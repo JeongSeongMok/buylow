@@ -25,6 +25,10 @@ Every Claude session working in this repo follows these:
    developer reads them); `README.md` is **Korean** for now. Keep **no secrets** in the repo
    (BYO keys in a gitignored local config) and **no machine-specific absolute paths** in
    committed files (use env vars / settings).
+6. **Add tests with every implementation.** When you implement a feature, add or extend tests
+   for it (pytest under `tests/`). Prefer fast unit tests for logic; mark slow/end-to-end tests
+   that need the full LEAN toolchain (.NET + data) as `@pytest.mark.integration` so the default
+   `pytest` run stays fast. Run the tests and confirm they pass before committing.
 
 ## 1. Key decisions
 

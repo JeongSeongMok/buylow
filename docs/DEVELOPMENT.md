@@ -90,6 +90,31 @@ Results land in `runs/<run-id>/` (the LEAN result JSON + `run.log`); summary sta
 parsed from stdout. Exit code `0` = the backtest completed. This is the same machinery the
 dashboard/API will call later. (`scripts/run-backtest.sh` remains as a no-Python shell check.)
 
+## Control API (dashboard backend)
+
+```bash
+# one-time: create a dev venv and install the orchestrator + dev deps
+uv venv .venv
+uv pip install --python .venv/bin/python -e ".[dev]"
+
+# run the Control API on 127.0.0.1:8420 (port via BUYLOW_DASHBOARD_PORT)
+LEAN_DATA_DIR=/path/to/lean/Data .venv/bin/python -m orchestrator.api
+```
+
+Endpoints: `GET /healthz`, `POST /runs` (trigger a backtest), `GET /runs`, `GET /runs/{id}`.
+State is persisted in `buylow.db` (SQLite, gitignored). The server binds to `127.0.0.1` only.
+
+## Tests
+
+```bash
+.venv/bin/python -m pytest            # fast unit + API tests
+# end-to-end backtest (needs .NET + Python 3.11 + LEAN_DATA_DIR):
+LEAN_DATA_DIR=/path/to/lean/Data .venv/bin/python -m pytest -m integration -o addopts=""
+```
+
+Per project rule, every feature ships with tests. Integration tests (real LEAN runs) are
+marked `@pytest.mark.integration` and deselected by default so the normal run stays fast.
+
 ## Machine-specific notes / gotchas
 
 - **`dotnet` not on PATH:** export `DOTNET_ROOT`/`PATH` as above (the run script does this for `~/.dotnet`).
