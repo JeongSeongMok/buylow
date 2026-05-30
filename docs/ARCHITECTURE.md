@@ -1,115 +1,208 @@
 # Architecture
 
-> System design and the reasoning behind it. For setup/build instructions see
+> The overall system design and the reasoning behind it. For setup/build instructions see
 > [DEVELOPMENT.md](./DEVELOPMENT.md); for the user-facing overview see the [README](../README.md).
 
-## Goal
+## In one line
 
-buylow is a personal automated algorithmic trading toolkit for Korean equities
-(KOSPI/KOSDAQ), built on top of the QuantConnect **LEAN** engine. Its core value is
-LEAN's **backtest–live isomorphism**: the *same strategy code* runs in backtesting and
-in live trading.
+A long-running **Python orchestrator** (which also serves a local browser dashboard) spawns
+a **LEAN (.NET) process per task** to run a strategy in backtest or live mode. The *same
+strategy code* runs in both — LEAN's backtest–live isomorphism.
 
-Brokerage connectivity (orders, fills, real-time quotes) targets the **Toss Securities
-API** (a later milestone).
+## Design principles
 
-## Distribution model
+These constraints drive every decision below:
 
-Open source, **clone-and-run** (no prebuilt installer):
+1. **Clone-and-run, open source.** Users `git clone`, install prerequisites, and run. No
+   separate servers to install (no MySQL/Redis/Elasticsearch). Source-only; no prebuilt installer.
+2. **Bring your own keys (BYO).** Toss/AI secrets are supplied by each user and stored
+   locally; **no secrets in the repo**.
+3. **LEAN is never modified or forked.** It is referenced via NuGet and extended only
+   through plugins (a DLL) and config.
+4. **Backtest = live isomorphism.** One strategy `.py` runs in both modes; only the
+   generated config differs.
+
+## Component map
 
 ```
-git clone → install prerequisites (.NET 10, Python 3.11, uv) → setup script
-          → put your own API keys (Toss, AI) in a local, gitignored config
-          → run
+                          Browser (localhost:<port>, default 8420)
+                                 │  HTTP + SSE
+┌────────────────────────────────┼───────────────────────────────────────────┐
+│ ORCHESTRATOR (Python, always-on)▼                                            │
+│  ┌────────────── Control API + Dashboard (FastAPI, 127.0.0.1 only) ───────┐  │
+│  │  strategy on/off · params · schedule · run backtests · view results    │  │
+│  │  · live control + kill switch · key entry · AI strategy generation     │  │
+│  │  (dashboard is a client of the API: HTMX + Jinja)                      │  │
+│  └────────────────────────────────┬───────────────────────────────────────┘  │
+│   ┌───────────────┬────────────────┼────────────────┬───────────────────────┐ │
+│   ▼               ▼                ▼                ▼                       ▼ │
+│ Scheduler    Strategy Registry  Config/Secrets   Persistence            AI Svc│
+│ (APScheduler)(strategy catalog) (env→disk→UI)    (SQLite + files)       (NL→py)│
+│   └───────────────┴────────────────┬────────────────┴───────────────────────┘ │
+│                            ┌────────▼─────────┐                                │
+│                            │   LEAN Runner    │ build config · set env · spawn │
+│                            └────────┬─────────┘ · collect & parse results      │
+└─────────────────────────────────────┼──────────────────────────────────────────┘
+            inject config.json ▼        │ collect result files & logs ▲  monitor/kill
+┌─────────────────────────────────────┼──────────────────────────────────────────┐
+│ LEAN PROCESS (.NET 10, "one process = one job")                                 │
+│   thin launcher → LEAN engine (unmodified NuGet) → strategy (.py)               │
+│                                       + MyTrading.Toss.dll                       │
+│                                         (TossBrokerage · DataQueue · KRX · Fees) │
+└──────▲────────────────────────────────────────────────────▲────────────────────┘
+       │ historical data (data/, LEAN format)                │ live quotes / orders
+  ┌────┴─────────────┐                                  ┌────┴───────────────┐
+  │ ETL (Python)      │  KRX/vendor → LEAN format         │ Toss API            │
+  └───────────────────┘                                  └─────────────────────┘
 ```
-
-- **No secrets in the repo.** Every user supplies their own keys (BYO-key).
-- The repo stays source-only; we ship documentation + setup scripts, not binaries.
 
 ## Two-process model
 
-A long-running **Python orchestrator** spawns short-lived **LEAN processes**, one per task.
+- **Orchestrator** — the only always-on process. Decides what/when/how to run, serves the
+  dashboard, owns persistence. Does **not** use the Toss DLL.
+- **LEAN process** — "one process = one job". Backtests are short-lived; live strategies are
+  long-lived (one process per strategy). The orchestrator spawns/monitors/kills them.
+
+## Orchestrator ↔ LEAN boundary
+
+Because LEAN is a per-job executor, the two communicate via the **filesystem + process
+control** — LEAN's native model, and the simplest robust option.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ buylow orchestrator (Python / FastAPI)        ← always on     │
-│   control API · scheduler · strategy mgmt · DB · dashboard    │
-└───────────────┬─────────────────────────────────────────────┘
-                │ spawn a subprocess per job / collect results & logs
-                ▼
-┌─────────────────────────────────────────────────────────────┐
-│ LEAN process (.NET 10, "one process = one job")               │
-│   ├ thin launcher (we build: LEAN Program.cs + Engine NuGet)  │
-│   ├ strategy (Algorithm)         ← Python (pythonnet)         │
-│   └ MyTrading.Toss.dll           ← our Korea/Toss adapter     │
-│        · TossBrokerage : IBrokerage        (orders/fills)     │
-│        · TossDataQueueHandler : IDataQueueHandler (quotes)    │
-│        · Market.Add("krx") + KRW + Korean fees/taxes          │
-└─────────────────────────────────────────────────────────────┘
+1. (in)  LEAN Runner writes a per-job config.json:
+           environment: backtesting | live-toss
+           algorithm-location / type: the strategy .py / class
+           parameters: strategy parameters       (+ Toss keys injected only for live jobs)
+         and sets env (PYTHONNET_PYDLL / PYTHONPATH), then spawns BuylowLauncher.dll.
+2. (out) LEAN writes result files (statistics JSON, orders, equity curve) + stdout logs.
+         The Runner parses them → stores summary/metadata in SQLite + raw blobs in runs/<id>/.
+3. (ctl) The Runner monitors liveness / exit code and can kill (live kill switch).
 ```
 
-- **Backtest / optimization**: spawn per job, exit when done (short-lived).
-- **Live**: one long-lived process per strategy (N strategies = N processes).
-- The orchestrator is the only always-on component; it spawns/monitors/kills/restarts
-  LEAN processes.
+`scripts/run-backtest.sh` is the manual version of step 1; the **LEAN Runner** absorbs it
+into code.
 
-## What LEAN owns vs. what we build
+## Strategy lifecycle (one `.py`, both modes)
 
-LEAN is **not** modified or forked. We reference it via NuGet and extend it through
-documented interfaces ("seams").
+```
+strategy.py + parameters ─┬─ [backtest] env=backtesting, historical data in data/  → statistics
+                          └─ [live]     env=live-toss,   Toss keys                  → real orders
+```
 
-**LEAN owns (the verified core we reuse):**
-- Event loop & time synchronization (`AlgorithmManager`) — the basis of backtest–live isomorphism
-- Data management: feeds, subscriptions, resolution, time zones, corporate-action adjustment
-- Strategy API (`QCAlgorithm`): `add_equity`, `set_holdings`, indicators, scheduling, universe selection, history
-- Portfolio / order / fill / fee / slippage / buying-power models
-- Indicator library and the 5-stage strategy framework
-- Market-hours and symbol-properties databases; statistics & reporting
+- Same file and parameters; only the generated config's `environment` differs.
+- Parameters are injected via LEAN's `parameters` and read with `get_parameter()` (this also
+  enables optimization later).
+- **AI-generated strategies**: natural language → a `QCAlgorithm` `.py` in
+  `strategies/generated/` → **must pass a backtest before it may go live** (a safety gate).
+  LEAN serves as the validator, which pairs well with AI generation.
 
-**We build (the seams + everything around LEAN):**
+## Dashboard
 
-| Seam | Interface | Our implementation |
-|---|---|---|
-| Live orders/fills | `IBrokerage` | `TossBrokerage` |
-| Live quotes | `IDataQueueHandler` | `TossDataQueueHandler` |
-| Market definition | `Market.Add`, market-hours / symbol-properties JSON | KRX (09:00–15:30, holidays, KRW) |
-| Cost model | `FeeModel` | Korean commissions + transaction tax |
-| Historical data | LEAN data format (zip+csv) | KRX → LEAN ETL |
+- A **browser UI** served by FastAPI on **`127.0.0.1:<port>`** (default `8420`, configurable
+  in `config.local.yaml`). The user runs the app, then opens `localhost:<port>`.
+- **HTMX + Jinja** (server-rendered, no Node/build step; charts via vendored JS). Real-time
+  updates (run progress, live P&L, logs) via **Server-Sent Events (SSE)**. The frontend can
+  later be swapped for an SPA without touching the API (the API is the contract).
+- **Security:** binds to `127.0.0.1` only — it holds the user's Toss keys and trading control,
+  so it must never be exposed to the network. A local token may be added if needed.
 
-Plus the **orchestrator** (process lifecycle, scheduling, persistence, control API,
-dashboard, alerts) and a **thin launcher** (below).
+## Persistence
+
+- **SQLite** — system of record for structured state: strategy config/on-off, run metadata &
+  statistics, orders, positions, P&L history, schedules. Ships with Python (`sqlite3`), single
+  file, **no server**. Run in WAL mode for concurrent reads.
+- **Disk files** (`runs/<id>/`) — large blobs: result JSON, equity curves, logs (LEAN writes
+  these directly). SQLite stores only the path + summary, not the blobs.
+- **Ownership:** only the orchestrator (Python) writes SQLite; the LEAN process (C#) writes
+  files. No cross-process DB contention.
+- On startup the orchestrator reads SQLite to restore prior state for the dashboard, so
+  closing and reopening the app shows previous content.
+- Migration path: SQLite → Postgres only if multi-user/remote/scale is needed later.
+
+## Configuration & secrets
+
+```
+config.local.yaml   (gitignored)   ← user's keys, enabled strategies, schedules, dashboard port
+config.example.yaml (committed)    ← template with empty keys
+```
+
+Secrets (Toss app key/secret/account, AI provider/key) are **stored on disk** in
+`config.local.yaml`. They are resolved in this order:
+
+1. **Environment variables** (e.g. `BUYLOW_TOSS_APP_KEY`, `BUYLOW_TOSS_SECRET`,
+   `BUYLOW_TOSS_ACCOUNT`, `BUYLOW_AI_API_KEY`) — highest priority; convenient for
+   `export` before launch.
+2. **On-disk config** (`config.local.yaml`).
+3. **Dashboard prompt** — if neither is set, on first browser access the dashboard shows a
+   setup screen to enter the keys, which are then written to `config.local.yaml`.
+
+The orchestrator injects only what each job needs into its generated config (e.g. Toss keys
+only for live jobs). Recommended: restrict the secrets file permissions (e.g. `chmod 600`).
+(OS keychain storage is a possible future hardening.)
+
+## Data / ETL
+
+KRX/vendor data → **ETL (Python)** → LEAN format (zip+csv) + market-hours / symbol-properties
+databases + universe data with **precomputed indicators** (e.g. 25-day MA / deviation) so that
+whole-market universe scans are cheap. Provides historical data for backtests and for live
+warm-up / indicators. The Toss API can also be a historical data source here.
+
+## Live operations (planned)
+
+- A live strategy is a long-lived LEAN process; the orchestrator supervises it (restart on
+  crash, **kill switch**).
+- On restart, position consistency is recovered via `BrokerageSetupHandler` calling
+  `TossBrokerage.GetAccountHoldings` to sync from the real account.
+- ⚠️ **v1: one live strategy per account.** Multiple live strategies on the same Toss account
+  would conflict on positions; multi-strategy coordination is deferred.
 
 ## C# artifacts (two)
 
-1. **Thin launcher** — a net10 console app that vendors LEAN's `Launcher/Program.cs`
-   (Apache-2.0) verbatim and references the LEAN Engine NuGet. We build our own because
-   the published `QuantConnect.Lean.Launcher` NuGet targets net462 and is unusable on
-   net10. The engine logic stays untouched in the NuGet package; only the entry point is ours.
-2. **`MyTrading.Toss.dll`** — the Korea/Toss adapter (brokerage, data queue, market definition, fees).
+1. **Thin launcher** (`launcher/`) — a net10 console app that vendors LEAN's
+   `Launcher/Program.cs` (Apache-2.0) verbatim and references the LEAN Engine NuGet. We build
+   our own because the published launcher NuGet targets net462. Engine logic stays in the
+   untouched NuGet; only the entry point is ours.
+2. **`MyTrading.Toss.dll`** (`adapter/`) — the Korea/Toss adapter: `TossBrokerage`,
+   `TossDataQueueHandler`, market definition (`Market.Add("krx")`, KRW), Korean fee/tax model.
 
-The runtime loads plugin assemblies by name (LEAN's `Composer` scans the output folder;
-`config.json` names them), which is how our adapter plugs in without modifying LEAN.
-
-## Data flow & strategy framework
+## Directory structure
 
 ```
-raw data → Slice → strategy → Insight → PortfolioTarget → Order → fill → portfolio → statistics
+launcher/      C# thin launcher                                    (done)
+adapter/       C# MyTrading.Toss (brokerage/dataqueue/KRX/fees)     (planned)
+orchestrator/  Python: api/ · dashboard/ · core/ (registry,
+               scheduler, jobmgr, config) · persistence/ (SQLite)
+               · lean/ (runner) · ai/                              (planned)
+strategies/    Python QCAlgorithm files (+ generated/)             (started)
+etl/           Python: KRX → LEAN format                           (planned)
+data/          LEAN-format market data (mostly gitignored)         (planned)
+config/        config.example.yaml (config.local.yaml gitignored)  (planned)
+runs/          per-run result blobs (gitignored)                   (planned)
+scripts/  docs/  tests/
 ```
 
-The 5-stage framework (the design basis for strategies):
-**Universe Selection → Alpha (Insight) → Portfolio Construction (PortfolioTarget) →
-Risk Management → Execution (Order).**
+## Decisions
 
-## Pipelines
+| Topic | Decision |
+|---|---|
+| LEAN usage | Reference via NuGet + extend with a plugin DLL (no fork) |
+| C# artifacts | Two: thin net10 launcher + `MyTrading.Toss.dll` |
+| LEAN NuGet version | `2.5.17757` (net10); never `10730.x` (net462) — see DEVELOPMENT.md |
+| Process model | 2 processes; "one process = one job" |
+| Orchestrator | Python (FastAPI + APScheduler) |
+| Strategy language | Python (pythonnet) |
+| Orchestrator ↔ LEAN | Filesystem (config in / results out) + process control |
+| Persistence | SQLite (orchestrator-owned, WAL) for state + disk files (`runs/<id>/`) for blobs; no DB server |
+| Control surface | Local browser dashboard via FastAPI on `127.0.0.1:<port>` (default 8420); HTMX+Jinja; SSE |
+| Config & secrets | `config.local.yaml` (gitignored); secrets resolved env var → disk → dashboard prompt |
+| Distribution | Open source, clone-and-run; BYO keys; no installer |
+| AI strategies | NL → `.py`; mandatory backtest validation before live |
+| Live multi-strategy | v1: one strategy per account |
 
-- **Backtest** (working): strategy + historical data → thin launcher runs LEAN → statistics.
-  Reproducible via `scripts/run-backtest.sh`.
-- **Live** (planned): `TossDataQueueHandler` → strategy → `TossBrokerage` → fill reconciliation.
+## Build order
 
-## Roadmap
-
-1. **KRX market definition** — `Market.Add("krx")`, market hours, KRW settlement, 6-digit code ↔ Symbol, Korean fee/tax model
-2. **Korean historical data ETL** — KRX/vendor → LEAN format (precompute universe indicators where useful)
-3. **Backtest validation** with Korean data
-4. **Toss live integration** — `IBrokerage` / `IDataQueueHandler`
-5. **Server features** — orchestration, scheduling, persistence, dashboard, alerts, operational safety
+1. **LEAN Runner** — absorb `run-backtest.sh` into Python (build config, spawn, parse results)
+2. **Persistence (SQLite)** + **Control API** skeleton
+3. **Minimal dashboard** — run a backtest and view results
+4. **KRX market definition + minimal ETL** — backtest a Korean symbol
+5. Strategy registry & scheduling → **Toss live adapter** → **AI strategies** → richer dashboard

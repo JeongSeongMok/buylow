@@ -34,6 +34,11 @@ Every Claude session working in this repo follows these:
 | Strategy language | Python (pythonnet) |
 | C# artifacts | **Two**: a thin net10 launcher (vendored LEAN `Program.cs`) + `MyTrading.Toss.dll` adapter |
 | LEAN NuGet version | `2.5.17757` lineage (net10); **never** `10730.x` (net462) — see DEVELOPMENT.md |
+| Orchestrator ↔ LEAN | Filesystem (config in / results out) + process control |
+| Persistence | SQLite (orchestrator-owned, WAL) for state + disk files (`runs/<id>/`) for blobs; no DB server |
+| Control surface | Local browser dashboard via FastAPI on `127.0.0.1:<port>` (default 8420, configurable); HTMX+Jinja; SSE |
+| Config & secrets | `config.local.yaml` (gitignored); secrets resolved env var → disk → dashboard prompt |
+| AI strategies | NL → `.py`; mandatory backtest validation before live |
 | Distribution | Open source, clone-and-run; BYO API keys; no installer |
 
 ## 2. Where to look
