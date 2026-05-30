@@ -1,0 +1,59 @@
+{
+  // buylow thin 런처용 백테스트 설정 (LEAN Launcher/config.json에서 백테스트에 필요한 키만 추림).
+  // __PLACEHOLDER__ 값들은 scripts/run-backtest.sh가 실행 시 실제 경로로 치환한다.
+  // 라이브/토스 환경 정의는 토스 어댑터 구현 단계에서 environments에 추가한다.
+
+  "environment": "backtesting",
+
+  // 실행할 알고리즘 (run-backtest.sh가 치환)
+  "algorithm-type-name": "__ALGORITHM_TYPE__",
+  "algorithm-language": "Python",
+  "algorithm-location": "__ALGORITHM_LOCATION__",
+
+  // 시세/보조 데이터 루트 (run-backtest.sh가 치환; 현재는 LEAN 레퍼런스 Data, 추후 buylow data/)
+  "data-folder": "__DATA_FOLDER__",
+
+  // 핸들러 — Composer가 이름으로 로드 (각 어셈블리는 출력폴더에 존재해야 함)
+  "log-handler": "QuantConnect.Logging.CompositeLogHandler",
+  "messaging-handler": "QuantConnect.Messaging.Messaging",
+  "job-queue-handler": "QuantConnect.Queues.JobQueue",
+  "api-handler": "QuantConnect.Api.Api",
+  "map-file-provider": "QuantConnect.Data.Auxiliary.LocalDiskMapFileProvider",
+  "factor-file-provider": "QuantConnect.Data.Auxiliary.LocalDiskFactorFileProvider",
+  "data-provider": "QuantConnect.Lean.Engine.DataFeeds.DefaultDataProvider",
+  "data-channel-provider": "DataChannelProvider",
+  "object-store": "QuantConnect.Lean.Engine.Storage.LocalObjectStore",
+  "data-aggregator": "QuantConnect.Lean.Engine.DataFeeds.AggregationManager",
+
+  // 로컬 백테스트라 QuantConnect 클라우드 계정 불필요
+  "job-user-id": "0",
+  "api-access-token": "",
+  "job-organization-id": "",
+
+  // 심볼 수 제한 (기본값)
+  "symbol-minute-limit": 10000,
+  "symbol-second-limit": 10000,
+  "symbol-tick-limit": 10000,
+
+  "maximum-data-points-per-chart-series": 1000000,
+  "maximum-chart-series": 30,
+
+  // 정규장 시간만 사용
+  "force-exchange-always-open": false,
+
+  // run-backtest.sh가 PYTHONPATH로 주입하므로 비워둠
+  "python-additional-paths": [],
+
+  "environments": {
+    // 백테스트 환경: 전부 LEAN 엔진 내장 핸들러
+    "backtesting": {
+      "live-mode": false,
+      "setup-handler": "QuantConnect.Lean.Engine.Setup.BacktestingSetupHandler",
+      "result-handler": "QuantConnect.Lean.Engine.Results.BacktestingResultHandler",
+      "data-feed-handler": "QuantConnect.Lean.Engine.DataFeeds.FileSystemDataFeed",
+      "real-time-handler": "QuantConnect.Lean.Engine.RealTime.BacktestingRealTimeHandler",
+      "history-provider": [ "QuantConnect.Lean.Engine.HistoricalData.SubscriptionDataReaderHistoryProvider" ],
+      "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BacktestingTransactionHandler"
+    }
+  }
+}

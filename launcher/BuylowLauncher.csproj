@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    buylow thin 런처. LEAN 엔진을 NuGet으로만 참조한다(무수정 원칙, CLAUDE.md §2/§6).
+    버전은 반드시 net10 호환 계보인 2.5.17757 사용 — semver상 더 큰 10730.x는 net462 구형이라 금지.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>BuylowLauncher</AssemblyName>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- LEAN transitive 의존성의 오래된 패키지(DotNetZip 등) 취약점 경고로 빌드가 시끄러워지는 것 억제 -->
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QuantConnect.Lean.Engine" Version="2.5.17757" />
+    <!-- Composer가 config.json의 핸들러를 이름으로 로드하므로 해당 어셈블리들이 출력폴더에 있어야 함 -->
+    <PackageReference Include="QuantConnect.Messaging" Version="2.5.17757" />
+    <PackageReference Include="QuantConnect.Queues" Version="2.5.17757" />
+    <PackageReference Include="QuantConnect.Api" Version="2.5.17757" />
+    <!-- C# 알고리즘 실행용(샘플/회귀 테스트). Python 전용이면 불필요하지만 둘 다 지원 위해 포함 -->
+    <PackageReference Include="QuantConnect.Algorithm.CSharp" Version="2.5.17757" />
+    <!-- Python 전략의 'from AlgorithmImports import *'가 QuantConnect.Research CLR 어셈블리를 요구 -->
+    <PackageReference Include="QuantConnect.Research" Version="2.5.17757" />
+  </ItemGroup>
+
+</Project>
