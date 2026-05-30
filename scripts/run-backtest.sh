@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 #
-# run-backtest.sh — buylow LEAN 연동 백테스트 실행/검증 스크립트.
+# run-backtest.sh — buylow LEAN 백테스트 실행/연동 검증 스크립트.
 #
 # 무수정 LEAN 엔진(NuGet) + 우리 thin 런처로 Python 전략 백테스트를 끝까지 돌린다.
-# 토스/실거래 없이 "LEAN 연동이 살아있는지"를 한 방에 확인하는 용도(스모크 테스트 포함).
+# 토스/실거래 없이 "LEAN 연동이 살아있는지"를 한 방에 확인하는 용도(스모크 테스트).
 #
 # 사용법:
-#   scripts/run-backtest.sh                         # 기본: SmokeTestAlgorithm
-#   STRATEGY=strategies/My.py ALGO_TYPE=My \        # 다른 전략 지정
-#     scripts/run-backtest.sh
+#   LEAN_DATA_DIR=/path/to/lean/Data scripts/run-backtest.sh            # 기본: SmokeTestAlgorithm
+#   LEAN_DATA_DIR=/path/to/lean/Data \
+#     STRATEGY=strategies/My.py ALGO_TYPE=My scripts/run-backtest.sh    # 다른 전략
 #
-# 환경변수(override 가능):
-#   STRATEGY      실행할 .py 경로 (default: strategies/SmokeTestAlgorithm.py)
-#   ALGO_TYPE     알고리즘 클래스명 (default: 파일명 stem)
-#   DATA_FOLDER   LEAN 데이터 루트 (default: LEAN 레퍼런스 repo의 Data — 한국 데이터 ETL 전까지 임시)
-#   DOTNET_ROOT   .NET SDK 위치 (default: ~/.dotnet)
+# 환경변수:
+#   LEAN_DATA_DIR  (필수) LEAN 포맷 데이터 루트. 예: QuantConnect/Lean 클론의 Data/ 디렉토리
+#   STRATEGY       전략 .py 경로 (기본: strategies/SmokeTestAlgorithm.py)
+#   ALGO_TYPE      알고리즘 클래스명 (기본: 파일명 stem)
+#   DOTNET_ROOT    .NET SDK 위치 (기본: ~/.dotnet)
 set -euo pipefail
 
 # --- 경로 기준 ---
@@ -22,13 +22,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-LEAN_PKG_VERSION="2.5.17757"   # net10 호환 계보. CLAUDE.md §6 참조 (10730.x 금지)
+LEAN_PKG_VERSION="2.5.17757"   # net10 호환 계보. docs/DEVELOPMENT.md 참고 (10730.x 금지)
 
 # --- .NET ---
 export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
 export PATH="$DOTNET_ROOT:$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 command -v dotnet >/dev/null || { echo "ERROR: dotnet 없음 ($DOTNET_ROOT). .NET 10 SDK 설치 필요"; exit 1; }
+
+# --- 데이터 폴더 (머신마다 다름 → 반드시 지정) ---
+DATA_FOLDER="${LEAN_DATA_DIR:-}"
+[ -n "$DATA_FOLDER" ] || { echo "ERROR: LEAN_DATA_DIR을 LEAN 포맷 데이터 폴더로 지정하세요 (예: Lean 클론의 Data/)"; exit 1; }
+[ -d "$DATA_FOLDER" ] || { echo "ERROR: LEAN_DATA_DIR 경로 없음: $DATA_FOLDER"; exit 1; }
 
 # --- 전략 인자 ---
 STRATEGY="${STRATEGY:-strategies/SmokeTestAlgorithm.py}"
@@ -37,15 +42,11 @@ STRATEGY_ABS="$(cd "$(dirname "$STRATEGY")" && pwd)/$(basename "$STRATEGY")"
 ALGO_TYPE="${ALGO_TYPE:-$(basename "$STRATEGY" .py)}"
 STRATEGY_DIR="$(dirname "$STRATEGY_ABS")"
 
-# --- 데이터 루트 (한국 데이터 ETL 전까지는 LEAN 레퍼런스 Data 사용) ---
-DATA_FOLDER="${DATA_FOLDER:-/Users/al03044447/IdeaProjects/Lean/Data}"
-[ -d "$DATA_FOLDER" ] || { echo "ERROR: 데이터 폴더 없음: $DATA_FOLDER (DATA_FOLDER로 지정하세요)"; exit 1; }
-
 # --- Python 3.11 런타임 (LEAN pythonnet은 3.11 사용) ---
-command -v python3.11 >/dev/null || { echo "ERROR: python3.11 없음. 'brew install python@3.11'"; exit 1; }
+command -v python3.11 >/dev/null || { echo "ERROR: python3.11 없음 (예: 'brew install python@3.11')"; exit 1; }
 PY_LIBDIR="$(python3.11 -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
 export PYTHONNET_PYDLL="$PY_LIBDIR/libpython3.11.dylib"
-[ -f "$PYTHONNET_PYDLL" ] || { echo "ERROR: libpython3.11.dylib 못 찾음: $PYTHONNET_PYDLL"; exit 1; }
+[ -f "$PYTHONNET_PYDLL" ] || { echo "ERROR: libpython3.11 못 찾음: $PYTHONNET_PYDLL"; exit 1; }
 
 # LEAN Python 연동에 필요한 pandas/numpy를 담은 전용 venv (없으면 생성)
 LEANPY="$REPO_ROOT/.leanpy"
