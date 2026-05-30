@@ -146,7 +146,7 @@ C#·Python 두 알고리즘 모두 동일 결과로 완주(BasicTemplateFramewor
   - `PYTHONNET_PYDLL` = `…/python@3.11/…/libpython3.11.dylib` (LEAN Python 런타임은 **3.11** 사용. Homebrew `python@3.11` 설치돼 있음)
   - `PYTHONPATH` = `{pandas/numpy 깐 3.11 venv}/site-packages` : `{QuantConnect.Common NuGet}/content`(여기 `AlgorithmImports.py`) : `{알고리즘 .py 디렉토리}`
   - Python 전략은 `from AlgorithmImports import *` → 이게 다수의 `QuantConnect.*` CLR 어셈블리를 로드하므로 위 DLL들이 출력폴더에 있어야 함.
-- 검증용 산출물(아직 repo 미반영): 런처 `/tmp/launcherprobe/BuylowLauncher`, Toss stub `/tmp/tossprobe/MyTrading.Toss`, 3.11 venv `/tmp/launcherprobe/leanpy`.
+- **repo 정식화 완료**: thin 런처 `launcher/`, 샘플 전략 `strategies/SmokeTestAlgorithm.py`, 실행 스크립트 `scripts/run-backtest.sh`(env 자동탐지·`.leanpy` venv 자동생성·config 치환). 한 방 실행/검증: `scripts/run-backtest.sh` (종료코드 0 = 연동 정상). *(Toss 어댑터는 라이브 단계에서 별도 추가)*
 
 ### 다음
 - 검증물을 **repo 정식 구조로 스캐폴딩** (thin 런처 프로젝트 + `MyTrading.Toss` 프로젝트 + Python 전략/오케스트레이터 + LEAN Python 런타임 환경 정의).

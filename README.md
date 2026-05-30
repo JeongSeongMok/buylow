@@ -44,12 +44,14 @@
 
 ## 3. 전체 파이프라인
 
-### 백테스트 (✅ 동작 검증 완료)
+### 백테스트 (✅ 동작 검증 완료 · repo에서 재현 가능)
 ```
 전략(Python) + 과거데이터(LEAN 포맷)
    → thin 런처가 LEAN 엔진 구동 → TimeSlice 단위 시뮬레이션 → 통계/리포트
 ```
-- 검증: `BasicTemplateFrameworkAlgorithm`(C#·Python 양쪽) end-to-end 완주. 재현 레시피는 [`CLAUDE.md` §6](./CLAUDE.md).
+- **실행**: `scripts/run-backtest.sh` (기본 `strategies/SmokeTestAlgorithm.py`). 처음 실행 시 LEAN Python 런타임 venv(`.leanpy`)를 자동 생성.
+- 검증: 우리 thin 런처 + `SmokeTestAlgorithm`(Python) end-to-end 완주(종료코드 0). 상세 레시피는 [`CLAUDE.md` §6](./CLAUDE.md).
+- ⚠️ 현재 데이터는 LEAN 레퍼런스의 US 샘플(SPY)을 사용 — 한국 시장/데이터 연동은 이후 단계.
 
 ### 라이브 (🔜 예정)
 ```
@@ -69,16 +71,15 @@
 
 ## 5. 저장소 구조
 
-> 🔜 스캐폴딩 예정. 현재는 문서(`CLAUDE.md`, `README.md`)만 존재.
-
 ```
 buylow/
-├─ launcher/      # (예정) C# net10 thin 런처
-├─ adapter/       # (예정) C# MyTrading.Toss (Toss 어댑터 + KRX 시장정의)
-├─ strategies/    # (예정) Python 전략
-├─ orchestrator/  # (예정) Python FastAPI + APScheduler
-├─ data/          # (예정) LEAN 포맷 한국 시세 데이터
-├─ runtime/       # (예정) 배포 조립 + 실행 스크립트
+├─ launcher/      # ✅ C# net10 thin 런처 (BuylowLauncher.csproj, Program.cs, config.json)
+├─ strategies/    # ✅ Python 전략 (SmokeTestAlgorithm.py)
+├─ scripts/       # ✅ 실행 스크립트 (run-backtest.sh)
+├─ adapter/       # 🔜 C# MyTrading.Toss (Toss 어댑터 + KRX 시장정의)
+├─ orchestrator/  # 🔜 Python FastAPI + APScheduler
+├─ data/          # 🔜 LEAN 포맷 한국 시세 데이터
+├─ runtime/       # 🔜 배포 조립
 ├─ CLAUDE.md      # 에이전트 작업 규칙 + 아키텍처 결정 + 검증 로그
 └─ README.md      # 이 문서 (프로젝트 최신 개요)
 ```
@@ -86,7 +87,8 @@ buylow/
 ## 6. 현재 상태 & 로드맵
 
 - [x] 툴체인 검증 (.NET 10, LEAN NuGet, C#/Python 백테스트 end-to-end, 플러그인 로딩) — 2026-05-30
-- [ ] 저장소 정식 스캐폴딩 (launcher / adapter / orchestrator / strategies)
+- [x] LEAN 연동 스모크 테스트 repo 정식화 (thin 런처 + 샘플 전략 + `run-backtest.sh`) — 2026-05-30
+- [ ] 저장소 스캐폴딩 잔여 (adapter / orchestrator)
 - [ ] **1. 한국 시장 정의** — `Market.Add("krx")`, market-hours(09:00~15:30·휴장일), KRW, 종목코드(6자리)↔Symbol, 한국 수수료/거래세 FeeModel
 - [ ] **2. 한국 과거데이터 ETL** — KRX/벤더 → LEAN 포맷(zip+csv)
 - [ ] **3. 백테스트 검증** — 한국 데이터 + Python 전략
