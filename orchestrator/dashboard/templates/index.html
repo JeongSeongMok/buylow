@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>새 백테스트</h2>
+  <form hx-post="/ui/runs" hx-target="#runs-table" hx-swap="outerHTML" hx-indicator="#run-indicator">
+    <label>전략
+      <select name="strategy">
+        {% for s in strategies %}<option value="{{ s.path }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>데이터 폴더 (LEAN 포맷)
+      <input type="text" name="data_folder" value="{{ default_data_folder }}" placeholder="/path/to/lean/Data">
+    </label>
+    <button type="submit">백테스트 실행</button>
+    <span id="run-indicator" class="htmx-indicator">실행 중…</span>
+  </form>
+</section>
+
+<section class="card">
+  <h2>실행 이력</h2>
+  {% include "partials/runs_table.html" %}
+</section>
+{% endblock %}

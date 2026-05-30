@@ -1,0 +1,71 @@
+/* buylow 대시보드 최소 스타일 */
+:root {
+  --bg: #0f1419;
+  --card: #1a212b;
+  --fg: #e6e6e6;
+  --muted: #8a97a6;
+  --accent: #4caf50;
+  --border: #2c3744;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.5;
+}
+header {
+  padding: 1.2rem 2rem;
+  border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 1.4rem; }
+header .sub { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.85rem; }
+main { max-width: 900px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.4rem;
+}
+.card h2 { margin-top: 0; font-size: 1.1rem; }
+
+form label { display: block; margin-bottom: 0.8rem; color: var(--muted); font-size: 0.85rem; }
+form select, form input[type=text] {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  background: #0f1419;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  padding: 0.55rem 1.1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+button:hover { filter: brightness(1.1); }
+
+/* HTMX 실행 표시 */
+.htmx-indicator { display: none; margin-left: 0.8rem; color: var(--muted); }
+.htmx-request .htmx-indicator { display: inline; }
+
+table { width: 100%; border-collapse: collapse; }
+table th, table td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
+table.runs thead th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+table.stats th { color: var(--muted); width: 40%; }
+.empty { color: var(--muted); text-align: center; }
+.error { color: #e57373; }
+.ok { color: var(--accent); }
+.fail { color: #e57373; }
+.meta { color: var(--muted); font-size: 0.85rem; margin: 0.3rem 0; }
+code { background: #0f1419; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.8rem; }
+a { color: #6fb3ff; }

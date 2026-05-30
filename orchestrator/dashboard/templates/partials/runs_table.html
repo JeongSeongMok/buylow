@@ -1,0 +1,22 @@
+<div id="runs-table">
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <table class="runs">
+    <thead>
+      <tr><th>전략</th><th>실행 시각</th><th>결과</th><th>순손익</th><th>주문수</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td>{{ r.algorithm_type }}</td>
+        <td>{{ r.created_at }}</td>
+        <td>{% if r.success %}✅{% else %}❌{% endif %}</td>
+        <td>{{ r.statistics.get("Net Profit", "-") }}</td>
+        <td>{{ r.statistics.get("Total Orders", "-") }}</td>
+        <td><a href="/ui/runs/{{ r.run_id }}">상세</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">아직 실행 이력이 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

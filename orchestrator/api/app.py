@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from ..dashboard import register_dashboard
 from ..lean import LeanRunner, RunRequest, RunResult
 from ..persistence import RunStore
 
@@ -45,6 +46,12 @@ def _result_to_record(req: RunRequest, result: RunResult) -> dict[str, Any]:
     }
 
 
+def run_and_store(runner: LeanRunner, store: RunStore, req: RunRequest) -> dict[str, Any]:
+    """백테스트 실행 → 결과 저장. JSON API와 대시보드가 공유하는 단일 경로."""
+    result = runner.run_backtest(req)
+    return store.save_run(_result_to_record(req, result))
+
+
 def create_app(runner: LeanRunner | None = None, store: RunStore | None = None) -> FastAPI:
     app = FastAPI(title="buylow", version="0.0.1")
     # runner는 lazy: 주입되지 않았으면 첫 실행 때 생성(런처 빌드 비용을 startup에서 회피)
@@ -72,8 +79,7 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None) 
             algorithm_type=payload.algorithm_type,
             parameters=payload.parameters,
         )
-        result = get_runner().run_backtest(req)
-        return state["store"].save_run(_result_to_record(req, result))
+        return run_and_store(get_runner(), state["store"], req)
 
     @app.get("/runs")
     def list_runs() -> list[dict[str, Any]]:
@@ -85,5 +91,13 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None) 
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return record
+
+    # 브라우저 대시보드(HTML) 라우트를 같은 앱에 얹는다
+    register_dashboard(
+        app,
+        get_runner=get_runner,
+        store=state["store"],
+        run_and_store=run_and_store,
+    )
 
     return app
