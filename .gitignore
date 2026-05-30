@@ -31,3 +31,11 @@ backtests/
 
 # === LEAN Python 런타임 venv (run-backtest.sh가 생성) ===
 .leanpy/
+
+# === 로컬 설정·시크릿 (사용자별, 절대 커밋 금지) ===
+config.local.yaml
+config/*.local.*
+.env
+
+# === 실행 결과 blob (per-run) ===
+runs/
