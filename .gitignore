@@ -39,3 +39,6 @@ config/*.local.*
 
 # === 실행 결과 blob (per-run) ===
 runs/
+
+# === 로컬 상태 DB (SQLite, 사용자 실행 이력) ===
+buylow.db*

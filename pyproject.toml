@@ -1,0 +1,31 @@
+[project]
+name = "buylow-orchestrator"
+version = "0.0.1"
+description = "buylow orchestrator: runs LEAN backtests/live jobs and serves the dashboard"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "httpx>=0.27",        # FastAPI TestClient용
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["orchestrator"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: 전체 LEAN 툴체인(.NET+데이터)이 필요한 end-to-end 테스트. 기본 실행에서 제외",
+]
+# 기본 pytest 실행은 빠른 테스트만 (integration은 'pytest -m integration'으로)
+addopts = "-m 'not integration'"
