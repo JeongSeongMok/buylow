@@ -45,8 +45,10 @@ cd buylow
 
 ## Configuration
 
-You provide your own API keys (Toss, AI) in a local, **gitignored** config. No keys are ever
-committed. _(The exact config file is TBD as the live integration lands.)_
+Bring your own API keys (Toss, AI). They are resolved in this order: **environment variables**
+(e.g. `export BUYLOW_TOSS_APP_KEY=...`) → a local `config.local.yaml` → otherwise the
+**dashboard prompts you to enter them on first launch**. Keys are stored locally in
+`config.local.yaml` (gitignored) and are never committed.
 
 ## Usage
 

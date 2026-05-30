@@ -45,8 +45,9 @@ cd buylow
 
 ## 설정
 
-토스·AI API 키는 **gitignore된** 로컬 설정 파일에 직접 입력합니다. 키는 절대 커밋되지
-않습니다. _(정확한 설정 파일은 라이브 연동과 함께 확정 예정.)_
+토스·AI API 키는 본인이 입력합니다. 우선순위: **환경변수**(예: `export BUYLOW_TOSS_APP_KEY=...`)
+→ 로컬 `config.local.yaml` → 둘 다 없으면 **첫 실행 시 대시보드에서 입력**. 키는 로컬
+`config.local.yaml`(gitignore)에 저장되며 절대 커밋되지 않습니다.
 
 ## 사용법
 
