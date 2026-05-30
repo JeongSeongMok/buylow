@@ -1,0 +1,30 @@
+# === OS ===
+.DS_Store
+
+# === JetBrains IDE ===
+.idea/
+*.iml
+
+# === Python ===
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# === .NET / C# ===
+bin/
+obj/
+*.user
+
+# === LEAN 런타임/산출물 ===
+# 배포 조립 폴더, 백테스트 결과, 로그 등 (실제 경로는 스캐폴딩 시 확정)
+runtime/build/
+backtests/
+*.log
+
+# === 데이터 (대용량, repo에 안 올림) ===
+# data/ 의 실제 시세 zip 등은 추후 .gitignore 정책 확정. 일단 무시 주석 처리.
+# data/
