@@ -11,17 +11,20 @@ Every Claude session working in this repo follows these:
 
 1. **Accumulate instructions and decisions in this file.** When it gets heavy, split topics
    into `docs/` files and link them from here (don't pre-split).
-2. **`README.md` (+ `README.ko.md`, `README.ja.md`) is the user-facing, always-current doc.**
-   Update it whenever a feature lands or the architecture changes; keep all three language
-   versions in sync. (CLAUDE.md = working agreement + decisions; README = user overview.)
+2. **`README.md` is the user-facing, always-current doc, written in Korean.**
+   Update it whenever a feature lands or the architecture changes. English/Japanese
+   translations may be added later; until then maintain only `README.md` (don't create
+   multiple language versions). (CLAUDE.md = working agreement + decisions; README = user overview.)
 3. **Commit per feature**, using [Conventional Commits](https://www.conventionalcommits.org/)
    (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`). **Push directly to `main`** (no PR).
 4. **Comment the "why."** Keep ordinary functions uncommented, but always explain the
    rationale for non-trivial logic (trading decisions) and special design choices (DLL split,
    process model) so a future session understands the intent.
-5. **This is a public, open-source repo.** Write everything in **English**. Keep **no secrets**
-   in the repo (users bring their own keys in a gitignored local config) and **no
-   machine-specific absolute paths** in committed files (use env vars / settings).
+5. **Public, open-source repo — language & hygiene.** Instruction/dev docs (`CLAUDE.md`,
+   `docs/`) are in **English** (easier for agents); **code comments are in Korean** (the
+   developer reads them); `README.md` is **Korean** for now. Keep **no secrets** in the repo
+   (BYO keys in a gitignored local config) and **no machine-specific absolute paths** in
+   committed files (use env vars / settings).
 
 ## 1. Key decisions
 
