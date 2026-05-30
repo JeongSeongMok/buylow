@@ -205,4 +205,7 @@ scripts/  docs/  tests/
 2. **Persistence (SQLite)** + **Control API** skeleton
 3. **Minimal dashboard** — run a backtest and view results
 4. **KRX market definition + minimal ETL** — backtest a Korean symbol
-5. Strategy registry & scheduling → **Toss live adapter** → **AI strategies** → richer dashboard
+5. Strategy registry & scheduling → **AI strategies** → richer dashboard
+6. **Toss live adapter** — gated on Toss API availability (not open yet). It is the *only*
+   piece that needs the broker API; everything above (backtest, KRX definition, ETL,
+   dashboard, AI strategy generation + backtest validation) works without it.

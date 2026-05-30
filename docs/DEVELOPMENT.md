@@ -73,6 +73,23 @@ LEAN's Python strategies do `from AlgorithmImports import *`, which loads many
 - `PYTHONPATH` → the `.leanpy` site-packages, the `AlgorithmImports.py` directory (shipped
   inside the `QuantConnect.Common` NuGet package's `content/`), and the strategy directory
 
+## Running via the orchestrator (LEAN Runner)
+
+The orchestrator's `LeanRunner` (`orchestrator/lean/`) is the programmatic equivalent of
+`run-backtest.sh`: it resolves the environment, builds the launcher, generates `config.json`,
+spawns the LEAN process, and parses the results.
+
+```bash
+LEAN_DATA_DIR=/path/to/lean/Data python -m orchestrator.lean
+# a different strategy + parameters:
+LEAN_DATA_DIR=/path/to/lean/Data python -m orchestrator.lean \
+    --strategy strategies/My.py --algo-type My --param threshold=0.12
+```
+
+Results land in `runs/<run-id>/` (the LEAN result JSON + `run.log`); summary statistics are
+parsed from stdout. Exit code `0` = the backtest completed. This is the same machinery the
+dashboard/API will call later. (`scripts/run-backtest.sh` remains as a no-Python shell check.)
+
 ## Machine-specific notes / gotchas
 
 - **`dotnet` not on PATH:** export `DOTNET_ROOT`/`PATH` as above (the run script does this for `~/.dotnet`).
