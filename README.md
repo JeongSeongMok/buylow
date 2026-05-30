@@ -52,15 +52,21 @@ cd buylow
 
 ## 사용법
 
-현재 제공: 엔진 연동을 end-to-end로 검증하는 **LEAN 백테스트 스모크 테스트**.
+**대시보드** (전략 선택 → 백테스트 실행 → 이력 보기):
 
 ```bash
-# LEAN 포맷 시세 데이터 폴더를 지정
-export LEAN_DATA_DIR=/path/to/lean/Data
-./scripts/run-backtest.sh
+export LEAN_DATA_DIR=/path/to/lean/Data      # LEAN 포맷 시세 데이터 폴더
+.venv/bin/python -m orchestrator.api         # http://127.0.0.1:8420 (포트: BUYLOW_DASHBOARD_PORT)
 ```
 
-종료 코드 `0`이면 연동 정상입니다. 자세한 내용은 [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+**CLI 스모크 테스트** (엔진 연동만 빠르게 확인):
+
+```bash
+export LEAN_DATA_DIR=/path/to/lean/Data
+./scripts/run-backtest.sh                    # 종료 코드 0이면 연동 정상
+```
+
+자세한 설정·실행은 [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
 
 ## 로드맵
 
@@ -68,7 +74,7 @@ export LEAN_DATA_DIR=/path/to/lean/Data
 - [ ] KRX 시장 정의 (장시간, KRW, 수수료/거래세)
 - [ ] 한국 과거데이터 ETL (KRX → LEAN 포맷)
 - [ ] 토스증권 라이브 거래 어댑터
-- [ ] 오케스트레이터 (LEAN Runner 착수 → 영속화·대시보드·스케줄링·알림)
+- [~] 오케스트레이터: 백테스트 실행·이력(SQLite)·로컬 대시보드 (완료) → 스케줄링·알림 (예정)
 
 ## 문서
 
