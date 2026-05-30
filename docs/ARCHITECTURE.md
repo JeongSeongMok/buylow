@@ -204,7 +204,12 @@ scripts/  docs/  tests/
 1. **LEAN Runner** — absorb `run-backtest.sh` into Python (build config, spawn, parse results)
 2. **Persistence (SQLite)** + **Control API** skeleton
 3. **Minimal dashboard** — run a backtest and view results
-4. **KRX market definition + minimal ETL** — backtest a Korean symbol
+4. **KRX market definition + minimal ETL** — backtest a Korean symbol.
+   *(4a done)* KRX market definition is implemented in **Python** (`market/krx.py`: KRW, Korean
+   `korean_fee`, market-hours/symbol-properties injection; `strategies/krx.py`: `KrxAlgorithm`
+   base + `KoreanFeeModel`). KRX backtests need only Python + config — the C# adapter is for live
+   only. The runner puts the repo root on `PYTHONPATH` so strategies can import shared libs.
+   *(4b next)* real Korean data ETL with a pluggable source (free provider now, Toss later).
 5. Strategy registry & scheduling → **AI strategies** → richer dashboard
 6. **Toss live adapter** — gated on Toss API availability (not open yet). It is the *only*
    piece that needs the broker API; everything above (backtest, KRX definition, ETL,
