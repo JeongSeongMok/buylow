@@ -10,7 +10,7 @@
   "algorithm-language": "Python",
   "algorithm-location": "__ALGORITHM_LOCATION__",
 
-  // 시세/보조 데이터 루트 (run-backtest.sh가 치환; 현재는 LEAN 레퍼런스 Data, 추후 buylow data/)
+  // 시세/보조 데이터 루트 (run-backtest.sh가 치환; 현재는 LEAN 포맷 데이터, 추후 buylow data/)
   "data-folder": "__DATA_FOLDER__",
 
   // 핸들러 — Composer가 이름으로 로드 (각 어셈블리는 출력폴더에 존재해야 함)

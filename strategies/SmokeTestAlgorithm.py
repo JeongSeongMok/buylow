@@ -7,8 +7,8 @@
 # [왜 단순 보유인가] 연동 검증이 목적이라 매매 판단 로직은 일부러 넣지 않는다.
 #        SPY를 100% 매수 후 보유하여 주문 1건 + 통계 산출만 확인한다.
 #
-# 데이터: LEAN 레퍼런스의 US equity daily 샘플(SPY)이 존재하는 구간으로 날짜 고정.
-#        한국 시장/데이터 연동은 이후 단계(CLAUDE.md §4-1,2)에서 별도 검증한다.
+# 데이터: LEAN의 US equity daily 샘플(SPY)이 존재하는 구간으로 날짜 고정.
+#        한국 시장/데이터 연동은 이후 단계에서 별도 검증한다(docs/ARCHITECTURE.md 로드맵).
 from AlgorithmImports import *
 
 

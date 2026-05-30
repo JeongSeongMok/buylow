@@ -2,10 +2,11 @@
  * BuylowLauncher — buylow 전용 net10 thin 런처.
  *
  * [왜 직접 빌드하나]
- *   LEAN을 fork/수정하지 않는다는 원칙(§2)에 따라 엔진은 NuGet(QuantConnect.Lean.Engine 2.5.17757)으로
- *   참조만 한다. 그런데 배포된 NuGet 런처(QuantConnect.Lean.Launcher)는 net462 타깃이라 net10 환경에서
- *   쓸 수 없다. 그래서 LEAN의 Launcher/Program.cs(Apache-2.0)를 "그대로" 복제해 우리 net10 exe로 빌드한다.
- *   → 엔진 로직은 무수정 NuGet 그대로, 진입점(Program.cs)만 우리가 소유. (자세한 검증: CLAUDE.md §6)
+ *   LEAN을 fork/수정하지 않는다는 원칙(docs/ARCHITECTURE.md)에 따라 엔진은
+ *   NuGet(QuantConnect.Lean.Engine 2.5.17757)으로 참조만 한다. 그런데 배포된 NuGet 런처
+ *   (QuantConnect.Lean.Launcher)는 net462 타깃이라 net10 환경에서 못 쓴다. 그래서 LEAN의
+ *   Launcher/Program.cs(Apache-2.0)를 "그대로" 복제해 우리 net10 exe로 빌드한다.
+ *   → 엔진 로직은 무수정 NuGet 그대로, 진입점(Program.cs)만 우리가 소유.
  *
  * [수정 금지 원칙]
  *   이 파일은 LEAN 원본과 동일하게 유지한다. 한국화/토스 연동은 별도 플러그인 DLL(MyTrading.Toss)과
