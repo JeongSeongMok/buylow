@@ -133,10 +133,12 @@ class LeanRunner:
         run_dir = RUNS_DIR / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        # 전략 import + 'from AlgorithmImports import *' 해소를 위한 PYTHONPATH
+        # 전략 import + 'from AlgorithmImports import *' 해소를 위한 PYTHONPATH.
+        # REPO_ROOT를 넣어 전략이 공용 라이브러리(예: market.krx)를 import할 수 있게 한다.
         pythonpath_parts = [
             str(self._env.venv_site_packages),
             str(self._env.algorithm_imports_dir),
+            str(REPO_ROOT),
             str(strategy.parent),
         ]
         proc_env = self._env.process_env(pythonpath_parts)
