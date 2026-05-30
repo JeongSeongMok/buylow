@@ -28,3 +28,6 @@ backtests/
 # === 데이터 (대용량, repo에 안 올림) ===
 # data/ 의 실제 시세 zip 등은 추후 .gitignore 정책 확정. 일단 무시 주석 처리.
 # data/
+
+# === LEAN Python 런타임 venv (run-backtest.sh가 생성) ===
+.leanpy/
