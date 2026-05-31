@@ -102,7 +102,7 @@ def test_compose_page_lists_catalog(tmp_path):
     c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "c.db")))
     r = c.get("/compose")
     assert r.status_code == 200
-    assert "EMA 교차" in r.text and "BNF" in r.text  # 카탈로그 노출
+    assert "EMA 교차" in r.text and "MACD" in r.text  # LEAN 내장 카탈로그 노출
 
 
 def test_compose_runs_composition(tmp_path):
@@ -110,9 +110,9 @@ def test_compose_runs_composition(tmp_path):
     runner = FakeRunner()
     c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "c.db")))
     r = c.post("/compose", data={
-        "alpha": ["ema_cross", "bnf"],
-        "ema_cross__fast": "10", "ema_cross__slow": "40", "ema_cross__period_days": "5",
-        "bnf__ma": "25", "bnf__threshold": "0.1", "bnf__period_days": "5",
+        "alpha": ["ema_cross", "rsi"],
+        "ema_cross__fast": "10", "ema_cross__slow": "40",
+        "rsi__period": "14",
         "universe": "005930", "start": "2023-01-02", "end": "2023-12-28",
         "cash": "10000000", "data_folder": "/data",
     })
@@ -120,7 +120,7 @@ def test_compose_runs_composition(tmp_path):
     req = runner.calls[-1]
     assert req.algorithm_type == "Composed"
     comp = json.loads(req.parameters["composition"])
-    assert {a["name"] for a in comp["alphas"]} == {"ema_cross", "bnf"}
+    assert {a["name"] for a in comp["alphas"]} == {"ema_cross", "rsi"}
     assert comp["alphas"][0]["params"]["fast"] == 10  # 타입 캐스팅(int)
 
 
