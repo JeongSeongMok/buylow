@@ -99,6 +99,19 @@ label.cond { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0.2
 label.cond input { width: auto; display: inline; margin: 0; }
 label.cond small { color: var(--muted); }
 label.spaced { margin-top: 1rem; }
+/* 백테스트 폼: 날짜/빠른설정/종목 칩 */
+.dates { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.25rem; }
+.dates input[type=date] { width: auto; display: inline-block; margin-top: 0; }
+.quick { color: var(--muted); font-size: 0.82rem; margin-bottom: 0.8rem; display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
+.add-row { display: flex; gap: 0.4rem; align-items: center; margin: 0.25rem 0 0.5rem; }
+.add-row input { width: auto; display: inline-block; margin-top: 0; }
+.chip { display: inline-flex; align-items: center; gap: 0.35rem; background: #0f1419; border: 1px solid var(--border);
+        border-radius: 12px; padding: 0.15rem 0.6rem; margin: 0.15rem 0.25rem 0.15rem 0; font-size: 0.82rem; }
+.chip a { color: var(--muted); text-decoration: none; }
+.chip a:hover { color: #e57373; }
+#universe-box.disabled { opacity: 0.4; }
+
 button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: 0.8rem; padding: 0.35rem 0.8rem; }
+button.ghost:disabled { cursor: not-allowed; }
 button.ghost:hover { background: var(--card); filter: none; }
 fieldset.group button.ghost { float: right; margin-top: -0.2rem; }

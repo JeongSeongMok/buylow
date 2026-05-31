@@ -134,7 +134,7 @@ def test_backtest_uses_saved_strategy(client):
     spec = json.loads(req.parameters["rule_spec"])
     assert spec["rule"] == "(EMA AND MACD) OR RSI"
     assert spec["universe"] == ["005930"]
-    assert spec["start"] == "2023-01-02" and spec["cash"] == 10000000
+    assert spec["start"] == "2023-01-02" and spec["cash"] == 100000000  # 1억 고정
     assert spec["signals"]["EMA"]["params"]["fast"] == 12
 
 

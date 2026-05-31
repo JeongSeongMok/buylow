@@ -29,6 +29,7 @@ _HERE = Path(__file__).resolve().parent
 TEMPLATES_DIR = _HERE / "templates"
 STATIC_DIR = _HERE / "static"
 STRATEGIES_DIR = REPO_ROOT / "strategies"
+BACKTEST_CASH = 100_000_000  # 초기자본 1억원 고정(백테스트 폼에서 입력받지 않음)
 
 
 def _resolve_universe(form, data_folder: str) -> list[str]:
@@ -86,11 +87,16 @@ def register_dashboard(
     # ── 백테스트 탭 ──────────────────────────────────────────────────
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest_page(request: Request):
+        from datetime import date, timedelta
+        today = date.today()
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
             "has_strategy": config.get_strategy() is not None,
             "data_loaded": _loaded_count(),
             "default_data_folder": config.get_data_folder(),
+            "start_default": (today - timedelta(days=90)).isoformat(),  # 3개월 전
+            "end_default": (today - timedelta(days=1)).isoformat(),     # 오늘 - 1
+            "cash": BACKTEST_CASH,
             "error": request.query_params.get("error"),
         })
 
@@ -114,7 +120,7 @@ def register_dashboard(
             **strategy,  # signals, rule, period_days
             "universe": _resolve_universe(form, data_folder),
             "start": form.get("start"), "end": form.get("end"),
-            "cash": int(form.get("cash") or 10_000_000),
+            "cash": BACKTEST_CASH,  # 초기자본은 1억으로 고정(입력받지 않음)
         }
         if not spec["universe"]:
             return RedirectResponse(url="/backtest?error=유니버스(종목)를 지정하세요", status_code=303)

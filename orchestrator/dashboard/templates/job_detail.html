@@ -3,7 +3,6 @@
 {% if job.state in ("pending", "running") %}
 <meta http-equiv="refresh" content="2">  {# 실행 중에는 2초마다 자동 새로고침 #}
 {% endif %}
-<p><a href="/jobs">← 작업 목록</a></p>
 <section class="card">
   <h2>{{ job.name }}
     {% if job.state == "succeeded" %}<span class="ok">완료 ✓</span>
