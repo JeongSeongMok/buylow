@@ -118,10 +118,18 @@ to `config.local.yaml` (gitignored) and fill values, or enter secrets in the das
 # config.local.yaml (gitignored — never committed)
 data_folder: ~/IdeaProjects/Lean/Data   # or ./data
 dashboard_port: 8420
+scheduler:          # daily incremental ingestion (weekday after close, KST)
+  enabled: false    # turn on to auto-append data daily
+  market: KOSPI200
+  hour: 18
 secrets:
   krx_id: ""      # https://data.krx.co.kr free account — for pykrx fundamentals (PER/PBR)
   krx_pw: ""
 ```
+
+The dashboard's **Data** page can trigger a bulk universe load (e.g. 3 years) as a **background
+job** (`/jobs` shows status) without blocking; daily incremental updates run via the scheduler
+(above). Bulk/incremental writes merge into existing per-ticker files (no duplicate dates).
 
 - **KRX login**: `pykrx` reads `KRX_ID`/`KRX_PW` env vars. The server injects them from config on
   startup (`apply_krx_credentials`), so fundamentals (PER/PBR) work once credentials are set.
