@@ -127,6 +127,22 @@ foreign net buying; `value` (저PBR, `KrxFundamental` over `etl.fundamental`) go
 below a threshold. BNF 이격도 등 추가 예정. Custom alphas live in `strategies/custom_alphas.py`;
 custom data types in `strategies/krx_data.py`.
 
+### Rule-based strategies (composable conditions)
+
+Beyond OR-combining alpha models, the **rule engine** lets users compose conditions with full
+boolean logic. Each **signal** returns `UP`/`DOWN`/`NONE` (not an insight), and a boolean
+expression combines them, e.g. `(EMA AND MACD) OR (RSI AND MOM)`.
+
+- `orchestrator/rules.py` — pure parser + 3-valued evaluator (AND = all same direction else NONE;
+  OR = the unanimous non-conflicting direction else NONE). Shared by dashboard validation and LEAN.
+- `orchestrator/signals_catalog.py` — signal specs (type, params) for the UI.
+- `strategies/signals.py` — signal evaluators (thin wrappers over LEAN indicators: ema/macd/rsi/roc),
+  with a `SIGNAL_TYPES` registry. Adding a condition = one class + one catalog entry.
+- `strategies/RuleStrategy.py` — `RuleAlpha` evaluates each signal per symbol each step, evaluates the
+  expression, and emits an UP/DOWN insight. The dashboard `/rules` builds the spec (signals + rule) and
+  runs it. Same `RuleAlpha` will drive live (when Toss opens); intraday/30s eval awaits a live feed.
+- Signals are evaluated as **states** (e.g. fast EMA > slow EMA) so AND/OR is meaningful each day.
+
 ## Dashboard
 
 - A **browser UI** served by FastAPI on **`127.0.0.1:<port>`** (default `8420`, configurable

@@ -85,6 +85,7 @@ export LEAN_DATA_DIR=/path/to/lean/Data
 - [x] 수급 ETL (투자자별 순매수 — 외국인/기관/개인, KRX 로그인 필요)
 - [x] 전략 카탈로그 + 대시보드 조합(레지스트리): LEAN 내장 Alpha(EMA교차·MACD·RSI·모멘텀)를 골라 결합 백테스트
 - [x] 한국 특화 커스텀 Alpha: **수급 추종**(외국인 순매수) · **저PBR 가치**(PER/PBR) — 커스텀 데이터 기반
+- [x] **규칙 엔진**: 조건(EMA/MACD/RSI/모멘텀)을 `(EMA AND MACD) OR RSI`처럼 자유 조합해 백테스트 (`/rules`)
 - [ ] 토스증권 라이브 거래 어댑터
 - [~] 오케스트레이터: 백테스트·이력(SQLite)·대시보드·백그라운드 잡·일일 스케줄러 (완료) → 알림 (예정)
 
