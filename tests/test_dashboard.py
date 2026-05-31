@@ -190,6 +190,19 @@ def test_compose_runs_composition(tmp_path):
     assert comp["alphas"][0]["params"]["fast"] == 10  # 타입 캐스팅(int)
 
 
+def test_settings_risk_save(tmp_path, monkeypatch):
+    from orchestrator import config
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "s.db")))
+    assert c.get("/settings").status_code == 200
+    r = c.post("/settings/risk", data={"stop_loss": "7", "take_profit": "20",
+                                       "trailing": "", "max_drawdown": ""})
+    assert r.status_code == 200
+    rc = config.get_risk_config()
+    assert rc["stop_loss"] == 7.0 and rc["take_profit"] == 20.0
+    assert rc["trailing"] is None
+
+
 def test_settings_page_and_save(tmp_path, monkeypatch):
     # 실제 config.local.yaml/환경변수를 건드리지 않도록 격리
     from orchestrator import config

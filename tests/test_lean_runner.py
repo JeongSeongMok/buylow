@@ -38,6 +38,17 @@ def test_build_config_core_fields(tmp_path):
     assert cfg["environments"]["backtesting"]["live-mode"] is False
 
 
+def test_params_with_risk_injects_global_risk(tmp_path, monkeypatch):
+    from orchestrator import config
+    from orchestrator.lean.runner import _params_with_risk
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    config.save_risk({"stop_loss": "7"})
+    params = _params_with_risk({"composition": "{}"})
+    assert params["risk_stop_loss"] == "7.0"     # 전역 리스크가 주입됨
+    assert params["composition"] == "{}"          # 기존 파라미터 보존
+    assert "risk_take_profit" not in params       # 미설정은 주입 안 함
+
+
 @pytest.mark.parametrize(
     "line,name,value",
     [

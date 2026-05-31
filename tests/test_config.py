@@ -59,6 +59,14 @@ def test_missing_and_status(tmp_config):
     assert all(s["set"] for s in config.secret_status())
 
 
+def test_risk_save_and_get(tmp_config):
+    assert config.get_risk_config()["stop_loss"] is None  # 기본 미적용
+    config.save_risk({"stop_loss": "7", "take_profit": "", "trailing": "5", "max_drawdown": "0"})
+    rc = config.get_risk_config()
+    assert rc["stop_loss"] == 7.0 and rc["trailing"] == 5.0
+    assert rc["take_profit"] is None and rc["max_drawdown"] is None  # 빈값/0 → 미적용
+
+
 def test_apply_krx_credentials(tmp_config, monkeypatch):
     assert config.apply_krx_credentials() is False
     config.save_secrets({"krx_id": "the_id", "krx_pw": "the_pw"})
