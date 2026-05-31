@@ -56,8 +56,22 @@ Every Claude session working in this repo follows these:
 
 ## 3. Current status
 
-- ✅ LEAN integration verified end-to-end (backtest, C# + Python) — reproducible via `scripts/run-backtest.sh`
-- 🔜 Next: KRX market definition → Korean data ETL → Toss live adapter → orchestrator
+**Working (backtest path is complete):**
+- LEAN integration (NuGet + thin launcher, C#/Python e2e)
+- Data ETL — price (OHLCV), 수급 (investor flows), fundamentals (PER/PBR); per-ticker + universe bulk + daily incremental scheduler
+- Orchestrator — LEAN Runner, SQLite persistence, FastAPI Control API, 3-chapter dashboard (전략 설정 / 백테스트 / 설정)
+- Background-job backtests with live status/log
+- Strategy framework (Alpha composition) + catalog (built-in EMA/MACD/RSI/momentum + custom 수급/저PBR)
+- **Rule engine** — boolean conditions `(A AND B) OR C` (`/rules`)
+- Universe selection (scan all loaded tickers)
+- **Risk management** (global stop-loss/take-profit/trailing/portfolio)
+- Config & secrets (env → config.local.yaml → dashboard `/settings`)
+
+**Not done / gated:**
+- ⛔ **Toss live trading** (`TossBrokerage`/`TossDataQueueHandler`, `MyTrading.Toss.dll`) — gated on Toss API (not open). Only piece needing the broker API.
+- Minute-bar ETL (intraday strategies), OpenDART deep financials, news/sentiment, AI NL→strategy, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, alerts, cross-platform packaging, LICENSE.
+
+> See `README.md` 로드맵 for the up-to-date checklist.
 
 > A local clone of [QuantConnect/Lean](https://github.com/QuantConnect/Lean) is a useful
 > read-only reference (interfaces, sample data). Its path is machine-specific — never commit it.

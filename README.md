@@ -12,23 +12,40 @@
 
 ---
 
-> ⚠️ **상태: 초기 개발 단계.** 현재 백테스트 연동은 동작하며, 한국 시장 데이터와 토스증권
-> 라이브 연동은 진행 중입니다. **아직 실거래용이 아닙니다.**
+> ⚠️ **상태: 개발 중.** 데이터 ETL · 전략(규칙 엔진) · 백테스트 · 리스크 관리까지 동작합니다.
+> **토스증권 라이브 거래는 토스 API 오픈 대기 중** — 아직 실거래용이 아닙니다.
 
 ## 개요
 
 buylow는 LEAN 엔진을 플랫폼으로 사용합니다. 상시 가동되는 Python 오케스트레이터가 작업마다
-LEAN(.NET) 프로세스를 실행하고, 한국화/토스 어댑터가 시장 정의와 라이브 거래를 위해 LEAN에
-플러그인으로 결합됩니다. 전략은 순수 Python 파일이므로 *백테스트한 코드 그대로* 라이브에서
-거래됩니다. 전체 설계는 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)를 참고하세요.
+LEAN(.NET) 프로세스를 띄워 전략을 백테스트/라이브로 실행합니다. 한국 시장 정의·수수료·전략은
+Python으로, 토스 실시간·주문(라이브)은 별도 플러그인으로 결합됩니다. 전략 정의는 그대로
+백테스트=라이브에 쓰입니다(LEAN 동형성). 전체 설계는 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## 기능
 
-- 매매 전략(BNF 평균회귀, 추세추종 등)을 LEAN 엔진에서 실행
-- **같은** 전략 코드로 백테스트와 라이브 거래
-- **사용자 본인 API 키 사용**(토스, AI) — 저장소에는 어떤 키도 포함되지 않음
-- 로컬 브라우저 대시보드로 전략 선택·백테스트·라이브 제어
-- _예정:_ AI 자연어 전략 생성, 전략 스케줄링
+- **데이터 ETL**: KRX 가격(OHLCV)·수급(투자자별 순매수)·펀더멘털(PER/PBR)을 LEAN 포맷으로 적재 (종목별 + 유니버스 일괄, 일일 증분 스케줄러)
+- **규칙 엔진**: EMA·MACD·RSI·모멘텀 등 조건을 `(EMA AND MACD) OR RSI`처럼 불리언으로 자유 조합 + 한국 특화 Alpha(수급 추종·저PBR)
+- **유니버스 선별**: 적재된 전 종목을 자동 스캔
+- **백테스트**: 백그라운드 실행 + 실시간 로그/상태, 결과·이력 저장(SQLite)
+- **리스크 관리(전역)**: 손절·익절·트레일링·포트폴리오 손실한도
+- **로컬 대시보드**(3챕터): ① 전략 설정 · ② 백테스트 · ③ 설정(키·데이터·리스크)
+- **BYO 키**: 토스·KRX·AI 키는 사용자 로컬에만 (저장소엔 없음)
+- _예정:_ 토스 라이브 거래(API 오픈 대기), AI 자연어 전략 생성
+
+## 파이프라인
+
+```
+ETL(가격·수급·펀더멘털) → ./data
+        │
+        ▼  (LEAN 5단계 · 매 거래일)
+유니버스 선별 → 조건/Alpha 판단(UP/DOWN) → 포트폴리오 비중 → 리스크(손절·익절) → 주문
+        │
+        ▼
+백테스트(지금) = 과거 데이터 재생   /   라이브(예정) = 토스 실시간·주문
+```
+- 같은 전략 정의가 백테스트·라이브에서 동일하게 동작.
+- **매수 = 전략(조건/Alpha)**, **매도 = 전략 신호 변화 + 리스크(손익)** 두 축.
 
 ## 전제조건
 
@@ -61,34 +78,49 @@ secrets:
 
 ## 사용법
 
-**대시보드** (전략 선택 → 백테스트 실행 → 이력 보기):
-
 ```bash
-export LEAN_DATA_DIR=/path/to/lean/Data      # LEAN 포맷 시세 데이터 폴더
-.venv/bin/python -m orchestrator.api         # http://127.0.0.1:8420 (포트: BUYLOW_DASHBOARD_PORT)
+# (최초 1회) 의존성 설치
+uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+# 대시보드 실행 → http://127.0.0.1:8420
+.venv/bin/python -m orchestrator.api
 ```
 
-**CLI 스모크 테스트** (엔진 연동만 빠르게 확인):
+대시보드 흐름:
+1. **③ 설정** — (필요 시) KRX 키 입력 · 과거 데이터 적재(종목별/유니버스) · 리스크 설정
+2. **① 전략 설정** — 조건식 `(EMA AND MACD) OR RSI` 작성 → 백테스트 실행
+3. **② 백테스트** — 실행 상태·로그·결과 확인
 
+CLI로도 가능:
 ```bash
-export LEAN_DATA_DIR=/path/to/lean/Data
-./scripts/run-backtest.sh                    # 종료 코드 0이면 연동 정상
+LEAN_DATA_DIR=/path/to/data .venv/bin/python -m etl.krx --ticker 005930 --from 2023-01-01 --to 2023-12-31
+LEAN_DATA_DIR=/path/to/data .venv/bin/python -m orchestrator.lean --strategy strategies/SmokeTestAlgorithm.py
 ```
-
-자세한 설정·실행은 [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+`config.local.yaml`에 `data_folder`를 넣으면 `LEAN_DATA_DIR` export가 불필요합니다. 자세한 건 [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
 
 ## 로드맵
 
-- [x] LEAN 연동 (백테스트, C# + Python)
-- [~] KRX 시장 정의 (장시간·KRW·한국 수수료/거래세 — Python 레이어 완료)
-- [x] 한국 과거데이터 ETL (KRX → LEAN 포맷, pykrx/FDR; 종목별 + 유니버스 일괄 KOSPI200/KOSPI/ALL)
-- [x] 수급 ETL (투자자별 순매수 — 외국인/기관/개인, KRX 로그인 필요)
-- [x] 전략 카탈로그 + 대시보드 조합(레지스트리): LEAN 내장 Alpha(EMA교차·MACD·RSI·모멘텀)를 골라 결합 백테스트
-- [x] 한국 특화 커스텀 Alpha: **수급 추종**(외국인 순매수) · **저PBR 가치**(PER/PBR) — 커스텀 데이터 기반
-- [x] **규칙 엔진**: 조건(EMA/MACD/RSI/모멘텀)을 `(EMA AND MACD) OR RSI`처럼 자유 조합해 백테스트 (`/rules`)
-- [x] **리스크 관리**(전역): 손절·익절·트레일링·포트폴리오 손실한도 — 모든 백테스트·라이브에 적용 (`/settings`)
-- [ ] 토스증권 라이브 거래 어댑터
-- [~] 오케스트레이터: 백테스트·이력(SQLite)·대시보드·백그라운드 잡·일일 스케줄러 (완료) → 알림 (예정)
+**완료**
+- [x] LEAN 연동 (NuGet 참조 + thin 런처, C#·Python 백테스트 end-to-end)
+- [x] KRX 시장 정의 (krx 시장·KRW·한국 수수료 — Python 레이어)
+- [x] 데이터 ETL — 가격(OHLCV)·수급·펀더멘털(PER/PBR), 종목별 + 유니버스 일괄 + 일일 증분 스케줄러
+- [x] 오케스트레이터 — LEAN Runner · 영속화(SQLite) · Control API · 대시보드(3챕터)
+- [x] 백테스트 백그라운드 잡 + 실시간 로그/상태
+- [x] 전략 프레임워크(Alpha 결합) + 카탈로그 — 내장(EMA·MACD·RSI·모멘텀) + 커스텀(수급·저PBR)
+- [x] 규칙 엔진 — 불리언 조건식 `(A AND B) OR C` (`/rules`)
+- [x] 유니버스 선별 — 적재 전 종목 스캔
+- [x] 리스크 관리(전역) — 손절·익절·트레일링·포트폴리오 손실한도
+- [x] 설정·시크릿 — env→config.local.yaml→대시보드(`/settings`)
+
+**남음 / 예정**
+- [ ] **토스증권 라이브** (`TossBrokerage`·`TossDataQueueHandler`) — ⛔ **토스 API 오픈 게이트**
+- [ ] 라이브 실행 엔진(30초 스케줄링) — 토스 의존
+- [ ] 분봉 ETL → 단타·변동성 돌파 전략
+- [ ] OpenDART 깊은 재무 · 뉴스/센티먼트 데이터
+- [ ] AI 자연어 → 전략 생성
+- [ ] 유니버스 기준 필터(시총 상위·저PBR 등 pre-filter)
+- [ ] 커스텀 리스크(ATR/변동성/시간) · PCM 선택(InsightWeighting 등)
+- [ ] flow/value를 규칙 엔진 signal로 · 결과 상세(equity 차트) · 알림
+- [ ] 전략 저장(named) · 크로스플랫폼 패키징 · 라이선스 결정
 
 ## 문서
 
