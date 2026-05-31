@@ -139,6 +139,10 @@ python -m etl.krx --ticker 005930 --from 2023-01-01 --source fdr             # a
 
 # Investor flows (수급: foreign/institution/individual net-buy value) — requires KRX login
 python -m etl.flow --ticker 005930 --from 2023-01-01 --to 2023-12-31
+
+# Bulk: a whole universe at once (efficient — one cross-sectional call per trading day,
+# not one per ticker). market: KOSPI200 (default) | KOSPI | KOSDAQ | ALL
+python -m etl.universe --market KOSPI200 --from 2023-01-01 --to 2023-12-31
 ```
 
 OHLCV needs no login; **flows (수급) and fundamentals require KRX credentials** (see Configuration).

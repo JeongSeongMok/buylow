@@ -81,7 +81,7 @@ export LEAN_DATA_DIR=/path/to/lean/Data
 
 - [x] LEAN 연동 (백테스트, C# + Python)
 - [~] KRX 시장 정의 (장시간·KRW·한국 수수료/거래세 — Python 레이어 완료)
-- [x] 한국 과거데이터 ETL (KRX → LEAN 포맷, pykrx/FDR, 소스 교체 가능)
+- [x] 한국 과거데이터 ETL (KRX → LEAN 포맷, pykrx/FDR; 종목별 + 유니버스 일괄 KOSPI200/KOSPI/ALL)
 - [x] 수급 ETL (투자자별 순매수 — 외국인/기관/개인, KRX 로그인 필요)
 - [~] 전략 카탈로그 (Alpha 프레임워크: 전략=AlphaModel 결합 — EMA교차·BNF 예시)
 - [ ] 토스증권 라이브 거래 어댑터
