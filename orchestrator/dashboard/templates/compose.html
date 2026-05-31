@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>전략 조합 백테스트</h2>
+  <p class="meta">여러 Alpha를 골라 하나의 포트폴리오로 결합합니다. 종목당 목표는 합산되어 충돌이 없습니다.</p>
+  <form method="post" action="/compose">
+    {% for a in catalog %}
+    <fieldset class="alpha">
+      <label><input type="checkbox" name="alpha" value="{{ a.name }}">
+        <b>{{ a.label }}</b> <small>[{{ a.category }}] {{ a.description }}</small></label>
+      <div class="params">
+        {% for p in a.params %}
+        <label class="param">{{ p.label }}
+          <input type="text" name="{{ a.name }}__{{ p.key }}" value="{{ p.default }}" size="6"></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+
+    <hr>
+    <label>유니버스 (종목코드, 쉼표 구분) <input type="text" name="universe" value="005930"></label>
+    <label>시작일 <input type="text" name="start" value="2023-01-02"></label>
+    <label>종료일 <input type="text" name="end" value="2023-12-28"></label>
+    <label>초기자본(KRW) <input type="text" name="cash" value="10000000"></label>
+    <label>데이터 폴더 <input type="text" name="data_folder" value="{{ default_data_folder }}"></label>
+    <button type="submit">조합 백테스트 실행</button>
+  </form>
+</section>
+{% endblock %}

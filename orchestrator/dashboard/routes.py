@@ -6,6 +6,7 @@ API 앱에 register_dashboard(app, ...)로 얹는다. 의존성(runner getter, s
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -84,6 +85,42 @@ def register_dashboard(
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return templates.TemplateResponse(request, "run_detail.html", {"run": record})
+
+    @app.get("/compose", response_class=HTMLResponse)
+    def compose_page(request: Request):
+        from .. import strategy_catalog
+        return templates.TemplateResponse(request, "compose.html", {
+            "catalog": strategy_catalog.CATALOG,
+            "default_data_folder": config.get_data_folder(),
+        })
+
+    @app.post("/compose")
+    async def compose_run(request: Request):
+        from .. import strategy_catalog
+        form = await request.form()
+        selected = form.getlist("alpha")
+        alphas = []
+        for spec in strategy_catalog.CATALOG:
+            if spec.name in selected:
+                raw = {p.key: form.get(f"{spec.name}__{p.key}", "") for p in spec.params}
+                alphas.append({"name": spec.name, "params": strategy_catalog.cast_params(spec.name, raw)})
+        if not alphas:
+            return RedirectResponse(url="/compose", status_code=303)
+
+        composition = {
+            "alphas": alphas,
+            "universe": [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()],
+            "start": form.get("start"), "end": form.get("end"),
+            "cash": int(form.get("cash") or 10_000_000),
+        }
+        req = RunRequest(
+            strategy_path="strategies/Composed.py",
+            data_folder=(form.get("data_folder") or config.get_data_folder()),
+            algorithm_type="Composed",
+            parameters={"composition": json.dumps(composition)},
+        )
+        record = run_and_store(get_runner(), store, req)
+        return RedirectResponse(url=f"/ui/runs/{record['run_id']}", status_code=303)
 
     @app.get("/data", response_class=HTMLResponse)
     def data_list(request: Request):
