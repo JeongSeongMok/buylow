@@ -7,7 +7,7 @@ from orchestrator import strategy_catalog as sc
 
 def test_catalog_has_alphas():
     names = {a.name for a in sc.CATALOG}
-    assert {"ema_cross", "macd", "rsi", "momentum", "flow"} <= names
+    assert {"ema_cross", "macd", "rsi", "momentum", "flow", "value"} <= names
 
 
 def test_cast_params_uses_defaults_when_blank():
