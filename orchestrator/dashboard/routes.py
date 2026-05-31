@@ -84,6 +84,49 @@ def register_dashboard(
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return templates.TemplateResponse(request, "run_detail.html", {"run": record})
 
+    @app.get("/data", response_class=HTMLResponse)
+    def data_list(request: Request):
+        from etl import catalog
+        data_dir = config.get_data_folder()
+        tickers = [
+            {"ticker": t,
+             "price": len(catalog.read_price_daily(data_dir, t)),
+             "flow": len(catalog.read_flow(data_dir, t))}
+            for t in catalog.all_tickers(data_dir)
+        ]
+        return templates.TemplateResponse(request, "data_list.html", {
+            "tickers": tickers, "data_dir": data_dir,
+            "error": request.query_params.get("error"),
+        })
+
+    @app.get("/data/{ticker}", response_class=HTMLResponse)
+    def data_detail(request: Request, ticker: str):
+        from etl import catalog
+        summary = catalog.ticker_summary(config.get_data_folder(), ticker)
+        return templates.TemplateResponse(request, "data_detail.html", {"d": summary})
+
+    @app.post("/data/fetch")
+    async def data_fetch(request: Request):
+        from datetime import date
+        form = await request.form()
+        ticker = (form.get("ticker") or "").strip()
+        kinds = form.getlist("kind")
+        data_dir = config.get_data_folder()
+        try:
+            start = date.fromisoformat(form["from"])
+            end = date.fromisoformat(form["to"]) if form.get("to") else date.today()
+            if not ticker:
+                raise ValueError("종목코드를 입력하세요")
+            if "price" in kinds:
+                from etl import krx as etl_krx
+                etl_krx.ingest(ticker, start, end, data_dir)
+            if "flow" in kinds:
+                from etl import flow as etl_flow
+                etl_flow.ingest_flow(ticker, start, end, data_dir)
+        except Exception as e:  # 네트워크/로그인/입력 오류를 사용자에게 표시
+            return RedirectResponse(url=f"/data?error={type(e).__name__}: {e}", status_code=303)
+        return RedirectResponse(url=f"/data/{ticker}", status_code=303)
+
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):
         return templates.TemplateResponse(request, "settings.html", {

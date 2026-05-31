@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>데이터 적재</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/data/fetch">
+    <label>종목코드 <input type="text" name="ticker" placeholder="005930"></label>
+    <label>시작일 <input type="text" name="from" placeholder="2023-01-01"></label>
+    <label>종료일(선택) <input type="text" name="to" placeholder="오늘"></label>
+    <label><input type="checkbox" name="kind" value="price" checked> 가격(OHLCV)</label>
+    <label><input type="checkbox" name="kind" value="flow"> 수급(투자자별, KRX 로그인 필요)</label>
+    <button type="submit">적재</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>적재된 종목</h2>
+  <p class="meta">data: <code>{{ data_dir }}</code></p>
+  <table class="runs">
+    <thead><tr><th>종목</th><th>가격(일봉)</th><th>수급</th><th></th></tr></thead>
+    <tbody>
+      {% for t in tickers %}
+      <tr>
+        <td>{{ t.ticker }}</td>
+        <td>{{ t.price }}일</td>
+        <td>{{ t.flow }}행</td>
+        <td><a href="/data/{{ t.ticker }}">보기</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">적재된 데이터가 없습니다. 위에서 적재하세요.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
