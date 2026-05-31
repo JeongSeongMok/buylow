@@ -38,6 +38,12 @@ def _resolve_universe(form, data_folder: str) -> list[str]:
     return [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
 
 
+def _loaded_count() -> int:
+    """적재된 종목 수 — 최초 실행 시 '데이터 먼저 적재' 안내 판단용."""
+    from etl.catalog import all_tickers
+    return len(all_tickers(config.get_data_folder()))
+
+
 def register_dashboard(
     app: FastAPI,
     *,
@@ -70,6 +76,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
             "has_strategy": config.get_strategy() is not None,
+            "data_loaded": _loaded_count(),
             "default_data_folder": config.get_data_folder(),
             "error": request.query_params.get("error"),
         })
@@ -126,6 +133,7 @@ def register_dashboard(
             "groups": groups,
             "param_value": signals_catalog.param_value,
             "risk": config.risk_form_values(),
+            "data_loaded": _loaded_count(),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })
@@ -218,6 +226,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
             "data_dir": config.get_data_folder(),
+            "data_loaded": _loaded_count(),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })

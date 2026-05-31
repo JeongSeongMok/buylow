@@ -42,9 +42,10 @@ class FakeRunner:
 
 @pytest.fixture
 def isolated_config(tmp_path, monkeypatch):
-    """config.local.yaml 을 임시로 격리(전략/리스크 저장이 실제 파일을 안 건드리게)."""
+    """config.local.yaml 을 임시로 격리하고, 빈 데이터 폴더를 가리키게(결정적 테스트)."""
     from orchestrator import config
     monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))  # 적재 0개 상태
     return config
 
 
@@ -76,6 +77,12 @@ def test_backtest_page_renders(client):
     assert r.status_code == 200
     assert "buylow" in r.text
     assert "백테스트" in r.text and "실행 이력" in r.text
+
+
+def test_first_run_prompts_data_load(client):
+    # 적재 0개면 전략/백테스트 화면에 '데이터 먼저 적재' 안내 배너가 뜬다
+    assert "전체 종목 데이터 적재" in client.get("/strategy").text
+    assert "전체 종목 데이터 적재" in client.get("/backtest").text
 
 
 def test_static_css_served(client):

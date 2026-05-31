@@ -72,6 +72,9 @@ table.stats th { color: var(--muted); width: 40%; }
 .ok { color: var(--accent); }
 .fail { color: #e57373; }
 .meta { color: var(--muted); font-size: 0.85rem; margin: 0.3rem 0; }
+.notice { background: #2a2410; border: 1px solid #5a4a1a; color: #e6d08a; padding: 0.7rem 1rem;
+          border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+.notice a { color: #ffd866; }
 code { background: #0f1419; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.8rem; }
 pre.log { background: #0b0e12; border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem;
           font-size: 0.75rem; line-height: 1.35; max-height: 420px; overflow: auto; white-space: pre-wrap; }

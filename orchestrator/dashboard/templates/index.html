@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
+{% if data_loaded == 0 %}
+<p class="notice">⚠️ 적재된 과거 데이터가 없습니다. 백테스트엔 데이터가 필요해요 —
+  먼저 <a href="/settings">설정</a>에서 <b>[전체 종목 데이터 적재]</b>를 실행하세요.</p>
+{% endif %}
 <section class="card">
   <h2>백테스트 실행</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
