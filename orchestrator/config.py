@@ -89,14 +89,10 @@ def get_risk_config() -> dict:
 
 
 def risk_form_values() -> dict:
-    """대시보드 리스크 폼 프리필용. 저장 이력이 없으면 기본값, 있으면 저장값(빈값=빈칸).
-
-    이렇게 분리해야 '한 번도 저장 안 함'(기본값 제안)과 '일부러 비워 저장함'(off)을 구분한다.
-    """
-    if _load_local().get("risk") is None:
-        return dict(DEFAULT_RISK)
+    """대시보드 리스크 폼 프리필용. 항상 실제 값을 채운다 — 저장값이 있으면 그 값,
+    없거나 비어 있으면 기본값(DEFAULT_RISK). 폼엔 placeholder가 아니라 실제 숫자가 보인다."""
     rc = get_risk_config()
-    return {k: (rc[k] if rc[k] is not None else "") for k in RISK_KEYS}
+    return {k: (rc[k] if rc[k] is not None else DEFAULT_RISK[k]) for k in RISK_KEYS}
 
 
 def save_risk(values: dict) -> None:

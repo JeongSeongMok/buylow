@@ -54,11 +54,11 @@
 <section class="card">
   <h2>리스크 관리 (전역 — 백테스트·라이브 모두 적용)</h2>
   <p class="meta">적용하지 않을 항목은 비우세요. 매수는 위 전략이, 매도(손절/익절)는 신호 변화 + 아래 리스크가 담당합니다.</p>
-  <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" placeholder="예: 7" size="6">
+  <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
     <small>매수가 대비 이만큼 떨어지면 매도 (고정 손절선)</small></label>
-  <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" placeholder="예: 20" size="6">
+  <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">
     <small>평가이익이 이만큼 나면 매도 (이익 실현)</small></label>
-  <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" placeholder="예: 5" size="6">
+  <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
     <small>매수 후 <b>최고가에서</b> 이만큼 떨어지면 매도. 주가가 오르면 기준선(고점)도 같이 올라가 이익을 지켜줍니다.
     예: 트레일링 5%로 1만원에 사서 1만2천원까지 오르면, 12,000의 −5%인 11,400 밑으로 빠질 때 매도 → 이익 확보.
     고점은 자동으로 추적되니 따로 정할 필요 없습니다.</small></label>

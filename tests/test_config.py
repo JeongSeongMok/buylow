@@ -68,14 +68,14 @@ def test_risk_save_and_get(tmp_config):
     assert "max_drawdown" not in rc  # 포트폴리오 손실한도 기능 제거됨
 
 
-def test_risk_form_values_defaults_then_saved(tmp_config):
-    # 저장 이력 없으면 기본값 제안
+def test_risk_form_values_always_filled(tmp_config):
+    # 저장 이력 없으면 기본값
     assert config.risk_form_values() == config.DEFAULT_RISK
-    # 저장하면 저장값 반영, 일부러 비운 항목은 빈칸(off)으로 구분
+    # 저장값이 있으면 그 값, 비운(미적용) 항목은 폼엔 기본값으로 채워 보인다
     config.save_risk({"stop_loss": "10", "take_profit": "", "trailing": "5"})
     fv = config.risk_form_values()
     assert fv["stop_loss"] == 10.0 and fv["trailing"] == 5.0
-    assert fv["take_profit"] == ""  # 저장 시 비운 건 빈칸 유지
+    assert fv["take_profit"] == config.DEFAULT_RISK["take_profit"]  # placeholder 아닌 실제 기본값
 
 
 def test_strategy_save_and_get(tmp_config):
