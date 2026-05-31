@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/data">← 데이터</a></p>
+<section class="card">
+  <h2>백그라운드 작업</h2>
+  <p class="meta">대량 적재 등 오래 걸리는 작업의 상태입니다. (새로고침으로 갱신)</p>
+  <table class="runs">
+    <thead><tr><th>작업</th><th>상태</th><th>시작</th><th>종료</th><th>결과/오류</th></tr></thead>
+    <tbody>
+      {% for j in jobs %}
+      <tr>
+        <td>{{ j.name }}</td>
+        <td>
+          {% if j.state == "succeeded" %}<span class="ok">완료 ✓</span>
+          {% elif j.state == "failed" %}<span class="fail">실패 ✗</span>
+          {% elif j.state == "running" %}실행 중…
+          {% else %}대기{% endif %}
+        </td>
+        <td>{{ j.created_at }}</td>
+        <td>{{ j.finished_at or "-" }}</td>
+        <td>{{ j.error or j.result or "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">작업 없음</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -40,6 +40,7 @@ def register_dashboard(
     get_runner: Callable[[], Any],
     store: Any,
     run_and_store: Callable[[Any, Any, RunRequest], dict[str, Any]],
+    jobs: Any,
 ) -> None:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -126,6 +127,24 @@ def register_dashboard(
         except Exception as e:  # 네트워크/로그인/입력 오류를 사용자에게 표시
             return RedirectResponse(url=f"/data?error={type(e).__name__}: {e}", status_code=303)
         return RedirectResponse(url=f"/data/{ticker}", status_code=303)
+
+    @app.post("/data/universe")
+    def load_universe(request: Request, market: str = Form("KOSPI200"), years: int = Form(3)):
+        # 대량/장기 적재는 요청을 막지 않도록 백그라운드 잡으로 던진다.
+        from datetime import date, timedelta
+        from etl.universe import ingest_universe
+        data_dir = config.get_data_folder()
+        end = date.today()
+        start = end - timedelta(days=365 * years)
+        jobs.submit(
+            f"유니버스 적재 {market} {years}년",
+            lambda: ingest_universe(start, end, market, data_dir),
+        )
+        return RedirectResponse(url="/jobs", status_code=303)
+
+    @app.get("/jobs", response_class=HTMLResponse)
+    def jobs_page(request: Request):
+        return templates.TemplateResponse(request, "jobs.html", {"jobs": jobs.list()})
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):

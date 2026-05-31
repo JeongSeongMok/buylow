@@ -11,6 +11,21 @@
     <label><input type="checkbox" name="kind" value="flow"> 수급(투자자별, KRX 로그인 필요)</label>
     <button type="submit">적재</button>
   </form>
+
+  <h3>유니버스 일괄 적재 (백그라운드)</h3>
+  <form method="post" action="/data/universe">
+    <label>유니버스
+      <select name="market">
+        <option value="KOSPI200">KOSPI200</option>
+        <option value="KOSPI">KOSPI</option>
+        <option value="KOSDAQ">KOSDAQ</option>
+        <option value="ALL">ALL</option>
+      </select>
+    </label>
+    <label>기간(년) <input type="text" name="years" value="3"></label>
+    <button type="submit">최초 적재 시작</button>
+    <span class="meta">백그라운드로 실행 — 진행상황은 <a href="/jobs">작업</a>에서. 이후 매일 갱신은 설정의 스케줄러.</span>
+  </form>
 </section>
 
 <section class="card">
