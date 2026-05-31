@@ -224,6 +224,29 @@ def test_data_pages(tmp_path, monkeypatch):
     assert r.status_code == 200 and "55,500" in r.text  # 역스케일된 종가
 
 
+def test_universe_index_returns_loaded_constituents(client, monkeypatch):
+    import etl.universe as u
+    import etl.catalog as cat
+    monkeypatch.setattr(u, "list_universe", lambda market: ["005930", "000660", "999999"])
+    monkeypatch.setattr(cat, "list_price_tickers", lambda d: ["005930", "000660"])  # 적재된 것만
+    data = client.get("/universe/index/KOSPI200").json()
+    assert data["tickers"] == ["005930", "000660"]  # 교집합(멤버 순서)
+    assert data["total"] == 3 and data["available"] == 2
+
+
+def test_universe_index_unknown_name(client):
+    data = client.get("/universe/index/NASDAQ").json()
+    assert data["error"] and data["tickers"] == []
+
+
+def test_universe_index_krx_failure_is_graceful(client, monkeypatch):
+    import etl.universe as u
+    def boom(market): raise RuntimeError("login needed")
+    monkeypatch.setattr(u, "list_universe", boom)
+    data = client.get("/universe/index/KOSDAQ150").json()
+    assert "조회 실패" in data["error"] and data["tickers"] == []
+
+
 def test_jobs_page_renders(client):
     assert client.get("/jobs").status_code == 200
 

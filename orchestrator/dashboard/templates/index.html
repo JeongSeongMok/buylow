@@ -34,7 +34,11 @@
         <input type="text" id="ticker-input" placeholder="예: 005930"
                onkeydown="if(event.key==='Enter'){event.preventDefault();addTicker();}">
         <button type="button" class="ghost" onclick="addTicker()">추가</button>
+        <button type="button" class="ghost" onclick="addIndex('KOSPI200')">KOSPI200 일괄추가</button>
+        <button type="button" class="ghost" onclick="addIndex('KOSDAQ150')">KOSDAQ150 일괄추가</button>
+        <button type="button" class="ghost" onclick="clearTickers()">비우기</button>
       </div>
+      <p id="universe-msg" class="meta"></p>
       <div id="chips"></div>
       <input type="hidden" name="universe" id="universe-hidden" value="005930">
     </div>
@@ -54,11 +58,12 @@
       document.getElementById('start').value = d.toISOString().slice(0, 10);
     }
     // 종목 칩 관리 — hidden universe(쉼표구분)에 동기화
+    const CHIP_LIMIT = 40;  // 칩이 너무 많으면(인덱스 일괄추가 등) 일부만 표시
     let tickers = (document.getElementById('universe-hidden').value || '').split(',').filter(Boolean);
     function syncTickers() {
       const box = document.getElementById('chips');
       box.innerHTML = '';
-      tickers.forEach((t, i) => {
+      tickers.slice(0, CHIP_LIMIT).forEach((t, i) => {
         const chip = document.createElement('span');
         chip.className = 'chip';
         chip.textContent = t;
@@ -68,6 +73,12 @@
         chip.appendChild(x);
         box.appendChild(chip);
       });
+      if (tickers.length > CHIP_LIMIT) {
+        const more = document.createElement('span');
+        more.className = 'meta';
+        more.textContent = ` 외 ${tickers.length - CHIP_LIMIT}종목 (총 ${tickers.length})`;
+        box.appendChild(more);
+      }
       document.getElementById('universe-hidden').value = tickers.join(',');
     }
     function addTicker() {
@@ -76,6 +87,20 @@
       if (v && !tickers.includes(v)) tickers.push(v);
       inp.value = '';
       syncTickers();
+    }
+    function clearTickers() { tickers = []; document.getElementById('universe-msg').textContent = ''; syncTickers(); }
+    async function addIndex(name) {
+      const msg = document.getElementById('universe-msg');
+      msg.textContent = name + ' 구성종목 불러오는 중…';
+      try {
+        const res = await fetch('/universe/index/' + name);
+        const data = await res.json();
+        if (data.error) { msg.textContent = '⚠️ ' + data.error; return; }
+        let added = 0;
+        data.tickers.forEach(t => { if (!tickers.includes(t)) { tickers.push(t); added++; } });
+        syncTickers();
+        msg.textContent = `${name}: ${added}종목 추가 (적재된 구성종목 ${data.available}/${data.total})`;
+      } catch (e) { msg.textContent = '⚠️ 조회 실패'; }
     }
     function toggleAll() {
       const on = document.getElementById('universe-all').checked;

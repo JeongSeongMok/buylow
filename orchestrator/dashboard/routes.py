@@ -218,6 +218,24 @@ def register_dashboard(
         job = submit_backtest("백테스트", req)
         return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
 
+    @app.get("/universe/index/{name}")
+    def universe_index(name: str):
+        # 인덱스(KOSPI200/KOSDAQ150) 구성종목을 한 번에 추가하기 위한 조회.
+        # 적재된 종목과 교집합만 반환(백테스트 가능한 것만). KRX 로그인이 필요할 수 있음.
+        from etl.universe import INDEX_CODES, list_universe
+        from etl.catalog import list_price_tickers
+        key = name.upper()
+        if key not in INDEX_CODES:
+            return {"error": f"지원하지 않는 인덱스: {name}", "tickers": []}
+        try:
+            members = list_universe(key)
+        except Exception as e:
+            return {"error": f"구성종목 조회 실패({type(e).__name__}) — KRX 로그인(설정) 필요할 수 있음",
+                    "tickers": []}
+        loaded = set(list_price_tickers(config.get_data_folder()))
+        tickers = [t for t in members if t in loaded] if loaded else list(members)
+        return {"index": key, "tickers": tickers, "total": len(members), "available": len(tickers)}
+
     @app.get("/ui/runs/{run_id}", response_class=HTMLResponse)
     def ui_run_detail(request: Request, run_id: str):
         record = store.get_run(run_id)

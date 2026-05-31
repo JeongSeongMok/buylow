@@ -23,18 +23,20 @@ from .sources import Bar
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
 
-KOSPI200_INDEX = "1028"  # pykrx 지수코드: KOSPI200
+# pykrx 지수코드 (지수 구성종목 조회용). 표준 KRX 코드.
+INDEX_CODES = {"KOSPI200": "1028", "KOSDAQ150": "2203"}
+KOSPI200_INDEX = INDEX_CODES["KOSPI200"]  # 하위호환
 
 
 def list_universe(market: str = "KOSPI200", on: date | None = None) -> list[str]:
-    """유니버스 종목코드 목록. market: KOSPI200 | KOSPI | KOSDAQ | ALL."""
+    """유니버스 종목코드 목록. market: KOSPI200 | KOSDAQ150 | KOSPI | KOSDAQ | ALL."""
     from pykrx import stock
     from orchestrator.config import apply_krx_credentials
     apply_krx_credentials()  # 지수 구성종목 조회 등은 KRX 로그인 필요
     on_str = (on or date.today()).strftime("%Y%m%d")
-    if market.upper() == "KOSPI200":
-        # 날짜 미지정 시 '오늘' 기준이라 실패할 수 있어 명시적으로 전달
-        return list(stock.get_index_portfolio_deposit_file(KOSPI200_INDEX, date=on_str))
+    code = INDEX_CODES.get(market.upper())
+    if code:  # KOSPI200/KOSDAQ150 등 지수 → 구성종목(deposit file). 날짜 명시(오늘 기준 실패 방지)
+        return list(stock.get_index_portfolio_deposit_file(code, date=on_str))
     return list(stock.get_market_ticker_list(on_str, market=market.upper()))
 
 
