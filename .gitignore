@@ -29,8 +29,8 @@ backtests/
 data/
 
 # === 로컬 전용 샘플/더미 (공개 repo 미포함) ===
-# 합성 KRX 시드 ETL + 더미 삼성 전략. 실제 ETL/전략으로 대체되면 그때 정식 커밋.
-etl/
+# 합성 KRX 시드 ETL + 더미 삼성 전략. (실 ETL etl/krx.py·sources.py 등은 커밋됨)
+etl/seed_krx_sample.py
 strategies/SamsungBuyHold.py
 
 # === LEAN Python 런타임 venv (run-backtest.sh가 생성) ===
