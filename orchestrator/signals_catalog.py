@@ -79,13 +79,50 @@ def signals_from_form(form) -> dict:
     }
 
 
+DEFAULT_GROUPS = [["EMA", "MACD"], ["RSI"]]  # (EMA AND MACD) OR RSI
+
+
+def rule_from_groups(groups: list[list[str]]) -> str:
+    """그룹 목록 → 규칙식. 그룹 안은 AND, 그룹끼리는 OR (사용자 친화 빌더의 출력).
+
+    예: [["EMA","MACD"],["RSI"]] → "(EMA AND MACD) OR RSI". 라벨은 카탈로그 순서로 정렬.
+    """
+    order = [s.label for s in CATALOG]
+    parts = []
+    for g in groups:
+        labels = [l for l in order if l in set(g)]
+        if not labels:
+            continue
+        parts.append("(" + " AND ".join(labels) + ")" if len(labels) > 1 else labels[0])
+    return " OR ".join(parts)
+
+
+def groups_from_form(form) -> list[list[str]]:
+    """폼의 체크박스(g{그룹번호}_{라벨})에서 그룹 구조를 복원. 빈 그룹/미정의 라벨은 제외."""
+    import re
+    valid = {s.label for s in CATALOG}
+    order = [s.label for s in CATALOG]
+    by_idx: dict[int, set] = {}
+    for key in form.keys():
+        m = re.match(r"g(\d+)_(.+)$", key)
+        if m and m.group(2) in valid and form.get(key):
+            by_idx.setdefault(int(m.group(1)), set()).add(m.group(2))
+    groups = []
+    for gi in sorted(by_idx):
+        labels = [l for l in order if l in by_idx[gi]]
+        if labels:
+            groups.append(labels)
+    return groups
+
+
 def default_strategy() -> dict:
     """기본 전략 스펙 — 저장된 게 없을 때 폼 초기값으로 사용."""
     signals = {
         s.label: {"type": s.type, "params": {p.key: p.default for p in s.params}}
         for s in CATALOG
     }
-    return {"signals": signals, "rule": DEFAULT_RULE, "period_days": DEFAULT_PERIOD_DAYS}
+    return {"signals": signals, "rule": rule_from_groups(DEFAULT_GROUPS),
+            "groups": DEFAULT_GROUPS, "period_days": DEFAULT_PERIOD_DAYS}
 
 
 def param_value(strategy: dict, label: str, key: str):

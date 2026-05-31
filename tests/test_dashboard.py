@@ -57,9 +57,10 @@ def client(tmp_path, isolated_config):
 
 
 def _save_default_strategy(client):
+    # 조건 그룹 빌더: 그룹0=[EMA,MACD](AND), 그룹1=[RSI] → "(EMA AND MACD) OR RSI"
     from orchestrator import signals_catalog
     data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
-    data.update({"rule": "(EMA AND MACD) OR RSI", "period_days": "5",
+    data.update({"g0_EMA": "1", "g0_MACD": "1", "g1_RSI": "1", "period_days": "5",
                  "stop_loss": "7", "take_profit": "", "trailing": "", "max_drawdown": ""})
     return client.post("/strategy", data=data)
 
@@ -87,13 +88,15 @@ def test_strategy_save_persists_strategy_and_risk(client, isolated_config):
     r = _save_default_strategy(client)
     assert r.status_code == 200  # 303 → /strategy?saved=1 따라감
     strat = isolated_config.get_strategy()
-    assert strat["rule"] == "(EMA AND MACD) OR RSI"
+    assert strat["rule"] == "(EMA AND MACD) OR RSI"  # 그룹 빌더가 생성한 식
+    assert strat["groups"] == [["EMA", "MACD"], ["RSI"]]
     assert strat["signals"]["EMA"]["params"]["fast"] == 12  # 캐스팅(int)
     assert isolated_config.get_risk_config()["stop_loss"] == 7.0  # 같은 화면에서 리스크도 저장
 
 
-def test_strategy_save_rejects_bad_rule(client):
-    r = client.post("/strategy", data={"rule": "(EMA AND"}, follow_redirects=False)
+def test_strategy_save_requires_a_condition(client):
+    # 아무 조건도 체크 안 하면(그룹 비어있음) 저장 거부
+    r = client.post("/strategy", data={"period_days": "5"}, follow_redirects=False)
     assert r.status_code == 303
     assert "error" in r.headers["location"]
 

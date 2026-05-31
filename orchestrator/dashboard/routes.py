@@ -114,9 +114,11 @@ def register_dashboard(
     def strategy_page(request: Request):
         from .. import signals_catalog
         strategy = config.get_strategy() or signals_catalog.default_strategy()
+        groups = strategy.get("groups") or signals_catalog.DEFAULT_GROUPS
         return templates.TemplateResponse(request, "strategy.html", {
             "catalog": signals_catalog.CATALOG,
             "strategy": strategy,
+            "groups": groups,
             "param_value": signals_catalog.param_value,
             "risk": config.get_risk_config(),
             "saved": request.query_params.get("saved"),
@@ -128,14 +130,19 @@ def register_dashboard(
         from .. import signals_catalog
         from ..rules import parse_rule
         form = await request.form()
-        rule = (form.get("rule") or "").strip()
+        # 사용자 친화 빌더: 조건 그룹(체크박스)에서 규칙식을 생성(그룹 안 AND, 그룹끼리 OR).
+        groups = signals_catalog.groups_from_form(form)
+        if not groups:
+            return RedirectResponse(url="/strategy?error=조건을 하나 이상 선택하세요", status_code=303)
+        rule = signals_catalog.rule_from_groups(groups)
         try:
-            parse_rule(rule)
+            parse_rule(rule)  # 생성식 방어적 검증
         except Exception as e:
             return RedirectResponse(url=f"/strategy?error=규칙식 오류: {e}", status_code=303)
         spec = {
             "signals": signals_catalog.signals_from_form(form),
             "rule": rule,
+            "groups": groups,
             "period_days": int(form.get("period_days") or signals_catalog.DEFAULT_PERIOD_DAYS),
         }
         config.save_strategy(spec)
