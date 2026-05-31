@@ -26,6 +26,8 @@ def test_build_config_core_fields(tmp_path):
     cfg = _build_config(req, results_dir=tmp_path / "run1", algorithm_id="run1")
 
     assert cfg["environment"] == "backtesting"
+    # 종료 시 'Press any key' 콘솔 대기로 멈추지 않도록 자동 종료 플래그가 켜져 있어야 함
+    assert cfg["close-automatically"] is True
     assert cfg["algorithm-language"] == "Python"
     assert cfg["algorithm-type-name"] == "SmokeTestAlgorithm"
     assert cfg["algorithm-id"] == "run1"

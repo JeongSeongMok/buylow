@@ -77,6 +77,9 @@ def _build_config(request: RunRequest, results_dir: Path, algorithm_id: str) -> 
     """
     return {
         "environment": "backtesting",
+        # 백테스트 종료 시 로컬 JobQueue가 'Press any key to continue.'로 콘솔 입력을 기다리며
+        # 멈추지 않게 한다(우리는 비대화형으로 프로세스를 띄움). 이게 없으면 잡이 영원히 실행 중으로 남음.
+        "close-automatically": True,
         "algorithm-id": algorithm_id,
         "algorithm-type-name": request.resolved_algorithm_type(),
         "algorithm-language": "Python",

@@ -23,6 +23,11 @@
   {% endif %}
 
   <h3>진행 로그 (최근 60줄)</h3>
-  {% if log_tail %}<pre class="log">{{ log_tail }}</pre>{% else %}<p class="meta">아직 로그 없음…</p>{% endif %}
+  {% if log_tail %}<pre class="log" id="log">{{ log_tail }}</pre>{% else %}<p class="meta">아직 로그 없음…</p>{% endif %}
 </section>
+<script>
+  // 새로고침마다 로그 콘솔을 맨 아래로 고정 — tail -f 처럼 항상 최신 줄이 보이게.
+  var _log = document.getElementById("log");
+  if (_log) { _log.scrollTop = _log.scrollHeight; }
+</script>
 {% endblock %}
