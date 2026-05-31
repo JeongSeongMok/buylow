@@ -120,7 +120,7 @@ def register_dashboard(
             "strategy": strategy,
             "groups": groups,
             "param_value": signals_catalog.param_value,
-            "risk": config.get_risk_config(),
+            "risk": config.risk_form_values(),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })

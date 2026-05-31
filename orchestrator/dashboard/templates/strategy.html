@@ -46,11 +46,11 @@
 
 <section class="card">
   <h2>리스크 관리 (전역 — 백테스트·라이브 모두 적용)</h2>
-  <p class="meta">비우면 미적용. 매수는 위 전략이, 매도(손절/익절)는 신호 변화 + 아래 리스크가 담당합니다.</p>
-  <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss or '' }}" placeholder="예: 7" size="6"></label>
-  <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit or '' }}" placeholder="예: 20" size="6"></label>
-  <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing or '' }}" placeholder="예: 5" size="6"></label>
-  <label>포트폴리오 손실 한도(%) <input type="text" name="max_drawdown" value="{{ risk.max_drawdown or '' }}" placeholder="예: 20" size="6"></label>
+  <p class="meta">기본값이 채워져 있습니다. 적용하지 않으려면 비우세요. 매수는 위 전략이, 매도(손절/익절)는 신호 변화 + 아래 리스크가 담당합니다.</p>
+  <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" placeholder="예: 7" size="6"></label>
+  <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" placeholder="예: 20" size="6"></label>
+  <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" placeholder="예: 5" size="6"></label>
+  <label>포트폴리오 손실 한도(%) <input type="text" name="max_drawdown" value="{{ risk.max_drawdown }}" placeholder="예: 20" size="6"></label>
 
   <button type="submit">전략 + 리스크 저장</button>
   <span class="meta">저장 후 <a href="/">② 백테스트</a>에서 실행하세요.</span>

@@ -69,6 +69,10 @@ def get_dashboard_port() -> int:
 
 RISK_KEYS = ("stop_loss", "take_profit", "trailing", "max_drawdown")
 
+# 리스크 폼 기본값(%). 한 번도 저장하지 않았을 때 대시보드에 미리 채워 보여준다.
+# 엔진(get_risk_config)은 '저장된' 값만 반영하므로, 사용자가 저장해야 실제 적용된다.
+DEFAULT_RISK = {"stop_loss": 7, "take_profit": 20, "trailing": 5, "max_drawdown": 20}
+
 
 def get_risk_config() -> dict:
     """전역 리스크 설정(%). 값이 없거나 0이면 해당 규칙 미적용(None)."""
@@ -82,6 +86,17 @@ def get_risk_config() -> dict:
         except (TypeError, ValueError):
             out[k] = None
     return out
+
+
+def risk_form_values() -> dict:
+    """대시보드 리스크 폼 프리필용. 저장 이력이 없으면 기본값, 있으면 저장값(빈값=빈칸).
+
+    이렇게 분리해야 '한 번도 저장 안 함'(기본값 제안)과 '일부러 비워 저장함'(off)을 구분한다.
+    """
+    if _load_local().get("risk") is None:
+        return dict(DEFAULT_RISK)
+    rc = get_risk_config()
+    return {k: (rc[k] if rc[k] is not None else "") for k in RISK_KEYS}
 
 
 def save_risk(values: dict) -> None:
