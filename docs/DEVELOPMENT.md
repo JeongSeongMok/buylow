@@ -107,7 +107,8 @@ run backtest → view history; HTMX + Jinja, vendored — no Node build). JSON e
 `GET /`, `POST /ui/runs`, `GET /ui/runs/{id}`, `GET|POST /rules` (compose conditions with AND/OR/괄호
 → backtest), `GET|POST /compose` (pick + combine alphas → backtest),
 `GET /data` + `GET /data/{ticker}` (view/fetch loaded OHLCV & 수급), `POST /data/universe` (bulk,
-background), `GET /jobs`, `GET|POST /settings`. State is persisted in `buylow.db` (SQLite,
+background), `GET /jobs` + `GET /jobs/{id}` (background job status + live log),
+`GET|POST /settings`. Dashboard backtests run as background jobs (non-blocking) with a live log. State is persisted in `buylow.db` (SQLite,
 gitignored). The server binds to `127.0.0.1` only.
 
 ## Configuration & secrets
