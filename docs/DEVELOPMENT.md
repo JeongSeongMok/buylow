@@ -127,6 +127,21 @@ secrets:
   Price (OHLCV) data needs no login.
 - Recommend `chmod 600 config.local.yaml`. OS keychain storage is possible future hardening.
 
+## Loading Korean market data (ETL)
+
+LEAN replays historical data from disk; the ETL fetches it and writes LEAN-format files into
+`./data`. Sources are pluggable (pykrx default, FinanceDataReader fallback).
+
+```bash
+python -m etl.krx --ticker 005930 --from 2023-01-01 --to 2023-12-31          # pykrx (default)
+python -m etl.krx --ticker 005930 --from 2023-01-01 --source fdr             # alternative source
+```
+
+OHLCV needs no login (fundamentals/PER-PBR via pykrx require KRX credentials — see
+Configuration). The KRX market definition is injected automatically. Files land in
+`data/equity/krx/daily/<ticker>.zip` (gitignored). Then backtest a Korean strategy against
+`./data`.
+
 ## Tests
 
 ```bash
