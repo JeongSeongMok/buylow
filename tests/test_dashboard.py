@@ -65,8 +65,14 @@ def _save_default_strategy(client):
     return client.post("/strategy", data=data)
 
 
-def test_index_renders(client):
-    r = client.get("/")
+def test_root_redirects_to_strategy(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers["location"] == "/strategy"
+
+
+def test_backtest_page_renders(client):
+    r = client.get("/backtest")
     assert r.status_code == 200
     assert "buylow" in r.text
     assert "백테스트" in r.text and "실행 이력" in r.text
@@ -105,7 +111,7 @@ def test_backtest_without_strategy_redirects(client):
     r = client.post("/backtest", data={"universe": "005930", "start": "2023-01-02",
                                        "end": "2023-12-28"}, follow_redirects=False)
     assert r.status_code == 303
-    assert r.headers["location"].startswith("/?error")  # 전략 없음 안내
+    assert r.headers["location"].startswith("/backtest?error")  # 전략 없음 안내
 
 
 def test_backtest_uses_saved_strategy(client):

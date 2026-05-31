@@ -4,9 +4,9 @@
   <h2>백테스트 실행</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if not has_strategy %}
-  <p class="meta">아직 저장된 전략이 없습니다. 먼저 <a href="/strategy">① 전략 설정</a>에서 전략을 만들어 저장하세요.</p>
+  <p class="meta">아직 저장된 전략이 없습니다. 먼저 <a href="/strategy">전략 설정</a>에서 전략을 만들어 저장하세요.</p>
   {% else %}
-  <p class="meta">저장된 전략(<a href="/strategy">① 전략 설정</a>)을 아래 조건으로 실행합니다.</p>
+  <p class="meta">저장된 전략(<a href="/strategy">전략 설정</a>)을 아래 조건으로 실행합니다.</p>
   <form method="post" action="/backtest">
     <label>시작일 <input type="text" name="start" value="2023-01-02"></label>
     <label>종료일 <input type="text" name="end" value="2023-12-28"></label>

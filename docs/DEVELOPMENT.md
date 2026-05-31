@@ -106,8 +106,9 @@ This also serves the **browser dashboard** at `http://127.0.0.1:8420` (3 chapter
 persisted** (`config.local.yaml` `strategy:`): you save conditions+risk once, then each backtest
 only supplies period/cash/universe. JSON endpoints: `GET /healthz`, `POST /runs` (trigger a
 backtest), `GET /runs`, `GET /runs/{id}`; HTML routes: `GET /` (② backtest form + history),
-`POST /backtest` (run saved strategy → background job), `GET /ui/runs/{id}` (result detail),
-`GET|POST /strategy` (① edit + save the rule conditions and global risk; hides internal
+`GET /` redirects to `/strategy` (landing); HTML routes: `GET /backtest` (backtest form +
+history), `POST /backtest` (run saved strategy → background job), `GET /ui/runs/{id}` (result
+detail), `GET|POST /strategy` (edit + save the rule conditions and global risk; hides internal
 UP/DOWN/NONE), `GET /data` + `GET /data/{ticker}` (view loaded OHLCV & 수급),
 `POST /data/load-all` (③ one button: bulk-load the whole KRX market OHLCV+flow, overwrite,
 background), `GET /jobs` + `GET /jobs/{id}` (background job status + live log), `GET|POST /settings`

@@ -59,9 +59,14 @@ def register_dashboard(
             return f"{rec['run_id']} · 주문 {rec['statistics'].get('Total Orders','-')} · Net {rec['statistics'].get('Net Profit','-')}"
         return jobs.submit(name, _bt)
 
-    # ── ② 백테스트 탭 ────────────────────────────────────────────────
-    @app.get("/", response_class=HTMLResponse)
-    def index(request: Request):
+    # ── 랜딩: 전략 설정 탭으로 ────────────────────────────────────────
+    @app.get("/")
+    def index_redirect():
+        return RedirectResponse(url="/strategy", status_code=307)
+
+    # ── 백테스트 탭 ──────────────────────────────────────────────────
+    @app.get("/backtest", response_class=HTMLResponse)
+    def backtest_page(request: Request):
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
             "has_strategy": config.get_strategy() is not None,
@@ -75,16 +80,16 @@ def register_dashboard(
         from ..rules import parse_rule
         strategy = config.get_strategy()
         if strategy is None:
-            return RedirectResponse(url="/?error=먼저 ① 전략 설정에서 전략을 저장하세요", status_code=303)
+            return RedirectResponse(url="/backtest?error=먼저 전략 설정에서 전략을 저장하세요", status_code=303)
         try:
             parse_rule(strategy["rule"])  # 저장 시 검증했지만 방어적으로 재확인
         except Exception as e:
-            return RedirectResponse(url=f"/?error=전략 규칙식 오류: {e}", status_code=303)
+            return RedirectResponse(url=f"/backtest?error=전략 규칙식 오류: {e}", status_code=303)
 
         form = await request.form()
         data_folder = form.get("data_folder") or config.get_data_folder()
         if not data_folder:
-            return RedirectResponse(url="/?error=데이터 폴더가 필요합니다(③ 설정)", status_code=303)
+            return RedirectResponse(url="/backtest?error=데이터 폴더가 필요합니다(설정)", status_code=303)
         spec = {
             **strategy,  # signals, rule, period_days
             "universe": _resolve_universe(form, data_folder),
@@ -92,7 +97,7 @@ def register_dashboard(
             "cash": int(form.get("cash") or 10_000_000),
         }
         if not spec["universe"]:
-            return RedirectResponse(url="/?error=유니버스(종목)를 지정하세요", status_code=303)
+            return RedirectResponse(url="/backtest?error=유니버스(종목)를 지정하세요", status_code=303)
         req = RunRequest(
             strategy_path="strategies/RuleStrategy.py",
             data_folder=data_folder,
