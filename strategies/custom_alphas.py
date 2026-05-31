@@ -5,7 +5,7 @@ from collections import deque
 
 from AlgorithmImports import *
 
-from krx_data import KrxFlow
+from krx_data import KrxFlow, KrxFundamental
 
 
 class FlowFollowingAlpha(AlphaModel):
@@ -42,5 +42,38 @@ class FlowFollowingAlpha(AlphaModel):
                 self._window[eq].append(data[fs]["foreign"])
             window = self._window[eq]
             if len(window) == window.maxlen and sum(window) > 0:  # 외국인 누적 순매수 → 롱
+                insights.append(Insight.price(eq, self.hold, InsightDirection.UP))
+        return insights
+
+
+class ValueAlpha(AlphaModel):
+    """저PBR 가치: PBR이 max_pbr 미만이면 롱(저평가). 가치는 장기라 보유기간을 길게.
+
+    PER/PBR(KrxFundamental 커스텀 데이터)을 종목별로 구독해 최신 PBR로 판단한다.
+    """
+
+    def __init__(self, max_pbr: float = 1.0, period_days: int = 20):
+        self.max_pbr = max_pbr
+        self.hold = timedelta(days=period_days)
+        self._fund_sym = {}   # equity symbol -> fundamental data symbol
+        self._pbr = {}        # equity symbol -> 최신 PBR
+
+    def on_securities_changed(self, algorithm, changes):
+        for sec in changes.added_securities:
+            eq = sec.symbol
+            if eq.security_type != SecurityType.EQUITY:
+                continue
+            self._fund_sym[eq] = algorithm.add_data(KrxFundamental, eq.value, Resolution.DAILY).symbol
+        for sec in changes.removed_securities:
+            self._fund_sym.pop(sec.symbol, None)
+            self._pbr.pop(sec.symbol, None)
+
+    def update(self, algorithm, data):
+        insights = []
+        for eq, fs in self._fund_sym.items():
+            if data.contains_key(fs) and data[fs] is not None:
+                self._pbr[eq] = data[fs]["pbr"]
+            pbr = self._pbr.get(eq)
+            if pbr is not None and 0 < pbr < self.max_pbr:  # 저PBR → 저평가 → 롱
                 insights.append(Insight.price(eq, self.hold, InsightDirection.UP))
         return insights

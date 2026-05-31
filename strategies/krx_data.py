@@ -28,3 +28,25 @@ class KrxFlow(PythonData):
         flow["individual"] = float(p[3])
         flow.value = float(p[1])  # 기본값 = 외국인 순매수
         return flow
+
+
+class KrxFundamental(PythonData):
+    """KRX 투자지표 커스텀 데이터. etl/fundamental.py 의 data/krx/fundamental/<ticker>.csv
+    (라인: YYYYMMDD,per,pbr,div) 를 파싱. 수급과 동일하게 D+1부터 노출."""
+
+    def get_source(self, config, date, is_live):
+        path = os.path.join(Globals.data_folder, "krx", "fundamental", f"{config.symbol.value}.csv")
+        return SubscriptionDataSource(path, SubscriptionTransportMedium.LOCAL_FILE)
+
+    def reader(self, config, line, date, is_live):
+        if not line or not line[0].isdigit():
+            return None
+        p = line.split(",")
+        f = KrxFundamental()
+        f.symbol = config.symbol
+        f.time = datetime.strptime(p[0], "%Y%m%d") + timedelta(days=1)
+        f["per"] = float(p[1])
+        f["pbr"] = float(p[2])
+        f["div"] = float(p[3])
+        f.value = float(p[2])  # 기본값 = PBR
+        return f

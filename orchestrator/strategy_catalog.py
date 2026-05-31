@@ -56,6 +56,11 @@ CATALOG: list[AlphaSpec] = [
               "외국인 순매수 N일 누적이 양수면 롱 (커스텀; 수급 데이터 필요)", [
                   ParamSpec("lookback", "누적(일)", "int", 5),
               ]),
+    AlphaSpec("value", "저PBR 가치", "가치",
+              "PBR이 상한 미만이면 롱 (커스텀; 펀더멘털 데이터 필요)", [
+                  ParamSpec("max_pbr", "PBR 상한", "float", 1.0),
+                  ParamSpec("period_days", "보유(일)", "int", 20),
+              ]),
 ]
 
 _BY_NAME = {a.name: a for a in CATALOG}

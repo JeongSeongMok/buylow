@@ -161,6 +161,9 @@ def register_dashboard(
             if "flow" in kinds:
                 from etl import flow as etl_flow
                 etl_flow.ingest_flow(ticker, start, end, data_dir)
+            if "fundamental" in kinds:
+                from etl import fundamental as etl_fund
+                etl_fund.ingest_fundamental(ticker, start, end, data_dir)
         except Exception as e:  # 네트워크/로그인/입력 오류를 사용자에게 표시
             return RedirectResponse(url=f"/data?error={type(e).__name__}: {e}", status_code=303)
         return RedirectResponse(url=f"/data/{ticker}", status_code=303)

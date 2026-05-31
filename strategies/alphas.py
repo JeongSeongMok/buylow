@@ -20,4 +20,7 @@ def build_alpha(name: str, p: dict):
     if name == "flow":  # 한국 특화 커스텀(수급)
         from custom_alphas import FlowFollowingAlpha
         return FlowFollowingAlpha(int(p["lookback"]))
+    if name == "value":  # 한국 특화 커스텀(저PBR 가치)
+        from custom_alphas import ValueAlpha
+        return ValueAlpha(float(p["max_pbr"]), int(p["period_days"]))
     raise ValueError(f"알 수 없는 alpha: {name}")
