@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card">
-  <h2>적재된 데이터</h2>
-  <p class="meta">data: <code>{{ data_dir }}</code> · 적재는 <a href="/settings">설정 → 과거 데이터 적재</a>에서</p>
+  <h2>적재된 데이터 <small>{{ count }}종목</small></h2>
+  <p class="meta">data: <code>{{ data_dir }}</code> · 적재는 <a href="/settings">설정 → 과거 데이터 적재</a>에서.
+    상세 수치는 종목별 <b>보기</b>에서 확인하세요.</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table class="runs">
-    <thead><tr><th>종목</th><th>가격(일봉)</th><th>수급</th><th></th></tr></thead>
+    <thead><tr><th>종목</th><th>가격</th><th>수급</th><th></th></tr></thead>
     <tbody>
       {% for t in tickers %}
       <tr>
         <td>{{ t.ticker }}</td>
-        <td>{{ t.price }}일</td>
-        <td>{{ t.flow }}행</td>
+        <td>{% if t.price %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
+        <td>{% if t.flow %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
         <td><a href="/data/{{ t.ticker }}">보기</a></td>
       </tr>
       {% else %}

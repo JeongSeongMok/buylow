@@ -166,16 +166,16 @@ def register_dashboard(
     # ── ③ 설정 탭 (키 + 데이터 적재) ─────────────────────────────────
     @app.get("/data", response_class=HTMLResponse)
     def data_list(request: Request):
+        # 목록은 '파일 존재 여부'만 본다(glob) — 수천 종목의 일봉/수급을 다 파싱하면
+        # 페이지가 멈추므로, 상세 행 수는 종목 상세(/data/{ticker})에서만 계산한다.
         from etl import catalog
         data_dir = config.get_data_folder()
-        tickers = [
-            {"ticker": t,
-             "price": len(catalog.read_price_daily(data_dir, t)),
-             "flow": len(catalog.read_flow(data_dir, t))}
-            for t in catalog.all_tickers(data_dir)
-        ]
+        price = set(catalog.list_price_tickers(data_dir))
+        flow = set(catalog.list_flow_tickers(data_dir))
+        tickers = [{"ticker": t, "price": t in price, "flow": t in flow}
+                   for t in sorted(price | flow)]
         return templates.TemplateResponse(request, "data_list.html", {
-            "tickers": tickers, "data_dir": data_dir,
+            "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "error": request.query_params.get("error"),
         })
 
