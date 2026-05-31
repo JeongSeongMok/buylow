@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 from .sources import Bar
@@ -20,11 +21,35 @@ def equity_daily_zip_path(data_dir: str | Path, market: str, ticker: str) -> Pat
     return Path(data_dir) / "equity" / market / "daily" / f"{ticker}.zip"
 
 
-def write_equity_daily(data_dir: str | Path, market: str, ticker: str, bars: list[Bar]) -> Path:
+def read_equity_daily(data_dir: str | Path, market: str, ticker: str) -> list[Bar]:
+    """저장된 LEAN 일봉을 Bar 리스트로 되읽기(가격 역스케일). 증분 병합/조회에 사용."""
+    zp = equity_daily_zip_path(data_dir, market, ticker)
+    if not zp.exists():
+        return []
+    with zipfile.ZipFile(zp) as zf:
+        text = zf.read(f"{ticker}.csv").decode("utf-8")
+    bars = []
+    for line in text.strip().splitlines():
+        dt, o, h, l, c, v = line.split(",")
+        d = datetime.strptime(dt.split()[0], "%Y%m%d").date()
+        bars.append(Bar(d, int(o) / PRICE_SCALE, int(h) / PRICE_SCALE,
+                        int(l) / PRICE_SCALE, int(c) / PRICE_SCALE, int(v)))
+    return bars
+
+
+def write_equity_daily(data_dir: str | Path, market: str, ticker: str,
+                       bars: list[Bar], merge: bool = False) -> Path:
     """일봉 리스트를 LEAN 포맷 zip으로 기록하고 경로 반환.
 
+    merge=True면 기존 파일의 봉과 날짜 기준으로 병합(새 값이 우선) → 증분 적재.
     KRX 가격은 보통 수정주가라 별도 보정 불필요 → factor_files를 비워둔다(이중 보정 방지).
     """
+    if merge:
+        by_day = {b.day: b for b in read_equity_daily(data_dir, market, ticker)}
+        for b in bars:
+            by_day[b.day] = b
+        bars = list(by_day.values())
+
     buf = io.StringIO()
     writer = csv.writer(buf)
     for b in sorted(bars, key=lambda x: x.day):

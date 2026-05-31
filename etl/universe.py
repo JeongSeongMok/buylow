@@ -62,7 +62,7 @@ def ingest_universe(
                 ))
 
     for tkr, bars in series.items():
-        write_equity_daily(data_dir, KRX_MARKET, tkr, bars)
+        write_equity_daily(data_dir, KRX_MARKET, tkr, bars, merge=True)  # 증분 병합
     inject_krx_market(data_dir)
 
     return {
@@ -71,6 +71,14 @@ def ingest_universe(
         "ingested": len(series),
         "trading_days": len(trading_days),
     }
+
+
+def update_universe(market: str = "KOSPI200", data_dir: str | Path = DEFAULT_DATA_DIR,
+                    days: int = 5) -> dict[str, Any]:
+    """최근 days일을 받아 증분 병합 (스케줄러 일일 갱신용). 멱등."""
+    from datetime import timedelta
+    end = date.today()
+    return ingest_universe(end - timedelta(days=days), end, market, data_dir)
 
 
 def main() -> None:
