@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from ..config import get_data_folder
 from ..dashboard import register_dashboard
+from ..jobs import JobManager
 from ..lean import LeanRunner, RunRequest, RunResult
 from ..persistence import RunStore
 
@@ -52,10 +53,12 @@ def run_and_store(runner: LeanRunner, store: RunStore, req: RunRequest) -> dict[
     return store.save_run(_result_to_record(req, result))
 
 
-def create_app(runner: LeanRunner | None = None, store: RunStore | None = None) -> FastAPI:
+def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
+               jobs: JobManager | None = None) -> FastAPI:
     app = FastAPI(title="buylow", version="0.0.1")
     # runner는 lazy: 주입되지 않았으면 첫 실행 때 생성(런처 빌드 비용을 startup에서 회피)
-    state: dict[str, Any] = {"runner": runner, "store": store or RunStore()}
+    state: dict[str, Any] = {"runner": runner, "store": store or RunStore(),
+                             "jobs": jobs or JobManager()}
 
     def get_runner() -> LeanRunner:
         if state["runner"] is None:
@@ -98,6 +101,7 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None) 
         get_runner=get_runner,
         store=state["store"],
         run_and_store=run_and_store,
+        jobs=state["jobs"],
     )
 
     return app

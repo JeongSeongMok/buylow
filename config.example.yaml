@@ -9,6 +9,12 @@ data_folder: ./data
 # 대시보드 포트 (기본: 8420)
 dashboard_port: 8420
 
+# 일일 증분 적재 스케줄 (평일 장마감 후 KST). 켜면 자동으로 매일 새 데이터를 쌓음.
+scheduler:
+  enabled: false
+  market: KOSPI200   # KOSPI200 | KOSPI | KOSDAQ | ALL
+  hour: 18
+
 secrets:
   # KRX 로그인 (pykrx 펀더멘털 PER/PBR 등 조회용). https://data.krx.co.kr 무료 회원가입.
   krx_id: ""

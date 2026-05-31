@@ -67,6 +67,16 @@ def get_dashboard_port() -> int:
     )
 
 
+def get_scheduler_config() -> dict:
+    """일일 증분 적재 스케줄 설정. 기본 비활성(사용자가 켜야 자동 적재)."""
+    sc = _load_local().get("scheduler") or {}
+    return {
+        "enabled": bool(sc.get("enabled", False)),
+        "market": sc.get("market", "KOSPI200"),
+        "hour": int(sc.get("hour", 18)),  # 평일 장마감 후 (KST)
+    }
+
+
 def get_secret(spec: SecretSpec) -> str | None:
     """env 우선, 없으면 config.local.yaml 의 secrets.<key>."""
     return os.environ.get(spec.env) or (_load_local().get("secrets") or {}).get(spec.key)

@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml>=6.0",          # config.local.yaml
     "pykrx>=1.2.8",         # KRX 시세/펀더멘털 소스 (ETL)
     "finance-datareader>=0.9",  # 대체 시세 소스 (ETL)
+    "apscheduler>=3.10",    # 일일 증분 적재 스케줄링
 ]
 
 [project.optional-dependencies]
