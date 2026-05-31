@@ -20,6 +20,18 @@
 </section>
 
 <section class="card">
+  <h2>리스크 관리 (전역 — 모든 백테스트·라이브에 적용)</h2>
+  <p class="meta">비우면 미적용. 여러 개 설정 시 동시 적용. 매수는 전략, 매도(손절/익절)는 여기서.</p>
+  <form method="post" action="/settings/risk">
+    <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss or '' }}" placeholder="예: 7" size="6"></label>
+    <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit or '' }}" placeholder="예: 20" size="6"></label>
+    <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing or '' }}" placeholder="예: 5" size="6"></label>
+    <label>포트폴리오 손실 한도(%) <input type="text" name="max_drawdown" value="{{ risk.max_drawdown or '' }}" placeholder="예: 20" size="6"></label>
+    <button type="submit">리스크 설정 저장</button>
+  </form>
+</section>
+
+<section class="card">
   <h2>과거 데이터 적재</h2>
   <p class="meta">적재 현황·조회 → <a href="/data">데이터 보기</a></p>
 

@@ -67,6 +67,37 @@ def get_dashboard_port() -> int:
     )
 
 
+RISK_KEYS = ("stop_loss", "take_profit", "trailing", "max_drawdown")
+
+
+def get_risk_config() -> dict:
+    """전역 리스크 설정(%). 값이 없거나 0이면 해당 규칙 미적용(None)."""
+    r = _load_local().get("risk") or {}
+    out = {}
+    for k in RISK_KEYS:
+        v = r.get(k)
+        try:
+            f = float(v)
+            out[k] = f if f > 0 else None
+        except (TypeError, ValueError):
+            out[k] = None
+    return out
+
+
+def save_risk(values: dict) -> None:
+    """대시보드에서 받은 리스크 % 값을 config.local.yaml 의 risk 섹션에 저장(빈값=미적용)."""
+    data = _load_local()
+    risk = data.setdefault("risk", {})
+    for k in RISK_KEYS:
+        v = str(values.get(k, "")).strip()
+        try:
+            f = float(v)
+            risk[k] = f if f > 0 else None
+        except ValueError:
+            risk[k] = None
+    _write_local(data)
+
+
 def get_scheduler_config() -> dict:
     """일일 증분 적재 스케줄 설정. 기본 비활성(사용자가 켜야 자동 적재)."""
     sc = _load_local().get("scheduler") or {}

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from ..config import get_risk_config
 from .environment import REPO_ROOT, LeanEnvironment, prepare_environment
 
 RUNS_DIR = REPO_ROOT / "runs"
@@ -58,6 +59,16 @@ class RunResult:
         return self.exit_code == 0
 
 
+def _params_with_risk(parameters: dict) -> dict:
+    """전략 파라미터에 전역 리스크 설정(%)을 risk_* 키로 합쳐 LEAN에 전달."""
+    params = {k: str(v) for k, v in parameters.items()}
+    risk = get_risk_config()
+    for k, v in risk.items():
+        if v is not None:
+            params[f"risk_{k}"] = str(v)
+    return params
+
+
 def _build_config(request: RunRequest, results_dir: Path, algorithm_id: str) -> dict:
     """백테스트용 LEAN config(dict)를 생성. launcher/config.json의 백테스트 키를 코드로 구성.
 
@@ -93,8 +104,8 @@ def _build_config(request: RunRequest, results_dir: Path, algorithm_id: str) -> 
         "maximum-data-points-per-chart-series": 1000000,
         "maximum-chart-series": 30,
         "force-exchange-always-open": False,
-        # 전략 파라미터(전부 문자열). 전략에서 get_parameter()로 읽음.
-        "parameters": {k: str(v) for k, v in request.parameters.items()},
+        # 전략 파라미터(전부 문자열) + 전역 리스크 설정 주입(전략은 get_parameter로 읽음).
+        "parameters": _params_with_risk(request.parameters),
         # PYTHONPATH로 주입하므로 비워둠
         "python-additional-paths": [],
         "environments": {

@@ -15,6 +15,13 @@ scheduler:
   market: KOSPI200   # KOSPI200 | KOSPI | KOSDAQ | ALL
   hour: 18
 
+# 전역 리스크 관리(%). 비우면 미적용. 모든 백테스트·라이브에 적용.
+risk:
+  stop_loss:       # 종목 손절 % (예: 7)
+  take_profit:     # 종목 익절 %
+  trailing:        # 트레일링 스탑 %
+  max_drawdown:    # 포트폴리오 손실 한도 %
+
 secrets:
   # KRX 로그인 (pykrx 펀더멘털 PER/PBR 등 조회용). https://data.krx.co.kr 무료 회원가입.
   krx_id: ""

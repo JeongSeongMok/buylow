@@ -22,6 +22,29 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
         # 결합/실행 기본값: 동일비중(=활성 신호들을 종목당 1목표로 합산) + 즉시 체결
         self.set_portfolio_construction(EqualWeightingPortfolioConstructionModel())
         self.set_execution(ImmediateExecutionModel())
+        self._apply_risk_management()
+
+    def _apply_risk_management(self):
+        # 전역 리스크 설정(Runner가 risk_* 파라미터로 주입). %값이라 /100. 여러 개면 합성.
+        def pct(name):
+            v = self.get_parameter(name)
+            try:
+                return float(v) / 100.0
+            except (TypeError, ValueError):
+                return None
+        sl, tp = pct("risk_stop_loss"), pct("risk_take_profit")
+        tr, md = pct("risk_trailing"), pct("risk_max_drawdown")
+        models = []
+        if sl:
+            models.append(MaximumDrawdownPercentPerSecurity(sl))          # 종목 손절
+        if tp:
+            models.append(MaximumUnrealizedProfitPercentPerSecurity(tp))  # 종목 익절
+        if tr:
+            models.append(TrailingStopRiskManagementModel(tr))            # 트레일링 스탑
+        if md:
+            models.append(MaximumDrawdownPercentPortfolio(md))            # 포트폴리오 손실 한도
+        if models:
+            self.set_risk_management(CompositeRiskManagementModel(*models))
 
     def krx_symbols(self, tickers: list[str]) -> list:
         # 수동 유니버스용 KRX 심볼 생성 (Market.add 이후 호출).

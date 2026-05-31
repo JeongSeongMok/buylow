@@ -258,9 +258,16 @@ def register_dashboard(
     def settings_page(request: Request):
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
+            "risk": config.get_risk_config(),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })
+
+    @app.post("/settings/risk")
+    async def settings_risk_save(request: Request):
+        form = await request.form()
+        config.save_risk({k: form.get(k, "") for k in config.RISK_KEYS})
+        return RedirectResponse(url="/settings?saved=1", status_code=303)
 
     @app.post("/settings")
     async def settings_save(request: Request):
