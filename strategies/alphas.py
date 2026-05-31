@@ -59,3 +59,66 @@ class BnfReversionAlpha(AlphaModel):
             if price < sma.current.value * (1 - self.threshold):  # 과대낙폭 → 롱
                 insights.append(Insight.price(symbol, self.period, InsightDirection.UP))
         return insights
+
+
+class RsiReversionAlpha(AlphaModel):
+    """평균회귀(RSI): RSI가 과매도(oversold) 아래면 롱."""
+
+    def __init__(self, period: int = 14, oversold: float = 30.0, period_days: int = 5):
+        self.period = period
+        self.oversold = oversold
+        self.hold = timedelta(days=period_days)
+        self._rsi = {}
+
+    def on_securities_changed(self, algorithm, changes):
+        for sec in changes.added_securities:
+            # rsi(symbol, period, moving_average_type, resolution=...) — resolution은 키워드로
+            self._rsi[sec.symbol] = algorithm.rsi(sec.symbol, self.period, resolution=Resolution.DAILY)
+        for sec in changes.removed_securities:
+            self._rsi.pop(sec.symbol, None)
+
+    def update(self, algorithm, data):
+        insights = []
+        for symbol, rsi in self._rsi.items():
+            if rsi.is_ready and rsi.current.value < self.oversold:
+                insights.append(Insight.price(symbol, self.hold, InsightDirection.UP))
+        return insights
+
+
+class MomentumAlpha(AlphaModel):
+    """모멘텀: 최근 lookback일 수익률(ROC)이 양수면 롱(추세 지속 기대)."""
+
+    def __init__(self, lookback: int = 120, period_days: int = 20):
+        self.lookback = lookback
+        self.hold = timedelta(days=period_days)
+        self._roc = {}
+
+    def on_securities_changed(self, algorithm, changes):
+        for sec in changes.added_securities:
+            self._roc[sec.symbol] = algorithm.roc(sec.symbol, self.lookback, Resolution.DAILY)
+        for sec in changes.removed_securities:
+            self._roc.pop(sec.symbol, None)
+
+    def update(self, algorithm, data):
+        insights = []
+        for symbol, roc in self._roc.items():
+            if roc.is_ready and roc.current.value > 0:
+                insights.append(Insight.price(symbol, self.hold, InsightDirection.UP))
+        return insights
+
+
+# name → AlphaModel 팩토리 (Composed 알고리즘이 조합 스펙으로 Alpha를 동적 생성).
+# 이름/파라미터 키는 orchestrator/strategy_catalog.py 의 스펙과 일치해야 한다.
+_ALPHA_CLASSES = {
+    "ema_cross": EmaCrossAlpha,
+    "bnf": BnfReversionAlpha,
+    "rsi": RsiReversionAlpha,
+    "momentum": MomentumAlpha,
+}
+
+
+def build_alpha(name: str, params: dict):
+    cls = _ALPHA_CLASSES.get(name)
+    if cls is None:
+        raise ValueError(f"알 수 없는 alpha: {name} (가능: {list(_ALPHA_CLASSES)})")
+    return cls(**params)
