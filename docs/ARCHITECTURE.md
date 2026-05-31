@@ -143,6 +143,16 @@ expression combines them, e.g. `(EMA AND MACD) OR (RSI AND MOM)`.
   runs it. Same `RuleAlpha` will drive live (when Toss opens); intraday/30s eval awaits a live feed.
 - Signals are evaluated as **states** (e.g. fast EMA > slow EMA) so AND/OR is meaningful each day.
 
+### Risk management (global)
+
+Entry is the strategy's job; **exit by P&L** (손절/익절/트레일링/포트폴리오 한도) is the **Risk stage** —
+a different axis from rule-based selling. Risk is **global** (set once in `/settings`, stored in
+`config.local.yaml` `risk:`), applied to **every** backtest and (later) live run: the `LeanRunner`
+injects the configured percentages as `risk_*` parameters, and `KrxFrameworkAlgorithm` builds a
+`CompositeRiskManagementModel` from LEAN's built-ins (`MaximumDrawdownPercentPerSecurity`,
+`MaximumUnrealizedProfitPercentPerSecurity`, `TrailingStopRiskManagementModel`,
+`MaximumDrawdownPercentPortfolio`). Built-ins now; custom (ATR/volatility/time) later via the same hook.
+
 ## Dashboard
 
 - A **browser UI** served by FastAPI on **`127.0.0.1:<port>`** (default `8420`, configurable
