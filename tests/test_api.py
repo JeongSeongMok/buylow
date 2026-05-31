@@ -16,7 +16,7 @@ class FakeRunner:
     def __init__(self):
         self.calls: list[RunRequest] = []
 
-    def run_backtest(self, request: RunRequest) -> RunResult:
+    def run_backtest(self, request: RunRequest, on_start=None) -> RunResult:
         self.calls.append(request)
         return RunResult(
             run_id="fake-run-1",

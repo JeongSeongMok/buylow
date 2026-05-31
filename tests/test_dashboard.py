@@ -10,12 +10,23 @@ from orchestrator.lean import RunRequest, RunResult
 from orchestrator.persistence import RunStore
 
 
+def _wait_calls(runner, n=1, timeout=3.0):
+    """백그라운드 잡이 runner를 호출할 때까지 대기(대시보드 백테스트는 비동기)."""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline and len(runner.calls) < n:
+        time.sleep(0.01)
+    return runner.calls
+
+
 class FakeRunner:
     def __init__(self):
         self.calls = []
 
-    def run_backtest(self, request: RunRequest) -> RunResult:
+    def run_backtest(self, request: RunRequest, on_start=None) -> RunResult:
         self.calls.append(request)
+        if on_start:
+            on_start("fake-run-1", "/tmp/fake-run-1/run.log")
         return RunResult(
             run_id="fake-run-1",
             exit_code=0,
@@ -117,7 +128,7 @@ def test_rules_run_builds_rule_spec(tmp_path):
         "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000", "data_folder": "/data",
     })
     assert r.status_code == 200
-    req = runner.calls[-1]
+    req = _wait_calls(runner)[-1]
     assert req.algorithm_type == "RuleStrategy"
     spec = json.loads(req.parameters["rule_spec"])
     assert spec["rule"] == "(EMA AND MACD) OR RSI"
@@ -141,7 +152,7 @@ def test_rules_universe_all_scans_loaded(tmp_path):
         "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000",
     })
     assert r.status_code == 200
-    spec = json.loads(runner.calls[-1].parameters["rule_spec"])
+    spec = json.loads(_wait_calls(runner)[-1].parameters["rule_spec"])
     assert set(spec["universe"]) == {"005930", "000660"}
 
 
@@ -172,7 +183,7 @@ def test_compose_runs_composition(tmp_path):
         "cash": "10000000", "data_folder": "/data",
     })
     assert r.status_code == 200  # 리다이렉트 따라가 run 상세
-    req = runner.calls[-1]
+    req = _wait_calls(runner)[-1]
     assert req.algorithm_type == "Composed"
     comp = json.loads(req.parameters["composition"])
     assert {a["name"] for a in comp["alphas"]} == {"ema_cross", "rsi"}

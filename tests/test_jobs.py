@@ -17,7 +17,7 @@ def _wait(jm, job_id, timeout=2.0):
 
 def test_job_succeeds_and_keeps_result():
     jm = JobManager()
-    job = jm.submit("ok", lambda: {"ingested": 3})
+    job = jm.submit("ok", lambda job: {"ingested": 3})
     j = _wait(jm, job.id)
     assert j.state == "succeeded"
     assert "ingested" in j.result
@@ -25,7 +25,7 @@ def test_job_succeeds_and_keeps_result():
 
 
 def test_job_failure_is_captured():
-    def boom():
+    def boom(job):
         raise ValueError("터짐")
     jm = JobManager()
     job = jm.submit("bad", boom)
@@ -36,9 +36,9 @@ def test_job_failure_is_captured():
 
 def test_list_most_recent_first():
     jm = JobManager()
-    a = jm.submit("a", lambda: 1)
+    a = jm.submit("a", lambda job: 1)
     _wait(jm, a.id)
-    b = jm.submit("b", lambda: 2)
+    b = jm.submit("b", lambda job: 2)
     _wait(jm, b.id)
     names = [j.name for j in jm.list()]
     assert names[0] == "b"  # 최신 먼저
