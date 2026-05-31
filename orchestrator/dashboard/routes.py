@@ -35,6 +35,14 @@ def available_strategies() -> list[dict[str, str]]:
     ]
 
 
+def _resolve_universe(form, data_folder: str) -> list[str]:
+    """유니버스 결정: '적재된 전체 종목' 체크 시 ./data의 가격 적재 종목 전부, 아니면 입력 목록."""
+    if form.get("universe_all"):
+        from etl.catalog import list_price_tickers
+        return list_price_tickers(data_folder)
+    return [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
+
+
 def register_dashboard(
     app: FastAPI,
     *,
@@ -107,15 +115,16 @@ def register_dashboard(
         if not alphas:
             return RedirectResponse(url="/compose", status_code=303)
 
+        data_folder = form.get("data_folder") or config.get_data_folder()
         composition = {
             "alphas": alphas,
-            "universe": [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()],
+            "universe": _resolve_universe(form, data_folder),
             "start": form.get("start"), "end": form.get("end"),
             "cash": int(form.get("cash") or 10_000_000),
         }
         req = RunRequest(
             strategy_path="strategies/Composed.py",
-            data_folder=(form.get("data_folder") or config.get_data_folder()),
+            data_folder=data_folder,
             algorithm_type="Composed",
             parameters={"composition": json.dumps(composition)},
         )
@@ -147,16 +156,17 @@ def register_dashboard(
         except Exception as e:
             return RedirectResponse(url=f"/rules?error=규칙식 오류: {e}", status_code=303)
 
+        data_folder = form.get("data_folder") or config.get_data_folder()
         spec = {
             "signals": signals, "rule": rule,
-            "universe": [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()],
+            "universe": _resolve_universe(form, data_folder),
             "start": form.get("start"), "end": form.get("end"),
             "cash": int(form.get("cash") or 10_000_000),
             "period_days": int(form.get("period_days") or 5),
         }
         req = RunRequest(
             strategy_path="strategies/RuleStrategy.py",
-            data_folder=(form.get("data_folder") or config.get_data_folder()),
+            data_folder=data_folder,
             algorithm_type="RuleStrategy",
             parameters={"rule_spec": json.dumps(spec)},
         )

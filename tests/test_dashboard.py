@@ -126,6 +126,27 @@ def test_rules_run_builds_rule_spec(tmp_path):
     assert spec["signals"]["EMA"]["params"]["fast"] == 10  # 캐스팅(int)
 
 
+def test_rules_universe_all_scans_loaded(tmp_path):
+    # '적재된 전체 종목' 체크 시 universe = ./data 의 가격 적재 종목 전부
+    import json
+    from datetime import date
+    from etl.lean_format import write_equity_daily
+    from etl.sources import Bar
+    dd = tmp_path / "data"
+    for t in ["005930", "000660"]:
+        write_equity_daily(dd, "krx", t, [Bar(date(2023, 1, 2), 100, 100, 100, 100, 1)])
+    runner = FakeRunner()
+    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "r.db")))
+    r = c.post("/rules", data={
+        "rule": "EMA", "EMA__fast": "12", "EMA__slow": "26",
+        "universe_all": "1", "data_folder": str(dd),
+        "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000",
+    })
+    assert r.status_code == 200
+    spec = json.loads(runner.calls[-1].parameters["rule_spec"])
+    assert set(spec["universe"]) == {"005930", "000660"}
+
+
 def test_rules_run_rejects_bad_expression(tmp_path):
     c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "r.db")))
     r = c.post("/rules", data={"rule": "(EMA AND", "universe": "005930",
