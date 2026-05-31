@@ -122,6 +122,47 @@ def register_dashboard(
         record = run_and_store(get_runner(), store, req)
         return RedirectResponse(url=f"/ui/runs/{record['run_id']}", status_code=303)
 
+    @app.get("/rules", response_class=HTMLResponse)
+    def rules_page(request: Request):
+        from .. import signals_catalog
+        return templates.TemplateResponse(request, "rules.html", {
+            "catalog": signals_catalog.CATALOG,
+            "default_data_folder": config.get_data_folder(),
+            "error": request.query_params.get("error"),
+        })
+
+    @app.post("/rules")
+    async def rules_run(request: Request):
+        from .. import signals_catalog
+        from ..rules import parse_rule
+        form = await request.form()
+        rule = (form.get("rule") or "").strip()
+        # 모든 signal을 그 파라미터로 구성(식에 쓰인 것만 RuleAlpha가 평가)
+        signals = {
+            spec.label: {"type": spec.type, "params": signals_catalog.cast_params(spec.label, form)}
+            for spec in signals_catalog.CATALOG
+        }
+        try:
+            parse_rule(rule)  # 식 검증
+        except Exception as e:
+            return RedirectResponse(url=f"/rules?error=규칙식 오류: {e}", status_code=303)
+
+        spec = {
+            "signals": signals, "rule": rule,
+            "universe": [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()],
+            "start": form.get("start"), "end": form.get("end"),
+            "cash": int(form.get("cash") or 10_000_000),
+            "period_days": int(form.get("period_days") or 5),
+        }
+        req = RunRequest(
+            strategy_path="strategies/RuleStrategy.py",
+            data_folder=(form.get("data_folder") or config.get_data_folder()),
+            algorithm_type="RuleStrategy",
+            parameters={"rule_spec": json.dumps(spec)},
+        )
+        record = run_and_store(get_runner(), store, req)
+        return RedirectResponse(url=f"/ui/runs/{record['run_id']}", status_code=303)
+
     @app.get("/data", response_class=HTMLResponse)
     def data_list(request: Request):
         from etl import catalog
