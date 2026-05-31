@@ -1,124 +1,20 @@
-# 전략 카탈로그 — 각 전략을 AlphaModel(신호 생성기)로 구현.
+# 전략 Alpha 팩토리 — LEAN 내장 AlphaModel을 친숙한 이름/파라미터로 생성.
 #
-# 각 Alpha는 Insight(롱/청산 등)를 내고, 알고리즘의 PortfolioConstruction이 종목당 하나의
-# 목표로 합산한다. 여러 Alpha를 add_alpha로 한 알고리즘에 결합 가능(= 멀티전략, 충돌 없음).
+# 커스텀 Alpha는 두지 않는다(검증된 LEAN 내장을 재사용). 한국 특화(수급·저PBR 등 LEAN에 없는 것)는
+# 추후 필요할 때만 커스텀으로 추가한다. orchestrator/strategy_catalog.py 의 스펙과 이름/키가 일치.
 #
-# 지금은 일봉(Resolution.DAILY) 가격 기반 전략들. 분봉/펀더멘털 전략은 데이터 갖춰지면 확장.
+# 파라미터는 위치인자로 넘긴다(LEAN 모델마다 인자명이 snake/camel로 달라 키워드는 불안정).
+# resolution은 기본값(DAILY)을 사용 — 우리 데이터가 일봉이므로 적합.
 from AlgorithmImports import *
 
 
-class EmaCrossAlpha(AlphaModel):
-    """추세추종: 단기 EMA가 장기 EMA 위면 롱 신호."""
-
-    def __init__(self, fast: int = 20, slow: int = 60, period_days: int = 5):
-        self.fast = fast
-        self.slow = slow
-        self.period = timedelta(days=period_days)
-        self._emas = {}
-
-    def on_securities_changed(self, algorithm, changes):
-        for sec in changes.added_securities:
-            self._emas[sec.symbol] = (
-                algorithm.ema(sec.symbol, self.fast, Resolution.DAILY),
-                algorithm.ema(sec.symbol, self.slow, Resolution.DAILY),
-            )
-        for sec in changes.removed_securities:
-            self._emas.pop(sec.symbol, None)
-
-    def update(self, algorithm, data):
-        insights = []
-        for symbol, (fast, slow) in self._emas.items():
-            if not (fast.is_ready and slow.is_ready):
-                continue
-            if fast.current.value > slow.current.value:  # 골든크로스 상태 → 롱
-                insights.append(Insight.price(symbol, self.period, InsightDirection.UP))
-        return insights
-
-
-class BnfReversionAlpha(AlphaModel):
-    """평균회귀(BNF): 이동평균 대비 -threshold 이상 과대낙폭이면 롱(반등 기대)."""
-
-    def __init__(self, ma: int = 25, threshold: float = 0.12, period_days: int = 5):
-        self.ma = ma
-        self.threshold = threshold
-        self.period = timedelta(days=period_days)
-        self._smas = {}
-
-    def on_securities_changed(self, algorithm, changes):
-        for sec in changes.added_securities:
-            self._smas[sec.symbol] = algorithm.sma(sec.symbol, self.ma, Resolution.DAILY)
-        for sec in changes.removed_securities:
-            self._smas.pop(sec.symbol, None)
-
-    def update(self, algorithm, data):
-        insights = []
-        for symbol, sma in self._smas.items():
-            if not sma.is_ready or symbol not in data.bars:
-                continue
-            price = data.bars[symbol].close
-            if price < sma.current.value * (1 - self.threshold):  # 과대낙폭 → 롱
-                insights.append(Insight.price(symbol, self.period, InsightDirection.UP))
-        return insights
-
-
-class RsiReversionAlpha(AlphaModel):
-    """평균회귀(RSI): RSI가 과매도(oversold) 아래면 롱."""
-
-    def __init__(self, period: int = 14, oversold: float = 30.0, period_days: int = 5):
-        self.period = period
-        self.oversold = oversold
-        self.hold = timedelta(days=period_days)
-        self._rsi = {}
-
-    def on_securities_changed(self, algorithm, changes):
-        for sec in changes.added_securities:
-            # rsi(symbol, period, moving_average_type, resolution=...) — resolution은 키워드로
-            self._rsi[sec.symbol] = algorithm.rsi(sec.symbol, self.period, resolution=Resolution.DAILY)
-        for sec in changes.removed_securities:
-            self._rsi.pop(sec.symbol, None)
-
-    def update(self, algorithm, data):
-        insights = []
-        for symbol, rsi in self._rsi.items():
-            if rsi.is_ready and rsi.current.value < self.oversold:
-                insights.append(Insight.price(symbol, self.hold, InsightDirection.UP))
-        return insights
-
-
-class MomentumAlpha(AlphaModel):
-    """모멘텀: 최근 lookback일 수익률(ROC)이 양수면 롱(추세 지속 기대)."""
-
-    def __init__(self, lookback: int = 120, period_days: int = 20):
-        self.lookback = lookback
-        self.hold = timedelta(days=period_days)
-        self._roc = {}
-
-    def on_securities_changed(self, algorithm, changes):
-        for sec in changes.added_securities:
-            self._roc[sec.symbol] = algorithm.roc(sec.symbol, self.lookback, Resolution.DAILY)
-        for sec in changes.removed_securities:
-            self._roc.pop(sec.symbol, None)
-
-    def update(self, algorithm, data):
-        insights = []
-        for symbol, roc in self._roc.items():
-            if roc.is_ready and roc.current.value > 0:
-                insights.append(Insight.price(symbol, self.hold, InsightDirection.UP))
-        return insights
-
-
-# name → AlphaModel 팩토리 (Composed 알고리즘이 조합 스펙으로 Alpha를 동적 생성).
-# 이름/파라미터 키는 orchestrator/strategy_catalog.py 의 스펙과 일치해야 한다.
-_ALPHA_CLASSES = {
-    "ema_cross": EmaCrossAlpha,
-    "bnf": BnfReversionAlpha,
-    "rsi": RsiReversionAlpha,
-    "momentum": MomentumAlpha,
-}
-
-
-def build_alpha(name: str, params: dict):
-    cls = _ALPHA_CLASSES.get(name)
-    if cls is None:
-        raise ValueError(f"알 수 없는 alpha: {name} (가능: {list(_ALPHA_CLASSES)})")
-    return cls(**params)
+def build_alpha(name: str, p: dict):
+    if name == "ema_cross":
+        return EmaCrossAlphaModel(int(p["fast"]), int(p["slow"]))
+    if name == "macd":
+        return MacdAlphaModel(int(p["fast"]), int(p["slow"]), int(p["signal"]))
+    if name == "rsi":
+        return RsiAlphaModel(int(p["period"]))
+    if name == "momentum":
+        return HistoricalReturnsAlphaModel(int(p["lookback"]))
+    raise ValueError(f"알 수 없는 alpha: {name}")

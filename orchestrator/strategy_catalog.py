@@ -29,26 +29,28 @@ class AlphaSpec:
     params: list[ParamSpec] = field(default_factory=list)
 
 
+# 전부 LEAN 내장 AlphaModel (검증됨). 파라미터 키는 우리 친숙한 이름 — alphas.build_alpha가
+# 위치인자로 LEAN 생성자에 매핑한다. (한국 특화 Alpha는 추후 필요 시 추가)
 CATALOG: list[AlphaSpec] = [
-    AlphaSpec("ema_cross", "EMA 교차", "추세추종", "단기 EMA가 장기 EMA 위면 롱", [
-        ParamSpec("fast", "단기 EMA", "int", 20),
-        ParamSpec("slow", "장기 EMA", "int", 60),
-        ParamSpec("period_days", "신호 유지(일)", "int", 5),
-    ]),
-    AlphaSpec("bnf", "BNF 이격도", "평균회귀", "이동평균 대비 과대낙폭이면 롱(반등)", [
-        ParamSpec("ma", "이동평균(일)", "int", 25),
-        ParamSpec("threshold", "이격 임계(비율)", "float", 0.12),
-        ParamSpec("period_days", "신호 유지(일)", "int", 5),
-    ]),
-    AlphaSpec("rsi", "RSI 역추세", "평균회귀", "RSI 과매도 아래면 롱", [
-        ParamSpec("period", "RSI 기간", "int", 14),
-        ParamSpec("oversold", "과매도 기준", "float", 30),
-        ParamSpec("period_days", "신호 유지(일)", "int", 5),
-    ]),
-    AlphaSpec("momentum", "모멘텀", "모멘텀", "최근 수익률(ROC) 양수면 롱", [
-        ParamSpec("lookback", "관측(일)", "int", 120),
-        ParamSpec("period_days", "신호 유지(일)", "int", 20),
-    ]),
+    AlphaSpec("ema_cross", "EMA 교차", "추세추종",
+              "단/장기 EMA 교차 (LEAN EmaCrossAlphaModel)", [
+                  ParamSpec("fast", "단기 EMA", "int", 12),
+                  ParamSpec("slow", "장기 EMA", "int", 26),
+              ]),
+    AlphaSpec("macd", "MACD", "추세추종",
+              "MACD 신호선 교차 (LEAN MacdAlphaModel)", [
+                  ParamSpec("fast", "단기", "int", 12),
+                  ParamSpec("slow", "장기", "int", 26),
+                  ParamSpec("signal", "시그널", "int", 9),
+              ]),
+    AlphaSpec("rsi", "RSI", "평균회귀",
+              "RSI 과매수/과매도 (LEAN RsiAlphaModel)", [
+                  ParamSpec("period", "RSI 기간", "int", 14),
+              ]),
+    AlphaSpec("momentum", "모멘텀(과거수익률)", "모멘텀",
+              "과거 수익률 부호 기반 (LEAN HistoricalReturnsAlphaModel)", [
+                  ParamSpec("lookback", "관측(기간)", "int", 60),
+              ]),
 ]
 
 _BY_NAME = {a.name: a for a in CATALOG}
