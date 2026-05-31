@@ -1,27 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
-<p><a href="/backtest">← 목록으로</a></p>
 <section class="card">
-  <h2>{{ run.algorithm_type }} <small>{{ run.run_id }}</small></h2>
-  <p class="meta">
-    상태:
-    {% if run.success %}<span class="ok">✅ 성공</span>{% else %}<span class="fail">❌ 실패 (exit {{ run.exit_code }})</span>{% endif %}
-    · {{ run.created_at }}
-  </p>
-  <p class="meta">전략: <code>{{ run.strategy }}</code></p>
-  <p class="meta">데이터: <code>{{ run.data_folder }}</code></p>
+  <h2>백테스트 결과
+    {% if run.success %}<span class="ok">성공 ✓</span>{% else %}<span class="fail">실패 ✗</span>{% endif %}
+  </h2>
+  <p class="meta">{{ run.created_at }}</p>
 
-  <h3>통계</h3>
   <table class="stats">
-    {% for k, v in run.statistics.items() %}
-    <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+    {% for r in summary %}
+    <tr>
+      <th>{{ r.label }}</th>
+      <td><b>{{ r.value }}</b>{% if r.note %} <small class="meta">{{ r.note }}</small>{% endif %}</td>
+    </tr>
     {% else %}
     <tr><td class="empty">통계 없음</td></tr>
     {% endfor %}
   </table>
 
-  <h3>산출물</h3>
-  <p class="meta">로그: <code>{{ run.log_path }}</code></p>
-  <p class="meta">결과 JSON: <code>{{ run.result_json or "-" }}</code></p>
+  <details>
+    <summary class="meta">원본 통계 전체 보기</summary>
+    <table class="stats">
+      {% for k, v in run.statistics.items() %}
+      <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+      {% endfor %}
+    </table>
+  </details>
 </section>
 {% endblock %}

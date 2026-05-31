@@ -53,6 +53,82 @@ def _loaded_count() -> int:
     return len(all_tickers(config.get_data_folder()))
 
 
+def format_won(amount) -> str:
+    """금액을 한국어(억/만원)로. 예: 147000257 → '1억 4,700만원', 2339943 → '234만원'."""
+    try:
+        n = int(round(float(amount)))
+    except (TypeError, ValueError):
+        return str(amount)
+    sign = "-" if n < 0 else ""
+    n = abs(n)
+    if n < 10_000:
+        return f"{sign}{n:,}원"
+    eok, rem = divmod(n, 100_000_000)
+    man = round(rem / 10_000)
+    parts = []
+    if eok:
+        parts.append(f"{eok}억")
+    if man:
+        parts.append(f"{man:,}만")
+    return f"{sign}{' '.join(parts) or '0'}원"
+
+
+def _num(stats: dict, key: str):
+    """통계 문자열에서 숫자만 추출(%, KRW, $, 콤마 제거). 실패 시 None."""
+    v = stats.get(key)
+    if v is None:
+        return None
+    s = str(v).replace("KRW", "").replace("$", "").replace("%", "").replace(",", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _pct(stats: dict, key: str):
+    """퍼센트 통계를 보기 좋게(소수 1자리, 불필요한 0 제거). 예: '119.311%' → '119.3%'."""
+    n = _num(stats, key)
+    if n is None:
+        return None
+    return f"{n:.1f}".rstrip("0").rstrip(".") + "%"
+
+
+def friendly_stats(stats: dict) -> list[dict]:
+    """LEAN 통계(영문·원시)를 사용자용 한국어 핵심 지표로 변환. 이해 어려운 항목은 생략."""
+    rows: list[dict] = []
+
+    def add(label, value, note=""):
+        if value is not None and value != "":
+            rows.append({"label": label, "value": value, "note": note})
+
+    start, end = _num(stats, "Start Equity"), _num(stats, "End Equity")
+    add("총 수익률", _pct(stats, "Net Profit"), "백테스트 기간 전체 수익률")
+    if start is not None and end is not None:
+        diff = end - start
+        add("순손익", ("+" if diff >= 0 else "-") + format_won(abs(diff)))
+        add("최종 자산", format_won(end))
+        add("시작 자본", format_won(start))
+    add("연환산 수익률", _pct(stats, "Compounding Annual Return"),
+        "1년 기준 환산값(기간이 짧으면 과장될 수 있음)")
+    add("최대 낙폭(MDD)", _pct(stats, "Drawdown"), "고점 대비 최대 하락폭")
+    add("총 거래 횟수", str(int(_num(stats, "Total Orders"))) + "회"
+        if _num(stats, "Total Orders") is not None else None)
+    add("승률", _pct(stats, "Win Rate"))
+    aw, al = _pct(stats, "Average Win"), _pct(stats, "Average Loss")
+    if aw and al:
+        add("평균 수익 / 손실", f"{aw} / {al}", "이긴 거래 / 진 거래의 평균")
+    plr = _num(stats, "Profit-Loss Ratio")
+    if plr is not None:
+        add("손익비", f"{plr:.2f}", "평균수익 ÷ 평균손실 (1보다 크면 유리)")
+    shp = _num(stats, "Sharpe Ratio")
+    if shp is not None:
+        add("샤프 지수", f"{shp:.2f}", "위험 대비 수익 (대략 1↑ 양호, 2↑ 우수)")
+    fees = _num(stats, "Total Fees")
+    if fees is not None:
+        add("총 수수료", format_won(fees))
+    return rows
+
+
 _PROGRESS_RE = re.compile(r"PROGRESS\s+(\d+)%")
 
 
@@ -147,7 +223,8 @@ def register_dashboard(
         record = store.get_run(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        return templates.TemplateResponse(request, "run_detail.html", {"run": record})
+        return templates.TemplateResponse(request, "run_detail.html", {
+            "run": record, "summary": friendly_stats(record.get("statistics") or {})})
 
     # ── ① 전략 설정 탭 ───────────────────────────────────────────────
     @app.get("/strategy", response_class=HTMLResponse)

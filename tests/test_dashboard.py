@@ -164,8 +164,34 @@ def test_run_detail_page(client):
     _wait_calls(client.runner)
     r = client.get("/ui/runs/fake-run-1")
     assert r.status_code == 200
-    assert "fake-run-1" in r.text and "Net Profit" in r.text
+    assert "백테스트 결과" in r.text and "총 수익률" in r.text  # 한국어 친화 요약
+    assert "Net Profit" in r.text  # 원본 통계는 접힌 영역에 그대로
     assert client.get("/ui/runs/missing").status_code == 404
+
+
+def test_format_won_korean():
+    from orchestrator.dashboard.routes import format_won
+    assert format_won(147000257) == "1억 4,700만원"
+    assert format_won(100000000) == "1억원"
+    assert format_won(2339943) == "234만원"
+    assert format_won(5000) == "5,000원"
+    assert format_won(-4700000) == "-470만원"
+
+
+def test_friendly_stats_korean_labels():
+    from orchestrator.dashboard.routes import friendly_stats
+    rows = friendly_stats({
+        "Net Profit": "47.000%", "Start Equity": "100000000", "End Equity": "147000257",
+        "Total Orders": "27", "Win Rate": "46%", "Total Fees": "KRW2339943.00",
+        "Sharpe Ratio": "2.131",
+    })
+    by = {r["label"]: r["value"] for r in rows}
+    assert by["총 수익률"] == "47%"
+    assert by["최종 자산"] == "1억 4,700만원"
+    assert by["순손익"] == "+4,700만원"
+    assert by["총 거래 횟수"] == "27회"
+    assert by["총 수수료"] == "234만원"
+    assert by["샤프 지수"] == "2.13"
 
 
 def test_load_all_triggers_background_job(client, monkeypatch):
