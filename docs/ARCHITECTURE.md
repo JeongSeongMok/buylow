@@ -118,8 +118,11 @@ into **one target weight per symbol**, so there is no cross-strategy conflict.
 dashboard `/compose` lets the user pick alphas, set parameters, and choose a universe/dates; it
 builds a composition spec (JSON) and runs the generic `strategies/Composed.py`, which reads the
 spec via a `composition` parameter and instantiates the selected alphas through `alphas.build_alpha`.
-Adding a strategy = add an `AlphaModel` + a catalog entry; it then appears in the dashboard. Current
-catalog: `ema_cross`, `bnf`, `rsi`, `momentum` (daily/price). Fundamental/flow alphas come later.
+The catalog uses **LEAN's built-in alpha models** (validated, market-agnostic) rather than custom
+code: `ema_cross` (EmaCrossAlphaModel), `macd` (MacdAlphaModel), `rsi` (RsiAlphaModel), `momentum`
+(HistoricalReturnsAlphaModel). `alphas.build_alpha` maps catalog names → LEAN classes. Adding a
+built-in = one catalog entry + one factory line. Korea-specific signals not in LEAN (수급, 저PBR
+value, BNF 이격도) will be added as custom alphas later, when their data path is ready.
 
 ## Dashboard
 
