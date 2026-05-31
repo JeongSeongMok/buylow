@@ -31,21 +31,6 @@ def all_tickers(data_dir: str | Path) -> list[str]:
     return sorted(set(list_price_tickers(data_dir)) | set(list_flow_tickers(data_dir)))
 
 
-def top_universe(data_dir: str | Path, n: int) -> list[str]:
-    """거래대금 상위 N종목 (etl.universe가 만든 universe_rank.csv). 파일 없으면 빈 리스트."""
-    fp = Path(data_dir) / "krx" / "universe_rank.csv"
-    if not fp.exists():
-        return []
-    out = []
-    for line in fp.read_text(encoding="utf-8").strip().splitlines():
-        tkr = line.split(",")[0].strip()
-        if tkr:
-            out.append(tkr)
-        if len(out) >= n:
-            break
-    return out
-
-
 def read_price_daily(data_dir: str | Path, ticker: str) -> list[dict[str, Any]]:
     zp = equity_daily_zip_path(data_dir, KRX_MARKET, ticker)
     if not zp.exists():

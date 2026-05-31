@@ -35,12 +35,3 @@ def test_lists_and_summary(tmp_path):
 def test_empty_ticker(tmp_path):
     s = catalog.ticker_summary(tmp_path, "000000")
     assert s["price"]["count"] == 0 and s["flow"]["count"] == 0
-
-
-def test_top_universe_reads_rank(tmp_path):
-    assert catalog.top_universe(tmp_path, 10) == []  # 랭킹 파일 없으면 빈 리스트
-    rank = tmp_path / "krx" / "universe_rank.csv"
-    rank.parent.mkdir(parents=True, exist_ok=True)
-    rank.write_text("005930,9000000\n000660,5000000\n035720,1000000\n", encoding="utf-8")
-    assert catalog.top_universe(tmp_path, 2) == ["005930", "000660"]  # 거래대금 상위 2개
-    assert catalog.top_universe(tmp_path, 99) == ["005930", "000660", "035720"]

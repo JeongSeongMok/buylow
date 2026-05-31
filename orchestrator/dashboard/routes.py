@@ -30,17 +30,20 @@ TEMPLATES_DIR = _HERE / "templates"
 STATIC_DIR = _HERE / "static"
 STRATEGIES_DIR = REPO_ROOT / "strategies"
 BACKTEST_CASH = 100_000_000  # 초기자본 1억원 고정(백테스트 폼에서 입력받지 않음)
-
-
-MAX_UNIVERSE = 50  # '전체 종목 대상' 시 상위 N종목으로 제한(전 종목 동일비중은 종목당 배분이 1주 미만이라 매매 불가)
+# 동시 보유 종목 상한. 1억을 이 수로 나눠도 종목당 배분이 1주 이상 되도록(=균등분할 가능) 한다.
+# 전체 종목 스캔은 유지하되, 매수 신호가 이보다 많으면 유동성 상위만 보유.
+MAX_POSITIONS = 20
 
 
 def _resolve_universe(form, data_folder: str) -> list[str]:
-    """유니버스 결정: '전체 종목 대상' 시 거래대금 상위 N종목, 아니면 입력한 종목 목록."""
+    """유니버스 결정: '전체 종목 대상' 시 적재된 전 종목을 스캔, 아니면 입력한 종목 목록.
+
+    유니버스(스캔 대상)는 줄이지 않는다. 매수 신호가 자본 대비 너무 많아 균등분할이 안 되는 문제는
+    포트폴리오 단계(전략의 max_positions)에서 보유 종목 수를 제한해 해결한다.
+    """
     if form.get("universe_all"):
-        from etl.catalog import top_universe, list_price_tickers
-        # 거래대금 랭킹이 있으면 상위 N, 없으면(구버전 적재) 적재 종목 앞에서 N개로라도 제한.
-        return top_universe(data_folder, MAX_UNIVERSE) or list_price_tickers(data_folder)[:MAX_UNIVERSE]
+        from etl.catalog import list_price_tickers
+        return list_price_tickers(data_folder)
     return [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
 
 
@@ -101,6 +104,7 @@ def register_dashboard(
             "start_default": (today - timedelta(days=90)).isoformat(),  # 3개월 전
             "end_default": (today - timedelta(days=1)).isoformat(),     # 오늘 - 1
             "cash": BACKTEST_CASH,
+            "max_positions": MAX_POSITIONS,
             "error": request.query_params.get("error"),
         })
 
@@ -125,6 +129,7 @@ def register_dashboard(
             "universe": _resolve_universe(form, data_folder),
             "start": form.get("start"), "end": form.get("end"),
             "cash": BACKTEST_CASH,  # 초기자본은 1억으로 고정(입력받지 않음)
+            "max_positions": MAX_POSITIONS,  # 동시 보유 상한(균등분할 가능하게)
         }
         if not spec["universe"]:
             return RedirectResponse(url="/backtest?error=유니버스(종목)를 지정하세요", status_code=303)

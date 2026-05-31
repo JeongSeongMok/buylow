@@ -18,11 +18,15 @@ from signals import build_signal
 
 
 class RuleAlpha(AlphaModel):
-    def __init__(self, signals_config: dict, rule: str, period_days: int = 5):
+    def __init__(self, signals_config: dict, rule: str, period_days: int = 5,
+                 max_positions: int = 0):
         self.signals_config = signals_config          # 라벨 -> {type, params}
         self.ast = parse_rule(rule)
         self.used = signal_labels(self.ast)            # 식에 실제 쓰인 라벨만 평가
         self.hold = timedelta(days=period_days)
+        # 동시 보유 상한. 매수 신호가 자본 대비 너무 많으면 균등분할 시 종목당 배분이 1주 미만이
+        # 되어 매매가 안 된다. 전체 종목 스캔은 유지하되, 매수 신호가 이보다 많으면 유동성 상위만 낸다.
+        self.max_positions = max_positions
         self._evals = {}                               # symbol -> {라벨: 평가기}
 
     def on_securities_changed(self, algorithm, changes):
@@ -38,15 +42,24 @@ class RuleAlpha(AlphaModel):
             self._evals.pop(sec.symbol, None)
 
     def update(self, algorithm, data):
-        insights = []
+        ups, exits = [], []
         for symbol, evals in self._evals.items():
             directions = {label: ev.direction() for label, ev in evals.items()}
             result = eval_rule(self.ast, directions)
             if result == UP:
-                insights.append(Insight.price(symbol, self.hold, InsightDirection.UP))
-            elif result == DOWN:
-                insights.append(Insight.price(symbol, self.hold, InsightDirection.DOWN))
-        return insights
+                ups.append(symbol)
+            elif result == DOWN:  # 매도 신호는 항상 내보낸다(청산은 막지 않음)
+                exits.append(Insight.price(symbol, self.hold, InsightDirection.DOWN))
+        # 매수 신호가 상한보다 많으면 유동성(당일 거래대금=가격×거래량) 상위만 보유.
+        if self.max_positions and len(ups) > self.max_positions:
+            ups.sort(key=lambda s: self._liquidity(algorithm, s), reverse=True)
+            ups = ups[:self.max_positions]
+        return [Insight.price(s, self.hold, InsightDirection.UP) for s in ups] + exits
+
+    def _liquidity(self, algorithm, symbol):
+        # 당일 거래대금 = 종가 × 거래량 (시장에서 실제 체결 가능한 규모의 척도).
+        sec = algorithm.securities[symbol]
+        return float(sec.price) * float(sec.volume)
 
 
 class RuleStrategy(KrxFrameworkAlgorithm):
@@ -65,4 +78,5 @@ class RuleStrategy(KrxFrameworkAlgorithm):
             self.set_benchmark(symbols[0])
 
         self.add_alpha(RuleAlpha(spec["signals"], spec["rule"],
-                                 int(spec.get("period_days", 5))))
+                                 int(spec.get("period_days", 5)),
+                                 int(spec.get("max_positions", 0))))
