@@ -20,50 +20,14 @@
 </section>
 
 <section class="card">
-  <h2>리스크 관리 (전역 — 모든 백테스트·라이브에 적용)</h2>
-  <p class="meta">비우면 미적용. 여러 개 설정 시 동시 적용. 매수는 전략, 매도(손절/익절)는 여기서.</p>
-  <form method="post" action="/settings/risk">
-    <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss or '' }}" placeholder="예: 7" size="6"></label>
-    <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit or '' }}" placeholder="예: 20" size="6"></label>
-    <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing or '' }}" placeholder="예: 5" size="6"></label>
-    <label>포트폴리오 손실 한도(%) <input type="text" name="max_drawdown" value="{{ risk.max_drawdown or '' }}" placeholder="예: 20" size="6"></label>
-    <button type="submit">리스크 설정 저장</button>
-  </form>
-</section>
-
-<section class="card">
   <h2>과거 데이터 적재</h2>
-  <p class="meta">적재 현황·조회 → <a href="/data">데이터 보기</a></p>
-
-  <h3>종목별 적재</h3>
-  <form method="post" action="/data/fetch">
-    <label>종목코드 <input type="text" name="ticker" placeholder="005930"></label>
-    <label>시작일 <input type="text" name="from" placeholder="2023-01-01"></label>
-    <label>종료일(선택) <input type="text" name="to" placeholder="오늘"></label>
-    <label><input type="checkbox" name="kind" value="price" checked> 가격(OHLCV)</label>
-    <label><input type="checkbox" name="kind" value="flow"> 수급(KRX 로그인)</label>
-    <label><input type="checkbox" name="kind" value="fundamental"> 펀더멘털(KRX 로그인)</label>
-    <button type="submit">적재</button>
-  </form>
-
-  <h3>유니버스 일괄 적재 (백그라운드)</h3>
-  <form method="post" action="/data/universe">
-    <label>유니버스
-      <select name="market">
-        <option value="KOSPI200">KOSPI200</option>
-        <option value="KOSPI">KOSPI</option>
-        <option value="KOSDAQ">KOSDAQ</option>
-        <option value="ALL">ALL</option>
-      </select>
-    </label>
-    <label>기간(년) <input type="text" name="years" value="3"></label>
-    <button type="submit">최초 적재 시작</button>
+  <p class="meta">버튼 하나로 <b>한국시장 전체 종목</b>(KOSPI·KOSDAQ)의 가격(OHLCV)과 수급을 일괄 적재합니다.
+    이미 적재된 데이터가 있어도 다시 누르면 <b>최신 데이터로 덮어씁니다</b>.
+    수급은 KRX 로그인(위 키)이 있을 때만, 종목 수만큼 호출하므로 시간이 걸립니다.</p>
+  <p class="meta">현재 적재 폴더: <code>{{ data_dir }}</code> · 적재 현황 → <a href="/data">데이터 보기</a></p>
+  <form method="post" action="/data/load-all">
+    <button type="submit">전체 종목 데이터 적재 / 갱신</button>
     <span class="meta">백그라운드 실행 — 진행상황 <a href="/jobs">작업</a></span>
   </form>
-</section>
-
-<section class="card">
-  <h2>작업 / 스케줄</h2>
-  <p class="meta">대량 적재 등 백그라운드 작업 진행상황 → <a href="/jobs">작업 보기</a></p>
 </section>
 {% endblock %}

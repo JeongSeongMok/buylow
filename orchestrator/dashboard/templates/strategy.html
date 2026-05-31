@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post" action="/strategy">
+<section class="card">
+  <h2>전략 설정</h2>
+  {% if saved %}<p class="ok">저장되었습니다.</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <p class="meta">아래 지표 조건들을 <b>AND / OR / 괄호</b>로 묶어 매수 규칙을 만드세요.
+    예: <code>(EMA AND MACD) OR RSI</code> — 각 조건은 시장 상황에 따라 매수/매도/중립을 자동 판단합니다.</p>
+
+  {% for s in catalog %}
+  <fieldset class="alpha">
+    <b>{{ s.label }}</b> — {{ s.name }} <small>{{ s.description }}</small>
+    <div class="params">
+      {% for p in s.params %}
+      <label class="param">{{ p.label }}
+        <input type="text" name="{{ s.label }}__{{ p.key }}"
+               value="{{ param_value(strategy, s.label, p.key) }}" size="6"></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {% endfor %}
+
+  <label>규칙식 <input type="text" name="rule" value="{{ strategy.rule }}" size="50"></label>
+  <label>매매 판단 주기(거래일) <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6">
+    <small>며칠마다 조건을 다시 평가할지</small></label>
+</section>
+
+<section class="card">
+  <h2>리스크 관리 (전역 — 백테스트·라이브 모두 적용)</h2>
+  <p class="meta">비우면 미적용. 매수는 위 전략이, 매도(손절/익절)는 신호 변화 + 아래 리스크가 담당합니다.</p>
+  <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss or '' }}" placeholder="예: 7" size="6"></label>
+  <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit or '' }}" placeholder="예: 20" size="6"></label>
+  <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing or '' }}" placeholder="예: 5" size="6"></label>
+  <label>포트폴리오 손실 한도(%) <input type="text" name="max_drawdown" value="{{ risk.max_drawdown or '' }}" placeholder="예: 20" size="6"></label>
+
+  <button type="submit">전략 + 리스크 저장</button>
+  <span class="meta">저장 후 <a href="/">② 백테스트</a>에서 실행하세요.</span>
+</section>
+</form>
+{% endblock %}

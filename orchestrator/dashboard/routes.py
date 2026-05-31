@@ -1,5 +1,10 @@
 """대시보드 HTML 라우트 (HTMX).
 
+3개 챕터로 구성:
+  ① 전략 설정(/strategy) — 조건식 + 리스크를 저장(단일 전략).
+  ② 백테스트(/)         — 저장된 전략을 기간/자본/유니버스만 정해 실행 + 결과 조회.
+  ③ 설정(/settings)     — API 키 + 과거 데이터 일괄 적재.
+
 API 앱에 register_dashboard(app, ...)로 얹는다. 의존성(runner getter, store, 실행 헬퍼)은
 주입받아 테스트 가능하게 한다.
 """
@@ -10,7 +15,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -23,16 +28,6 @@ _HERE = Path(__file__).resolve().parent
 TEMPLATES_DIR = _HERE / "templates"
 STATIC_DIR = _HERE / "static"
 STRATEGIES_DIR = REPO_ROOT / "strategies"
-
-
-def available_strategies() -> list[dict[str, str]]:
-    """strategies/ 의 전략 .py 목록 (전략 레지스트리의 최소 버전)."""
-    if not STRATEGIES_DIR.is_dir():
-        return []
-    return [
-        {"path": f"strategies/{p.name}", "name": p.stem}
-        for p in sorted(STRATEGIES_DIR.glob("*.py"))
-    ]
 
 
 def _resolve_universe(form, data_folder: str) -> list[str]:
@@ -48,7 +43,7 @@ def register_dashboard(
     *,
     get_runner: Callable[[], Any],
     store: Any,
-    run_and_store: Callable[[Any, Any, RunRequest], dict[str, Any]],
+    run_and_store: Callable[..., dict[str, Any]],
     jobs: Any,
 ) -> None:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -64,34 +59,48 @@ def register_dashboard(
             return f"{rec['run_id']} · 주문 {rec['statistics'].get('Total Orders','-')} · Net {rec['statistics'].get('Net Profit','-')}"
         return jobs.submit(name, _bt)
 
+    # ── ② 백테스트 탭 ────────────────────────────────────────────────
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
-        # ② 백테스트 챕터 — 결과/이력. 새 실행은 ① 전략 설정에서.
-        return templates.TemplateResponse(request, "index.html", {"runs": store.list_runs()})
+        return templates.TemplateResponse(request, "index.html", {
+            "runs": store.list_runs(),
+            "has_strategy": config.get_strategy() is not None,
+            "default_data_folder": config.get_data_folder(),
+            "error": request.query_params.get("error"),
+        })
 
-    @app.post("/ui/runs", response_class=HTMLResponse)
-    def ui_create_run(
-        request: Request,
-        strategy: str = Form(...),
-        data_folder: str = Form(""),
-        algorithm_type: str = Form(""),
-    ):
-        df = data_folder or config.get_data_folder()
-        if not df:
-            # 데이터 폴더 없이는 실행 불가 — 폼 위치에 에러 partial 반환
-            return templates.TemplateResponse(
-                request, "partials/runs_table.html",
-                {"runs": store.list_runs(), "error": "데이터 폴더(LEAN_DATA_DIR)가 필요합니다."},
-            )
+    @app.post("/backtest")
+    async def run_backtest(request: Request):
+        # 저장된 단일 전략 + 이 폼의 기간/자본/유니버스로 백테스트 실행.
+        from ..rules import parse_rule
+        strategy = config.get_strategy()
+        if strategy is None:
+            return RedirectResponse(url="/?error=먼저 ① 전략 설정에서 전략을 저장하세요", status_code=303)
+        try:
+            parse_rule(strategy["rule"])  # 저장 시 검증했지만 방어적으로 재확인
+        except Exception as e:
+            return RedirectResponse(url=f"/?error=전략 규칙식 오류: {e}", status_code=303)
+
+        form = await request.form()
+        data_folder = form.get("data_folder") or config.get_data_folder()
+        if not data_folder:
+            return RedirectResponse(url="/?error=데이터 폴더가 필요합니다(③ 설정)", status_code=303)
+        spec = {
+            **strategy,  # signals, rule, period_days
+            "universe": _resolve_universe(form, data_folder),
+            "start": form.get("start"), "end": form.get("end"),
+            "cash": int(form.get("cash") or 10_000_000),
+        }
+        if not spec["universe"]:
+            return RedirectResponse(url="/?error=유니버스(종목)를 지정하세요", status_code=303)
         req = RunRequest(
-            strategy_path=strategy,
-            data_folder=df,
-            algorithm_type=(algorithm_type or None),
+            strategy_path="strategies/RuleStrategy.py",
+            data_folder=data_folder,
+            algorithm_type="RuleStrategy",
+            parameters={"rule_spec": json.dumps(spec)},
         )
-        run_and_store(get_runner(), store, req)  # 동기 실행(스레드풀) → 저장
-        return templates.TemplateResponse(
-            request, "partials/runs_table.html", {"runs": store.list_runs()},
-        )
+        job = submit_backtest("백테스트", req)
+        return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
 
     @app.get("/ui/runs/{run_id}", response_class=HTMLResponse)
     def ui_run_detail(request: Request, run_id: str):
@@ -100,85 +109,41 @@ def register_dashboard(
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return templates.TemplateResponse(request, "run_detail.html", {"run": record})
 
-    @app.get("/compose", response_class=HTMLResponse)
-    def compose_page(request: Request):
-        from .. import strategy_catalog
-        return templates.TemplateResponse(request, "compose.html", {
-            "catalog": strategy_catalog.CATALOG,
-            "default_data_folder": config.get_data_folder(),
-        })
-
-    @app.post("/compose")
-    async def compose_run(request: Request):
-        from .. import strategy_catalog
-        form = await request.form()
-        selected = form.getlist("alpha")
-        alphas = []
-        for spec in strategy_catalog.CATALOG:
-            if spec.name in selected:
-                raw = {p.key: form.get(f"{spec.name}__{p.key}", "") for p in spec.params}
-                alphas.append({"name": spec.name, "params": strategy_catalog.cast_params(spec.name, raw)})
-        if not alphas:
-            return RedirectResponse(url="/compose", status_code=303)
-
-        data_folder = form.get("data_folder") or config.get_data_folder()
-        composition = {
-            "alphas": alphas,
-            "universe": _resolve_universe(form, data_folder),
-            "start": form.get("start"), "end": form.get("end"),
-            "cash": int(form.get("cash") or 10_000_000),
-        }
-        req = RunRequest(
-            strategy_path="strategies/Composed.py",
-            data_folder=data_folder,
-            algorithm_type="Composed",
-            parameters={"composition": json.dumps(composition)},
-        )
-        job = submit_backtest("백테스트 · Alpha조합", req)
-        return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
-
-    @app.get("/rules", response_class=HTMLResponse)
-    def rules_page(request: Request):
+    # ── ① 전략 설정 탭 ───────────────────────────────────────────────
+    @app.get("/strategy", response_class=HTMLResponse)
+    def strategy_page(request: Request):
         from .. import signals_catalog
-        return templates.TemplateResponse(request, "rules.html", {
+        strategy = config.get_strategy() or signals_catalog.default_strategy()
+        return templates.TemplateResponse(request, "strategy.html", {
             "catalog": signals_catalog.CATALOG,
-            "default_data_folder": config.get_data_folder(),
+            "strategy": strategy,
+            "param_value": signals_catalog.param_value,
+            "risk": config.get_risk_config(),
+            "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })
 
-    @app.post("/rules")
-    async def rules_run(request: Request):
+    @app.post("/strategy")
+    async def strategy_save(request: Request):
         from .. import signals_catalog
         from ..rules import parse_rule
         form = await request.form()
         rule = (form.get("rule") or "").strip()
-        # 모든 signal을 그 파라미터로 구성(식에 쓰인 것만 RuleAlpha가 평가)
-        signals = {
-            spec.label: {"type": spec.type, "params": signals_catalog.cast_params(spec.label, form)}
-            for spec in signals_catalog.CATALOG
-        }
         try:
-            parse_rule(rule)  # 식 검증
+            parse_rule(rule)
         except Exception as e:
-            return RedirectResponse(url=f"/rules?error=규칙식 오류: {e}", status_code=303)
-
-        data_folder = form.get("data_folder") or config.get_data_folder()
+            return RedirectResponse(url=f"/strategy?error=규칙식 오류: {e}", status_code=303)
         spec = {
-            "signals": signals, "rule": rule,
-            "universe": _resolve_universe(form, data_folder),
-            "start": form.get("start"), "end": form.get("end"),
-            "cash": int(form.get("cash") or 10_000_000),
-            "period_days": int(form.get("period_days") or 5),
+            "signals": signals_catalog.signals_from_form(form),
+            "rule": rule,
+            "period_days": int(form.get("period_days") or signals_catalog.DEFAULT_PERIOD_DAYS),
         }
-        req = RunRequest(
-            strategy_path="strategies/RuleStrategy.py",
-            data_folder=data_folder,
-            algorithm_type="RuleStrategy",
-            parameters={"rule_spec": json.dumps(spec)},
-        )
-        job = submit_backtest("백테스트 · 규칙전략", req)
-        return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
+        config.save_strategy(spec)
+        # 리스크 설정도 같은 화면에서 저장
+        config.save_risk({k: form.get(k, "") for k in config.RISK_KEYS})
+        return RedirectResponse(url="/strategy?saved=1", status_code=303)
 
+    # ── ③ 설정 탭 (키 + 데이터 적재) ─────────────────────────────────
     @app.get("/data", response_class=HTMLResponse)
     def data_list(request: Request):
         from etl import catalog
@@ -200,43 +165,12 @@ def register_dashboard(
         summary = catalog.ticker_summary(config.get_data_folder(), ticker)
         return templates.TemplateResponse(request, "data_detail.html", {"d": summary})
 
-    @app.post("/data/fetch")
-    async def data_fetch(request: Request):
-        from datetime import date
-        form = await request.form()
-        ticker = (form.get("ticker") or "").strip()
-        kinds = form.getlist("kind")
+    @app.post("/data/load-all")
+    def load_all_market(request: Request):
+        # 버튼 하나로 한국시장 전체(OHLCV+수급) 일괄 적재(덮어쓰기). 무거우니 백그라운드 잡.
+        from etl.universe import ingest_all_market
         data_dir = config.get_data_folder()
-        try:
-            start = date.fromisoformat(form["from"])
-            end = date.fromisoformat(form["to"]) if form.get("to") else date.today()
-            if not ticker:
-                raise ValueError("종목코드를 입력하세요")
-            if "price" in kinds:
-                from etl import krx as etl_krx
-                etl_krx.ingest(ticker, start, end, data_dir)
-            if "flow" in kinds:
-                from etl import flow as etl_flow
-                etl_flow.ingest_flow(ticker, start, end, data_dir)
-            if "fundamental" in kinds:
-                from etl import fundamental as etl_fund
-                etl_fund.ingest_fundamental(ticker, start, end, data_dir)
-        except Exception as e:  # 네트워크/로그인/입력 오류를 설정 화면에 표시(적재 폼이 설정에 있음)
-            return RedirectResponse(url=f"/settings?error={type(e).__name__}: {e}", status_code=303)
-        return RedirectResponse(url=f"/data/{ticker}", status_code=303)
-
-    @app.post("/data/universe")
-    def load_universe(request: Request, market: str = Form("KOSPI200"), years: int = Form(3)):
-        # 대량/장기 적재는 요청을 막지 않도록 백그라운드 잡으로 던진다.
-        from datetime import date, timedelta
-        from etl.universe import ingest_universe
-        data_dir = config.get_data_folder()
-        end = date.today()
-        start = end - timedelta(days=365 * years)
-        jobs.submit(
-            f"유니버스 적재 {market} {years}년",
-            lambda job: ingest_universe(start, end, market, data_dir),
-        )
+        jobs.submit("전체시장 적재(OHLCV+수급)", lambda job: ingest_all_market(data_dir))
         return RedirectResponse(url="/jobs", status_code=303)
 
     @app.get("/jobs", response_class=HTMLResponse)
@@ -258,16 +192,10 @@ def register_dashboard(
     def settings_page(request: Request):
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
-            "risk": config.get_risk_config(),
+            "data_dir": config.get_data_folder(),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })
-
-    @app.post("/settings/risk")
-    async def settings_risk_save(request: Request):
-        form = await request.form()
-        config.save_risk({k: form.get(k, "") for k in config.RISK_KEYS})
-        return RedirectResponse(url="/settings?saved=1", status_code=303)
 
     @app.post("/settings")
     async def settings_save(request: Request):

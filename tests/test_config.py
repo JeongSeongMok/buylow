@@ -67,6 +67,19 @@ def test_risk_save_and_get(tmp_config):
     assert rc["take_profit"] is None and rc["max_drawdown"] is None  # 빈값/0 → 미적용
 
 
+def test_strategy_save_and_get(tmp_config):
+    assert config.get_strategy() is None  # 기본 없음
+    spec = {"signals": {"EMA": {"type": "ema", "params": {"fast": 5, "slow": 20}}},
+            "rule": "EMA", "period_days": 3}
+    config.save_strategy(spec)
+    got = config.get_strategy()
+    assert got["rule"] == "EMA" and got["period_days"] == 3
+    assert got["signals"]["EMA"]["params"]["fast"] == 5
+    # 단일 전략 — 다시 저장하면 덮어쓴다
+    config.save_strategy({"signals": {}, "rule": "MACD", "period_days": 7})
+    assert config.get_strategy()["rule"] == "MACD"
+
+
 def test_apply_krx_credentials(tmp_config, monkeypatch):
     assert config.apply_krx_credentials() is False
     config.save_secrets({"krx_id": "the_id", "krx_pw": "the_pw"})

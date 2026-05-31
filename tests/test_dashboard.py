@@ -1,5 +1,9 @@
-"""대시보드(HTML) 라우트 테스트 — 가짜 runner로 LEAN 없이 검증."""
+"""대시보드(HTML) 라우트 테스트 — 가짜 runner로 LEAN 없이 검증.
 
+흐름: ① /strategy 에서 전략+리스크 저장 → ② /backtest 에서 기간/유니버스만 정해 실행(백그라운드 잡).
+"""
+
+import time
 from pathlib import Path
 
 import pytest
@@ -11,8 +15,7 @@ from orchestrator.persistence import RunStore
 
 
 def _wait_calls(runner, n=1, timeout=3.0):
-    """백그라운드 잡이 runner를 호출할 때까지 대기(대시보드 백테스트는 비동기)."""
-    import time
+    """백그라운드 잡이 runner를 호출할 때까지 대기(백테스트는 비동기 잡)."""
     deadline = time.time() + timeout
     while time.time() < deadline and len(runner.calls) < n:
         time.sleep(0.01)
@@ -38,55 +41,132 @@ class FakeRunner:
 
 
 @pytest.fixture
-def client(tmp_path):
-    return TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "ui.db")))
+def isolated_config(tmp_path, monkeypatch):
+    """config.local.yaml 을 임시로 격리(전략/리스크 저장이 실제 파일을 안 건드리게)."""
+    from orchestrator import config
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    return config
+
+
+@pytest.fixture
+def client(tmp_path, isolated_config):
+    runner = FakeRunner()
+    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "ui.db")))
+    c.runner = runner  # 테스트에서 접근
+    return c
+
+
+def _save_default_strategy(client):
+    from orchestrator import signals_catalog
+    data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
+    data.update({"rule": "(EMA AND MACD) OR RSI", "period_days": "5",
+                 "stop_loss": "7", "take_profit": "", "trailing": "", "max_drawdown": ""})
+    return client.post("/strategy", data=data)
 
 
 def test_index_renders(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "buylow" in r.text
-    assert "백테스트 결과" in r.text  # ② 백테스트 챕터(결과/이력)
+    assert "백테스트" in r.text and "실행 이력" in r.text
 
 
 def test_static_css_served(client):
     assert client.get("/static/style.css").status_code == 200
 
 
-def test_run_backtest_returns_updated_table(client):
-    r = client.post("/ui/runs", data={
-        "strategy": "strategies/SmokeTestAlgorithm.py",
-        "data_folder": "/data",
+def test_strategy_page_renders_without_internal_tokens(client):
+    r = client.get("/strategy")
+    assert r.status_code == 200
+    assert "EMA" in r.text and "MACD" in r.text and "리스크" in r.text
+    # 서버 내부 신호값(UP/DOWN/NONE)은 사용자에게 노출하지 않는다
+    assert "DOWN" not in r.text and "NONE" not in r.text
+
+
+def test_strategy_save_persists_strategy_and_risk(client, isolated_config):
+    r = _save_default_strategy(client)
+    assert r.status_code == 200  # 303 → /strategy?saved=1 따라감
+    strat = isolated_config.get_strategy()
+    assert strat["rule"] == "(EMA AND MACD) OR RSI"
+    assert strat["signals"]["EMA"]["params"]["fast"] == 12  # 캐스팅(int)
+    assert isolated_config.get_risk_config()["stop_loss"] == 7.0  # 같은 화면에서 리스크도 저장
+
+
+def test_strategy_save_rejects_bad_rule(client):
+    r = client.post("/strategy", data={"rule": "(EMA AND"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "error" in r.headers["location"]
+
+
+def test_backtest_without_strategy_redirects(client):
+    r = client.post("/backtest", data={"universe": "005930", "start": "2023-01-02",
+                                       "end": "2023-12-28"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/?error")  # 전략 없음 안내
+
+
+def test_backtest_uses_saved_strategy(client):
+    import json
+    _save_default_strategy(client)
+    r = client.post("/backtest", data={
+        "universe": "005930", "start": "2023-01-02", "end": "2023-12-28",
+        "cash": "10000000", "data_folder": "/data",
+    })
+    assert r.status_code == 200  # 303 → /jobs/{id}
+    req = _wait_calls(client.runner)[-1]
+    assert req.algorithm_type == "RuleStrategy"
+    spec = json.loads(req.parameters["rule_spec"])
+    assert spec["rule"] == "(EMA AND MACD) OR RSI"
+    assert spec["universe"] == ["005930"]
+    assert spec["start"] == "2023-01-02" and spec["cash"] == 10000000
+    assert spec["signals"]["EMA"]["params"]["fast"] == 12
+
+
+def test_backtest_universe_all_scans_loaded(client):
+    import json
+    from datetime import date
+    from etl.lean_format import write_equity_daily
+    from etl.sources import Bar
+    import tempfile
+    dd = Path(tempfile.mkdtemp())
+    for t in ["005930", "000660"]:
+        write_equity_daily(dd, "krx", t, [Bar(date(2023, 1, 2), 100, 100, 100, 100, 1)])
+    _save_default_strategy(client)
+    r = client.post("/backtest", data={
+        "universe_all": "1", "data_folder": str(dd),
+        "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000",
     })
     assert r.status_code == 200
-    # 갱신된 실행 이력 partial에 방금 실행이 보여야 함
-    assert "SmokeTestAlgorithm" in r.text
-    assert "1.694%" in r.text
-    assert 'id="runs-table"' in r.text
+    spec = json.loads(_wait_calls(client.runner)[-1].parameters["rule_spec"])
+    assert set(spec["universe"]) == {"005930", "000660"}
 
-
-def test_run_uses_config_default_data_folder(client, tmp_path, monkeypatch):
-    # data_folder 미지정이어도 config 기본값으로 해석돼 실행된다
-    from orchestrator import config
-    cfg = tmp_path / "config.local.yaml"
-    cfg.write_text("data_folder: /cfg/data\n")
-    monkeypatch.setattr(config, "CONFIG_LOCAL", cfg)
-    monkeypatch.delenv("LEAN_DATA_DIR", raising=False)
-    r = client.post("/ui/runs", data={"strategy": "strategies/SmokeTestAlgorithm.py"})
-    assert r.status_code == 200
-    assert "SmokeTestAlgorithm" in r.text  # 실행되어 이력에 표시됨
 
 def test_run_detail_page(client):
-    client.post("/ui/runs", data={"strategy": "strategies/SmokeTestAlgorithm.py", "data_folder": "/data"})
+    _save_default_strategy(client)
+    client.post("/backtest", data={"universe": "005930", "start": "2023-01-02",
+                                   "end": "2023-12-28", "data_folder": "/data"})
+    _wait_calls(client.runner)
     r = client.get("/ui/runs/fake-run-1")
     assert r.status_code == 200
-    assert "fake-run-1" in r.text
-    assert "Net Profit" in r.text
+    assert "fake-run-1" in r.text and "Net Profit" in r.text
     assert client.get("/ui/runs/missing").status_code == 404
 
 
+def test_load_all_triggers_background_job(client, monkeypatch):
+    # 전체시장 적재 버튼 → ingest_all_market 을 백그라운드 잡으로 실행(여기선 가짜로 대체)
+    import etl.universe as universe
+    called = {}
+    monkeypatch.setattr(universe, "ingest_all_market",
+                        lambda data_dir, **kw: called.setdefault("dir", str(data_dir)))
+    r = client.post("/data/load-all", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/jobs"
+    deadline = time.time() + 3.0
+    while time.time() < deadline and "dir" not in called:
+        time.sleep(0.01)
+    assert "dir" in called  # 잡이 적재 함수를 호출
+
+
 def test_data_pages(tmp_path, monkeypatch):
-    # config의 data_folder를 샘플 적재한 tmp로 지정 → /data, /data/{ticker} 렌더
     from datetime import date
     from orchestrator import config
     from etl.lean_format import write_equity_daily
@@ -95,124 +175,24 @@ def test_data_pages(tmp_path, monkeypatch):
     monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))
     write_equity_daily(tmp_path / "data", "krx", "005930",
                        [Bar(date(2023, 1, 2), 55500, 56100, 55200, 55500, 10031448)])
-
     c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "d.db")))
     r = c.get("/data")
     assert r.status_code == 200 and "005930" in r.text
     r = c.get("/data/005930")
-    assert r.status_code == 200 and "55,500" in r.text  # 역스케일된 종가 표시
+    assert r.status_code == 200 and "55,500" in r.text  # 역스케일된 종가
 
 
 def test_jobs_page_renders(client):
     assert client.get("/jobs").status_code == 200
 
 
-def test_rules_page_renders(tmp_path):
-    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "r.db")))
-    r = c.get("/rules")
-    assert r.status_code == 200
-    assert "규칙" in r.text and "EMA" in r.text and "MACD" in r.text
-
-
-def test_rules_run_builds_rule_spec(tmp_path):
-    import json
-    runner = FakeRunner()
-    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "r.db")))
-    r = c.post("/rules", data={
-        "EMA__fast": "10", "EMA__slow": "30",
-        "MACD__fast": "12", "MACD__slow": "26", "MACD__signal": "9",
-        "RSI__period": "14", "RSI__oversold": "30", "RSI__overbought": "70",
-        "MOM__lookback": "60",
-        "rule": "(EMA AND MACD) OR RSI",
-        "period_days": "5", "universe": "005930",
-        "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000", "data_folder": "/data",
-    })
-    assert r.status_code == 200
-    req = _wait_calls(runner)[-1]
-    assert req.algorithm_type == "RuleStrategy"
-    spec = json.loads(req.parameters["rule_spec"])
-    assert spec["rule"] == "(EMA AND MACD) OR RSI"
-    assert spec["signals"]["EMA"]["params"]["fast"] == 10  # 캐스팅(int)
-
-
-def test_rules_universe_all_scans_loaded(tmp_path):
-    # '적재된 전체 종목' 체크 시 universe = ./data 의 가격 적재 종목 전부
-    import json
-    from datetime import date
-    from etl.lean_format import write_equity_daily
-    from etl.sources import Bar
-    dd = tmp_path / "data"
-    for t in ["005930", "000660"]:
-        write_equity_daily(dd, "krx", t, [Bar(date(2023, 1, 2), 100, 100, 100, 100, 1)])
-    runner = FakeRunner()
-    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "r.db")))
-    r = c.post("/rules", data={
-        "rule": "EMA", "EMA__fast": "12", "EMA__slow": "26",
-        "universe_all": "1", "data_folder": str(dd),
-        "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000",
-    })
-    assert r.status_code == 200
-    spec = json.loads(_wait_calls(runner)[-1].parameters["rule_spec"])
-    assert set(spec["universe"]) == {"005930", "000660"}
-
-
-def test_rules_run_rejects_bad_expression(tmp_path):
-    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "r.db")))
-    r = c.post("/rules", data={"rule": "(EMA AND", "universe": "005930",
-                               "start": "2023-01-02", "end": "2023-12-28"}, follow_redirects=False)
-    assert r.status_code == 303
-    assert "error" in r.headers["location"]  # 규칙식 오류로 리다이렉트
-
-
-def test_compose_page_lists_catalog(tmp_path):
-    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "c.db")))
-    r = c.get("/compose")
-    assert r.status_code == 200
-    assert "EMA 교차" in r.text and "MACD" in r.text  # LEAN 내장 카탈로그 노출
-
-
-def test_compose_runs_composition(tmp_path):
-    import json
-    runner = FakeRunner()
-    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "c.db")))
-    r = c.post("/compose", data={
-        "alpha": ["ema_cross", "rsi"],
-        "ema_cross__fast": "10", "ema_cross__slow": "40",
-        "rsi__period": "14",
-        "universe": "005930", "start": "2023-01-02", "end": "2023-12-28",
-        "cash": "10000000", "data_folder": "/data",
-    })
-    assert r.status_code == 200  # 리다이렉트 따라가 run 상세
-    req = _wait_calls(runner)[-1]
-    assert req.algorithm_type == "Composed"
-    comp = json.loads(req.parameters["composition"])
-    assert {a["name"] for a in comp["alphas"]} == {"ema_cross", "rsi"}
-    assert comp["alphas"][0]["params"]["fast"] == 10  # 타입 캐스팅(int)
-
-
-def test_settings_risk_save(tmp_path, monkeypatch):
-    from orchestrator import config
-    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
-    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "s.db")))
-    assert c.get("/settings").status_code == 200
-    r = c.post("/settings/risk", data={"stop_loss": "7", "take_profit": "20",
-                                       "trailing": "", "max_drawdown": ""})
-    assert r.status_code == 200
-    rc = config.get_risk_config()
-    assert rc["stop_loss"] == 7.0 and rc["take_profit"] == 20.0
-    assert rc["trailing"] is None
-
-
 def test_settings_page_and_save(tmp_path, monkeypatch):
-    # 실제 config.local.yaml/환경변수를 건드리지 않도록 격리
     from orchestrator import config
     monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
     for spec in config.SECRET_SPECS:
         monkeypatch.delenv(spec.env, raising=False)
-
     c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "s.db")))
     assert c.get("/settings").status_code == 200
-    # 저장(폼) → 303 리다이렉트 따라가 200, 그리고 config에 반영
     r = c.post("/settings", data={"krx_id": "fake_id", "krx_pw": "fake_pw"})
     assert r.status_code == 200
     assert config.get_secret(config.SECRET_SPECS[0]) == "fake_id"

@@ -98,6 +98,21 @@ def save_risk(values: dict) -> None:
     _write_local(data)
 
 
+def get_strategy() -> dict | None:
+    """저장된 단일 전략 스펙(signals/rule/period_days). 없으면 None.
+
+    전략은 하나만 유지한다(전략 설정 탭에서 저장 → 백테스트 탭에서 실행).
+    """
+    return _load_local().get("strategy")
+
+
+def save_strategy(spec: dict) -> None:
+    """전략 스펙을 config.local.yaml 의 strategy 섹션에 저장(덮어쓰기 — 단일 전략)."""
+    data = _load_local()
+    data["strategy"] = spec
+    _write_local(data)
+
+
 def get_scheduler_config() -> dict:
     """일일 증분 적재 스케줄 설정. 기본 비활성(사용자가 켜야 자동 적재)."""
     sc = _load_local().get("scheduler") or {}

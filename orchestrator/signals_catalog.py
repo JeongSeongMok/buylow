@@ -27,26 +27,30 @@ class SignalSpec:
 
 
 # 기본 라벨 = type 키를 대문자로. 식에서 EMA/MACD/RSI/MOM 으로 참조.
+# 설명은 사용자 친화 표현(매수/매도/중립)만 — 내부 신호값(UP/DOWN/NONE)은 노출하지 않는다.
 CATALOG: list[SignalSpec] = [
-    SignalSpec("ema", "EMA", "EMA 추세", "단기 EMA > 장기 EMA = UP, 반대 = DOWN", [
-        ParamSpec("fast", "단기 EMA", "int", 12),
-        ParamSpec("slow", "장기 EMA", "int", 26),
+    SignalSpec("ema", "EMA", "이동평균 추세", "단기 이동평균이 장기 이동평균보다 높으면 매수 우호, 낮으면 매도 우호", [
+        ParamSpec("fast", "단기 이동평균", "int", 12),
+        ParamSpec("slow", "장기 이동평균", "int", 26),
     ]),
-    SignalSpec("macd", "MACD", "MACD", "MACD선 > 시그널선 = UP, 반대 = DOWN", [
+    SignalSpec("macd", "MACD", "MACD", "MACD선이 시그널선 위면 매수 우호, 아래면 매도 우호", [
         ParamSpec("fast", "단기", "int", 12),
         ParamSpec("slow", "장기", "int", 26),
         ParamSpec("signal", "시그널", "int", 9),
     ]),
-    SignalSpec("rsi", "RSI", "RSI", "과매도(<oversold)=UP, 과매수(>overbought)=DOWN, 중립=NONE", [
+    SignalSpec("rsi", "RSI", "RSI 과열도", "과매도 구간이면 매수 우호, 과매수 구간이면 매도 우호, 중간은 중립", [
         ParamSpec("period", "기간", "int", 14),
         ParamSpec("oversold", "과매도(%)", "float", 30),
         ParamSpec("overbought", "과매수(%)", "float", 70),
     ]),
-    SignalSpec("momentum", "MOM", "모멘텀", "최근 N일 수익률 > 0 = UP, < 0 = DOWN", [
+    SignalSpec("momentum", "MOM", "모멘텀", "최근 N일 수익률이 플러스면 매수 우호, 마이너스면 매도 우호", [
         ParamSpec("lookback", "관측(일)", "int", 60),
     ]),
     # flow / value 는 데이터 연동 후 추가 예정
 ]
+
+DEFAULT_RULE = "(EMA AND MACD) OR RSI"
+DEFAULT_PERIOD_DAYS = 5
 
 _BY_LABEL = {s.label: s for s in CATALOG}
 
@@ -65,3 +69,31 @@ def cast_params(label: str, raw: dict[str, str]) -> dict:
         else:
             out[p.key] = int(v) if p.type == "int" else float(v)
     return out
+
+
+def signals_from_form(form) -> dict:
+    """폼(라벨__파라미터)에서 전체 signal 구성을 추출(식에 안 쓰여도 모두 보존)."""
+    return {
+        s.label: {"type": s.type, "params": cast_params(s.label, form)}
+        for s in CATALOG
+    }
+
+
+def default_strategy() -> dict:
+    """기본 전략 스펙 — 저장된 게 없을 때 폼 초기값으로 사용."""
+    signals = {
+        s.label: {"type": s.type, "params": {p.key: p.default for p in s.params}}
+        for s in CATALOG
+    }
+    return {"signals": signals, "rule": DEFAULT_RULE, "period_days": DEFAULT_PERIOD_DAYS}
+
+
+def param_value(strategy: dict, label: str, key: str):
+    """저장된 전략에서 특정 signal 파라미터 값(폼 프리필용). 없으면 카탈로그 기본값."""
+    try:
+        return strategy["signals"][label]["params"][key]
+    except (KeyError, TypeError):
+        for p in _BY_LABEL[label].params:
+            if p.key == key:
+                return p.default
+        return ""

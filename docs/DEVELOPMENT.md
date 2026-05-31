@@ -101,15 +101,18 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 LEAN_DATA_DIR=/path/to/lean/Data .venv/bin/python -m orchestrator.api
 ```
 
-This also serves the **browser dashboard** at `http://127.0.0.1:8420` (strategy selection →
-run backtest → view history; HTMX + Jinja, vendored — no Node build). JSON endpoints:
-`GET /healthz`, `POST /runs` (trigger a backtest), `GET /runs`, `GET /runs/{id}`; HTML routes:
-`GET /`, `POST /ui/runs`, `GET /ui/runs/{id}`, `GET|POST /rules` (compose conditions with AND/OR/괄호
-→ backtest), `GET|POST /compose` (pick + combine alphas → backtest),
-`GET /data` + `GET /data/{ticker}` (view/fetch loaded OHLCV & 수급), `POST /data/universe` (bulk,
-background), `GET /jobs` + `GET /jobs/{id}` (background job status + live log),
-`GET|POST /settings`. Dashboard backtests run as background jobs (non-blocking) with a live log. State is persisted in `buylow.db` (SQLite,
-gitignored). The server binds to `127.0.0.1` only.
+This also serves the **browser dashboard** at `http://127.0.0.1:8420` (3 chapters: ① 전략 설정 →
+② 백테스트 → ③ 설정; HTMX + Jinja, vendored — no Node build). The strategy is **singular and
+persisted** (`config.local.yaml` `strategy:`): you save conditions+risk once, then each backtest
+only supplies period/cash/universe. JSON endpoints: `GET /healthz`, `POST /runs` (trigger a
+backtest), `GET /runs`, `GET /runs/{id}`; HTML routes: `GET /` (② backtest form + history),
+`POST /backtest` (run saved strategy → background job), `GET /ui/runs/{id}` (result detail),
+`GET|POST /strategy` (① edit + save the rule conditions and global risk; hides internal
+UP/DOWN/NONE), `GET /data` + `GET /data/{ticker}` (view loaded OHLCV & 수급),
+`POST /data/load-all` (③ one button: bulk-load the whole KRX market OHLCV+flow, overwrite,
+background), `GET /jobs` + `GET /jobs/{id}` (background job status + live log), `GET|POST /settings`
+(③ API keys). Dashboard backtests run as background jobs (non-blocking) with a live log. State is
+persisted in `buylow.db` (SQLite, gitignored). The server binds to `127.0.0.1` only.
 
 ## Configuration & secrets
 

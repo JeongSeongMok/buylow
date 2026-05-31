@@ -40,8 +40,12 @@ def list_universe(market: str = "KOSPI200", on: date | None = None) -> list[str]
 
 def ingest_universe(
     start: date, end: date, market: str = "KOSPI200", data_dir: str | Path = DEFAULT_DATA_DIR,
+    merge: bool = True,
 ) -> dict[str, Any]:
-    """유니버스 전 종목의 일봉을 날짜별 단면으로 받아 LEAN 포맷으로 적재."""
+    """유니버스 전 종목의 일봉을 날짜별 단면으로 받아 LEAN 포맷으로 적재.
+
+    merge=True면 기존 파일과 증분 병합(스케줄러 일일 갱신). merge=False면 덮어쓰기(전체 재적재).
+    """
     from pykrx import stock
 
     universe = set(list_universe(market, end))
@@ -62,7 +66,7 @@ def ingest_universe(
                 ))
 
     for tkr, bars in series.items():
-        write_equity_daily(data_dir, KRX_MARKET, tkr, bars, merge=True)  # 증분 병합
+        write_equity_daily(data_dir, KRX_MARKET, tkr, bars, merge=merge)
     inject_krx_market(data_dir)
 
     return {
@@ -70,6 +74,49 @@ def ingest_universe(
         "universe": len(universe),
         "ingested": len(series),
         "trading_days": len(trading_days),
+    }
+
+
+DEFAULT_LOAD_YEARS = 5  # 전체 적재 버튼 기본 기간 (백테스트에 충분한 과거 구간)
+
+
+def ingest_all_market(
+    data_dir: str | Path = DEFAULT_DATA_DIR, *, years: int = DEFAULT_LOAD_YEARS,
+    with_flow: bool = True,
+) -> dict[str, Any]:
+    """버튼 하나로 한국시장 전체(KOSPI+KOSDAQ) 과거 데이터를 일괄 적재(덮어쓰기).
+
+    - 가격(OHLCV): 날짜별 단면으로 전 종목을 효율 적재. 기존 데이터가 있어도 덮어쓴다(merge=False).
+    - 수급(투자자별): KRX 로그인이 설정된 경우에만 종목별로 best-effort 적재(종목 수만큼 호출 → 느림).
+      로그인 없거나 일부 실패해도 전체 작업은 계속한다.
+    """
+    from datetime import timedelta
+
+    from etl.flow import ingest_flow
+    from orchestrator.config import apply_krx_credentials
+
+    end = date.today()
+    start = end - timedelta(days=365 * years)
+
+    price = ingest_universe(start, end, market="ALL", data_dir=data_dir, merge=False)
+
+    flow_ok = flow_fail = 0
+    flow_enabled = with_flow and apply_krx_credentials()
+    if flow_enabled:
+        for tkr in list_universe("ALL", end):
+            try:
+                ingest_flow(tkr, start, end, data_dir)
+                flow_ok += 1
+            except Exception:  # 개별 종목 실패(데이터 없음 등)는 건너뛰고 계속
+                flow_fail += 1
+
+    return {
+        "years": years,
+        "price_tickers": price["ingested"],
+        "trading_days": price["trading_days"],
+        "flow_enabled": flow_enabled,
+        "flow_ok": flow_ok,
+        "flow_fail": flow_fail,
     }
 
 
