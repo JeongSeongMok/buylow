@@ -113,6 +113,14 @@ into **one target weight per symbol**, so there is no cross-strategy conflict.
 - Each strategy carries its own cadence (resolution + `Schedule.On`); rebalance frequency etc. are
   parameters. Minute/intraday strategies (e.g. volatility breakout) await a minute-bar ETL.
 
+**Strategy registry (compose in the dashboard).** Available alphas are declared as pure specs in
+`orchestrator/strategy_catalog.py` (name, params, defaults — no LEAN import, used for the UI). The
+dashboard `/compose` lets the user pick alphas, set parameters, and choose a universe/dates; it
+builds a composition spec (JSON) and runs the generic `strategies/Composed.py`, which reads the
+spec via a `composition` parameter and instantiates the selected alphas through `alphas.build_alpha`.
+Adding a strategy = add an `AlphaModel` + a catalog entry; it then appears in the dashboard. Current
+catalog: `ema_cross`, `bnf`, `rsi`, `momentum` (daily/price). Fundamental/flow alphas come later.
+
 ## Dashboard
 
 - A **browser UI** served by FastAPI on **`127.0.0.1:<port>`** (default `8420`, configurable

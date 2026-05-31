@@ -104,8 +104,9 @@ LEAN_DATA_DIR=/path/to/lean/Data .venv/bin/python -m orchestrator.api
 This also serves the **browser dashboard** at `http://127.0.0.1:8420` (strategy selection →
 run backtest → view history; HTMX + Jinja, vendored — no Node build). JSON endpoints:
 `GET /healthz`, `POST /runs` (trigger a backtest), `GET /runs`, `GET /runs/{id}`; HTML routes:
-`GET /`, `POST /ui/runs`, `GET /ui/runs/{id}`, `GET /data` + `GET /data/{ticker}` (view/fetch
-loaded OHLCV & 수급 per ticker), `GET|POST /settings`. State is persisted in `buylow.db` (SQLite,
+`GET /`, `POST /ui/runs`, `GET /ui/runs/{id}`, `GET|POST /compose` (pick + combine alphas → backtest),
+`GET /data` + `GET /data/{ticker}` (view/fetch loaded OHLCV & 수급), `POST /data/universe` (bulk,
+background), `GET /jobs`, `GET|POST /settings`. State is persisted in `buylow.db` (SQLite,
 gitignored). The server binds to `127.0.0.1` only.
 
 ## Configuration & secrets
