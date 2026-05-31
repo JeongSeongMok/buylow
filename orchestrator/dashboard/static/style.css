@@ -73,6 +73,8 @@ table.stats th { color: var(--muted); width: 40%; }
 .fail { color: #e57373; }
 .meta { color: var(--muted); font-size: 0.85rem; margin: 0.3rem 0; }
 code { background: #0f1419; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.8rem; }
+pre.log { background: #0b0e12; border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem;
+          font-size: 0.75rem; line-height: 1.35; max-height: 420px; overflow: auto; white-space: pre-wrap; }
 a { color: #6fb3ff; }
 fieldset.alpha { border: 1px solid var(--border); border-radius: 6px; margin: 0.6rem 0; padding: 0.6rem 0.9rem; }
 fieldset.alpha .params { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.8rem; }

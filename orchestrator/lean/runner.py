@@ -120,7 +120,8 @@ class LeanRunner:
         # env 준비(=런처 빌드 포함)는 비용이 있으므로 한 번 만들어 재사용한다.
         self._env = env or prepare_environment()
 
-    def run_backtest(self, request: RunRequest) -> RunResult:
+    def run_backtest(self, request: RunRequest, on_start=None) -> RunResult:
+        """백테스트 실행. on_start(run_id, log_path)가 주어지면 spawn 직전에 호출(진행 추적용)."""
         strategy = request.resolved_strategy()
         if not strategy.is_file():
             raise FileNotFoundError(f"전략 파일 없음: {strategy}")
@@ -149,8 +150,11 @@ class LeanRunner:
         (out_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
         log_path = run_dir / "run.log"
+        if on_start:
+            on_start(run_id, log_path)
         statistics: dict[str, str] = {}
-        with open(log_path, "w", encoding="utf-8") as log:
+        # buffering=1(라인 버퍼) → 실행 중에도 로그가 즉시 파일에 기록돼 대시보드에서 실시간 확인 가능
+        with open(log_path, "w", encoding="utf-8", buffering=1) as log:
             proc = subprocess.Popen(
                 [str(self._env.dotnet_exe), "BuylowLauncher.dll"],
                 cwd=str(out_dir),

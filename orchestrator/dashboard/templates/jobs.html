@@ -9,7 +9,7 @@
     <tbody>
       {% for j in jobs %}
       <tr>
-        <td>{{ j.name }}</td>
+        <td><a href="/jobs/{{ j.id }}">{{ j.name }}</a></td>
         <td>
           {% if j.state == "succeeded" %}<span class="ok">완료 ✓</span>
           {% elif j.state == "failed" %}<span class="fail">실패 ✗</span>

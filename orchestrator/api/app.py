@@ -47,9 +47,10 @@ def _result_to_record(req: RunRequest, result: RunResult) -> dict[str, Any]:
     }
 
 
-def run_and_store(runner: LeanRunner, store: RunStore, req: RunRequest) -> dict[str, Any]:
-    """백테스트 실행 → 결과 저장. JSON API와 대시보드가 공유하는 단일 경로."""
-    result = runner.run_backtest(req)
+def run_and_store(runner: LeanRunner, store: RunStore, req: RunRequest, on_start=None) -> dict[str, Any]:
+    """백테스트 실행 → 결과 저장. JSON API와 대시보드가 공유하는 단일 경로.
+    on_start(run_id, log_path)는 백그라운드 잡의 진행 추적용으로 전달된다."""
+    result = runner.run_backtest(req, on_start=on_start)
     return store.save_run(_result_to_record(req, result))
 
 

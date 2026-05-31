@@ -54,6 +54,16 @@ def register_dashboard(
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    def submit_backtest(name: str, req: RunRequest):
+        """백테스트를 백그라운드 잡으로 실행(요청 비차단). 잡에 run_id/log_path를 실어 진행 추적."""
+        def _bt(job):
+            def on_start(run_id, log_path):
+                job.run_id = run_id
+                job.log_path = str(log_path)
+            rec = run_and_store(get_runner(), store, req, on_start=on_start)
+            return f"{rec['run_id']} · 주문 {rec['statistics'].get('Total Orders','-')} · Net {rec['statistics'].get('Net Profit','-')}"
+        return jobs.submit(name, _bt)
+
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
         # ② 백테스트 챕터 — 결과/이력. 새 실행은 ① 전략 설정에서.
@@ -124,8 +134,8 @@ def register_dashboard(
             algorithm_type="Composed",
             parameters={"composition": json.dumps(composition)},
         )
-        record = run_and_store(get_runner(), store, req)
-        return RedirectResponse(url=f"/ui/runs/{record['run_id']}", status_code=303)
+        job = submit_backtest("백테스트 · Alpha조합", req)
+        return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
 
     @app.get("/rules", response_class=HTMLResponse)
     def rules_page(request: Request):
@@ -166,8 +176,8 @@ def register_dashboard(
             algorithm_type="RuleStrategy",
             parameters={"rule_spec": json.dumps(spec)},
         )
-        record = run_and_store(get_runner(), store, req)
-        return RedirectResponse(url=f"/ui/runs/{record['run_id']}", status_code=303)
+        job = submit_backtest("백테스트 · 규칙전략", req)
+        return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
 
     @app.get("/data", response_class=HTMLResponse)
     def data_list(request: Request):
@@ -225,13 +235,24 @@ def register_dashboard(
         start = end - timedelta(days=365 * years)
         jobs.submit(
             f"유니버스 적재 {market} {years}년",
-            lambda: ingest_universe(start, end, market, data_dir),
+            lambda job: ingest_universe(start, end, market, data_dir),
         )
         return RedirectResponse(url="/jobs", status_code=303)
 
     @app.get("/jobs", response_class=HTMLResponse)
     def jobs_page(request: Request):
         return templates.TemplateResponse(request, "jobs.html", {"jobs": jobs.list()})
+
+    @app.get("/jobs/{job_id}", response_class=HTMLResponse)
+    def job_detail(request: Request, job_id: str):
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="job not found")
+        log_tail = ""
+        if job.log_path and Path(job.log_path).exists():
+            lines = Path(job.log_path).read_text(encoding="utf-8", errors="replace").splitlines()
+            log_tail = "\n".join(lines[-60:])  # 최근 60줄
+        return templates.TemplateResponse(request, "job_detail.html", {"job": job, "log_tail": log_tail})
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):

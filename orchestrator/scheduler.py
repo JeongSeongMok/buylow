@@ -27,7 +27,7 @@ def start_scheduler(jobs: JobManager) -> Any | None:
     def _daily():
         jobs.submit(
             f"daily {market} update",
-            lambda: update_universe(market, get_data_folder()),
+            lambda job: update_universe(market, get_data_folder()),
         )
 
     sched = BackgroundScheduler(timezone="Asia/Seoul")

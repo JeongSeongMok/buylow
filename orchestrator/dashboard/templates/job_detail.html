@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+{% if job.state in ("pending", "running") %}
+<meta http-equiv="refresh" content="2">  {# 실행 중에는 2초마다 자동 새로고침 #}
+{% endif %}
+<p><a href="/jobs">← 작업 목록</a></p>
+<section class="card">
+  <h2>{{ job.name }}
+    {% if job.state == "succeeded" %}<span class="ok">완료 ✓</span>
+    {% elif job.state == "failed" %}<span class="fail">실패 ✗</span>
+    {% elif job.state == "running" %}<span>실행 중… (자동 새로고침)</span>
+    {% else %}<span>대기</span>{% endif %}
+  </h2>
+  <p class="meta">시작 {{ job.created_at }}{% if job.finished_at %} · 종료 {{ job.finished_at }}{% endif %}</p>
+  {% if job.error %}<p class="error">{{ job.error }}</p>{% endif %}
+  {% if job.result %}<p class="ok">{{ job.result }}</p>{% endif %}
+  {% if job.run_id %}<p class="meta">결과 상세: <a href="/ui/runs/{{ job.run_id }}">{{ job.run_id }}</a></p>{% endif %}
+
+  <h3>진행 로그 (최근 60줄)</h3>
+  {% if log_tail %}<pre class="log">{{ log_tail }}</pre>{% else %}<p class="meta">아직 로그 없음…</p>{% endif %}
+</section>
+{% endblock %}

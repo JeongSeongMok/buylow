@@ -27,6 +27,8 @@ class Job:
     finished_at: str | None = None
     result: str | None = None
     error: str | None = None
+    log_path: str | None = None       # 진행 로그 파일(백테스트 등) — 실시간 표시용
+    run_id: str | None = None         # 연결된 백테스트 run id
 
 
 class JobManager:
@@ -35,7 +37,8 @@ class JobManager:
         self._lock = threading.Lock()
         self._seq = 0
 
-    def submit(self, name: str, fn: Callable[[], Any]) -> Job:
+    def submit(self, name: str, fn: Callable[[Job], Any]) -> Job:
+        """fn(job)을 백그라운드 스레드에서 실행. fn은 job을 받아 진행정보(log_path 등)를 갱신할 수 있다."""
         with self._lock:
             self._seq += 1
             job = Job(id=uuid.uuid4().hex[:12], name=name, seq=self._seq)
@@ -43,10 +46,10 @@ class JobManager:
         threading.Thread(target=self._run, args=(job, fn), daemon=True).start()
         return job
 
-    def _run(self, job: Job, fn: Callable[[], Any]) -> None:
+    def _run(self, job: Job, fn: Callable[[Job], Any]) -> None:
         job.state = "running"
         try:
-            result = fn()
+            result = fn(job)
             job.result = str(result)[:1000]
             job.state = "succeeded"
         except Exception as e:  # 실패도 상태로 보존 (대시보드 표시)
