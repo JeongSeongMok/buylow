@@ -46,9 +46,18 @@ cd buylow
 
 ## 설정
 
-토스·AI API 키는 본인이 입력합니다. 우선순위: **환경변수**(예: `export BUYLOW_TOSS_APP_KEY=...`)
-→ 로컬 `config.local.yaml` → 둘 다 없으면 **첫 실행 시 대시보드에서 입력**. 키는 로컬
-`config.local.yaml`(gitignore)에 저장되며 절대 커밋되지 않습니다.
+키·경로는 우선순위 **환경변수 → `config.local.yaml` → 기본값**으로 해석됩니다.
+`config.example.yaml`을 `config.local.yaml`로 복사해 채우거나, 대시보드 `/settings`에서 입력하세요.
+`config.local.yaml`은 gitignore되어 절대 커밋되지 않습니다.
+
+```yaml
+# config.local.yaml (예)
+data_folder: ./data        # 설정하면 매번 LEAN_DATA_DIR export 불필요
+dashboard_port: 8420
+secrets:
+  krx_id: ""               # pykrx 펀더멘털(PER/PBR)용 — data.krx.co.kr 무료 가입
+  krx_pw: ""
+```
 
 ## 사용법
 

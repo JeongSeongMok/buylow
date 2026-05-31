@@ -107,6 +107,26 @@ run backtest → view history; HTMX + Jinja, vendored — no Node build). JSON e
 `GET /`, `POST /ui/runs`, `GET /ui/runs/{id}`. State is persisted in `buylow.db` (SQLite,
 gitignored). The server binds to `127.0.0.1` only.
 
+## Configuration & secrets
+
+Settings resolve in order **env var → `config.local.yaml` → default**. Copy `config.example.yaml`
+to `config.local.yaml` (gitignored) and fill values, or enter secrets in the dashboard at
+`/settings`. With `data_folder` set in config you no longer need to `export LEAN_DATA_DIR`.
+
+```yaml
+# config.local.yaml (gitignored — never committed)
+data_folder: ~/IdeaProjects/Lean/Data   # or ./data
+dashboard_port: 8420
+secrets:
+  krx_id: ""      # https://data.krx.co.kr free account — for pykrx fundamentals (PER/PBR)
+  krx_pw: ""
+```
+
+- **KRX login**: `pykrx` reads `KRX_ID`/`KRX_PW` env vars. The server injects them from config on
+  startup (`apply_krx_credentials`), so fundamentals (PER/PBR) work once credentials are set.
+  Price (OHLCV) data needs no login.
+- Recommend `chmod 600 config.local.yaml`. OS keychain storage is possible future hardening.
+
 ## Tests
 
 ```bash
