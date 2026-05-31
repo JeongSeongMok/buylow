@@ -12,6 +12,7 @@ API 앱에 register_dashboard(app, ...)로 얹는다. 의존성(runner getter, s
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -42,6 +43,18 @@ def _loaded_count() -> int:
     """적재된 종목 수 — 최초 실행 시 '데이터 먼저 적재' 안내 판단용."""
     from etl.catalog import all_tickers
     return len(all_tickers(config.get_data_folder()))
+
+
+_PROGRESS_RE = re.compile(r"PROGRESS\s+(\d+)%")
+
+
+def _parse_progress(lines: list[str]) -> int | None:
+    """로그에서 마지막 'PROGRESS NN%'(전략이 시뮬레이션 날짜 기준으로 찍음) 값을 추출."""
+    for line in reversed(lines):
+        m = _PROGRESS_RE.search(line)
+        if m:
+            return int(m.group(1))
+    return None
 
 
 def register_dashboard(
@@ -215,11 +228,13 @@ def register_dashboard(
         job = jobs.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
-        log_tail = ""
+        log_tail, progress = "", None
         if job.log_path and Path(job.log_path).exists():
             lines = Path(job.log_path).read_text(encoding="utf-8", errors="replace").splitlines()
             log_tail = "\n".join(lines[-60:])  # 최근 60줄
-        return templates.TemplateResponse(request, "job_detail.html", {"job": job, "log_tail": log_tail})
+            progress = _parse_progress(lines)  # 백테스트 진행률(%) — 'PROGRESS NN%' 마지막 값
+        return templates.TemplateResponse(
+            request, "job_detail.html", {"job": job, "log_tail": log_tail, "progress": progress})
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):

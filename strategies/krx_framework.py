@@ -23,6 +23,22 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
         self.set_portfolio_construction(EqualWeightingPortfolioConstructionModel())
         self.set_execution(ImmediateExecutionModel())
         self._apply_risk_management()
+        self._setup_progress_logging()
+
+    def _setup_progress_logging(self):
+        # 백테스트 진행률을 주 1회 로그로 남겨 대시보드 작업 화면이 파싱해 표시한다.
+        # (현재 시뮬레이션 날짜 ÷ 전체 기간. 스케줄 불가 환경에서도 전략엔 영향 없게 감싼다.)
+        try:
+            self.schedule.on(self.date_rules.week_start(), self.time_rules.midnight,
+                             self._emit_progress)
+        except Exception:
+            pass
+
+    def _emit_progress(self):
+        total = max((self.end_date - self.start_date).days, 1)
+        done = (self.time - self.start_date).days
+        pct = max(0.0, min(100.0, done / total * 100.0))
+        self.debug(f"PROGRESS {pct:.0f}% {self.time:%Y-%m-%d}")
 
     def _apply_risk_management(self):
         # 전역 리스크 설정(Runner가 risk_* 파라미터로 주입). %값이라 /100. 여러 개면 합성.

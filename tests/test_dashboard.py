@@ -202,6 +202,14 @@ def test_jobs_page_renders(client):
     assert client.get("/jobs").status_code == 200
 
 
+def test_parse_progress_picks_last():
+    from orchestrator.dashboard.routes import _parse_progress
+    lines = ["...", "20230101 PROGRESS 10% 2023-01-01", "noise",
+             "20230601 PROGRESS 50% 2023-06-01"]
+    assert _parse_progress(lines) == 50
+    assert _parse_progress(["no progress here"]) is None
+
+
 def test_settings_page_and_save(tmp_path, monkeypatch):
     from orchestrator import config
     monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")

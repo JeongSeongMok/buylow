@@ -16,6 +16,12 @@
   {% if job.result %}<p class="ok">{{ job.result }}</p>{% endif %}
   {% if job.run_id %}<p class="meta">결과 상세: <a href="/ui/runs/{{ job.run_id }}">{{ job.run_id }}</a></p>{% endif %}
 
+  {% if progress is not none and job.state == "running" %}
+  <div class="progress" title="{{ progress }}%">
+    <div class="progress-bar" style="width: {{ progress }}%">{{ progress }}%</div>
+  </div>
+  {% endif %}
+
   <h3>진행 로그 (최근 60줄)</h3>
   {% if log_tail %}<pre class="log">{{ log_tail }}</pre>{% else %}<p class="meta">아직 로그 없음…</p>{% endif %}
 </section>
