@@ -50,7 +50,7 @@ CATALOG: list[SignalSpec] = [
 ]
 
 DEFAULT_RULE = "(EMA AND MACD) OR RSI"
-DEFAULT_PERIOD_DAYS = 5
+DEFAULT_PERIOD_DAYS = 3
 
 _BY_LABEL = {s.label: s for s in CATALOG}
 

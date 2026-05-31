@@ -39,9 +39,16 @@
   </div>
   <button type="button" class="ghost" onclick="addGroup()">＋ 조건 그룹 추가 (OR)</button>
 
-  <label class="spaced">매매 판단 주기(거래일)
-    <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6">
-    <small>며칠마다 조건을 다시 평가할지 (기본 5)</small></label>
+  <h3>③ 신호 보유 기간</h3>
+  <p class="meta">매수 신호가 <b>마지막으로 뜬 날로부터 며칠 더 보유</b>할지 정합니다(기본 3일).</p>
+  <ul class="meta">
+    <li>매수 조건이 계속 충족되는 동안은 매일 갱신되어 계속 보유합니다.</li>
+    <li>보유 중 <b>매도 신호(규칙이 반대로 전환)</b>가 나오면 이 기간과 무관하게 <b>즉시 청산</b>합니다.</li>
+    <li>신호가 그냥 사라지면(중립) 마지막 매수 신호로부터 이 기간이 지난 뒤 청산합니다.</li>
+    <li>짧을수록 반응이 빠르지만 잡음에 자주 털리고, 길수록 추세를 오래 따라갑니다.</li>
+  </ul>
+  <label>보유 기간(일)
+    <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6"></label>
 </section>
 
 <section class="card">

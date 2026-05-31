@@ -30,7 +30,7 @@ def test_default_strategy_has_groups_and_defaults():
     assert s["groups"] == [["EMA", "MACD"], ["RSI"]]
     assert s["rule"] == "(EMA AND MACD) OR RSI"
     assert s["signals"]["EMA"]["params"]["fast"] == 12
-    assert s["period_days"] == 5
+    assert s["period_days"] == 3
 
 
 def test_descriptions_hide_internal_tokens():
