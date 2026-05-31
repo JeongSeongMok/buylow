@@ -1,0 +1,16 @@
+# buylow 로컬 설정 예시.
+# 이 파일을 config.local.yaml 로 복사해 값을 채우세요 (config.local.yaml 은 gitignore 됩니다).
+# 해석 우선순위: 환경변수 > config.local.yaml > 기본값
+# 시크릿은 대시보드 설정화면(/settings)에서 입력해도 됩니다.
+
+# LEAN 포맷 데이터 폴더 (기본: ./data) — 설정하면 매번 LEAN_DATA_DIR export 불필요
+data_folder: ./data
+
+# 대시보드 포트 (기본: 8420)
+dashboard_port: 8420
+
+secrets:
+  # KRX 로그인 (pykrx 펀더멘털 PER/PBR 등 조회용). https://data.krx.co.kr 무료 회원가입.
+  krx_id: ""
+  krx_pw: ""
+  # (라이브 단계에서 추가) 토스/AI 키

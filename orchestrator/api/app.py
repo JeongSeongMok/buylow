@@ -9,12 +9,12 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from ..config import get_data_folder
 from ..dashboard import register_dashboard
 from ..lean import LeanRunner, RunRequest, RunResult
 from ..persistence import RunStore
@@ -70,7 +70,7 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None) 
     def create_run(payload: RunCreate) -> dict[str, Any]:
         # 동기(blocking) 실행 — FastAPI가 sync 핸들러를 스레드풀에서 돌려 이벤트루프를 막지 않음.
         # (장기 백테스트의 비동기/백그라운드 큐 전환은 이후 단계)
-        data_folder = payload.data_folder or os.environ.get("LEAN_DATA_DIR")
+        data_folder = payload.data_folder or get_data_folder()
         if not data_folder:
             raise HTTPException(status_code=400, detail="data_folder 또는 LEAN_DATA_DIR 필요")
         req = RunRequest(
