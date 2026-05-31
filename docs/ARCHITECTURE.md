@@ -96,6 +96,23 @@ strategy.py + parameters ─┬─ [backtest] env=backtesting, historical data i
   `strategies/generated/` → **must pass a backtest before it may go live** (a safety gate).
   LEAN serves as the validator, which pairs well with AI generation.
 
+## Strategies (Alpha framework)
+
+Multiple strategies are composed via LEAN's **Alpha framework**, not run as independent bots on
+one account (which would conflict — one strategy buying what another sells). Each strategy is an
+**`AlphaModel`** that emits `Insight`s; the algorithm's **PortfolioConstruction** model nets them
+into **one target weight per symbol**, so there is no cross-strategy conflict.
+
+- `strategies/krx_framework.py` — `KrxFrameworkAlgorithm` base: registers `krx`, sets KRW, attaches
+  the Korean fee model via a security initializer, and defaults to
+  `EqualWeightingPortfolioConstructionModel` + `ImmediateExecutionModel`.
+- `strategies/alphas.py` — the strategy catalog as alpha models (currently `EmaCrossAlpha` (trend),
+  `BnfReversionAlpha` (mean reversion); all daily/price-based). Add more by type here.
+- A concrete algorithm composes chosen alphas with `add_alpha(...)` over a universe
+  (`strategies/KrxFrameworkExample.py` combines both on one symbol).
+- Each strategy carries its own cadence (resolution + `Schedule.On`); rebalance frequency etc. are
+  parameters. Minute/intraday strategies (e.g. volatility breakout) await a minute-bar ETL.
+
 ## Dashboard
 
 - A **browser UI** served by FastAPI on **`127.0.0.1:<port>`** (default `8420`, configurable
