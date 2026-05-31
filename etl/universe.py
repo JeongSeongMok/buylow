@@ -38,9 +38,25 @@ def list_universe(market: str = "KOSPI200", on: date | None = None) -> list[str]
     return list(stock.get_market_ticker_list(on_str, market=market.upper()))
 
 
+def _write_universe_rank(data_dir: str | Path, series: dict[str, list[Bar]]) -> None:
+    """거래대금(종가×거래량) 평균 기준으로 종목을 정렬해 랭킹 파일로 저장.
+
+    '전체 종목 대상' 백테스트가 이 상위 N종목만 빠르게 고를 수 있게 한다(전 종목 동일비중은
+    종목당 배분이 1주 미만이 돼 매매가 안 됨 → 유동성 상위로 제한).
+    """
+    rows = []
+    for tkr, bars in series.items():
+        if bars:
+            rows.append((tkr, sum(b.close * b.volume for b in bars) / len(bars)))
+    rows.sort(key=lambda r: r[1], reverse=True)
+    out = Path(data_dir) / "krx" / "universe_rank.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(f"{t},{v:.0f}" for t, v in rows) + "\n", encoding="utf-8")
+
+
 def ingest_universe(
     start: date, end: date, market: str = "KOSPI200", data_dir: str | Path = DEFAULT_DATA_DIR,
-    merge: bool = True, on_progress=None,
+    merge: bool = True, on_progress=None, write_rank: bool = False,
 ) -> dict[str, Any]:
     """유니버스 전 종목의 일봉을 날짜별 단면으로 받아 LEAN 포맷으로 적재.
 
@@ -76,6 +92,8 @@ def ingest_universe(
     progress(f"OHLCV 파일 기록 중… ({len(series)}종목)")
     for tkr, bars in series.items():
         write_equity_daily(data_dir, KRX_MARKET, tkr, bars, merge=merge)
+    if write_rank:
+        _write_universe_rank(data_dir, series)  # 거래대금 상위 선별용 랭킹 저장
     inject_krx_market(data_dir)
     progress(f"OHLCV 적재 완료: {len(series)}종목")
 
@@ -115,7 +133,7 @@ def ingest_all_market(
     progress(f"전체시장 적재 시작 (최근 {years}년)")
 
     price = ingest_universe(start, end, market="ALL", data_dir=data_dir, merge=False,
-                            on_progress=on_progress)
+                            on_progress=on_progress, write_rank=True)
 
     flow_ok = flow_fail = 0
     flow_enabled = with_flow and apply_krx_credentials()

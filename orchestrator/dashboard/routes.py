@@ -32,11 +32,15 @@ STRATEGIES_DIR = REPO_ROOT / "strategies"
 BACKTEST_CASH = 100_000_000  # 초기자본 1억원 고정(백테스트 폼에서 입력받지 않음)
 
 
+MAX_UNIVERSE = 50  # '전체 종목 대상' 시 상위 N종목으로 제한(전 종목 동일비중은 종목당 배분이 1주 미만이라 매매 불가)
+
+
 def _resolve_universe(form, data_folder: str) -> list[str]:
-    """유니버스 결정: '적재된 전체 종목' 체크 시 ./data의 가격 적재 종목 전부, 아니면 입력 목록."""
+    """유니버스 결정: '전체 종목 대상' 시 거래대금 상위 N종목, 아니면 입력한 종목 목록."""
     if form.get("universe_all"):
-        from etl.catalog import list_price_tickers
-        return list_price_tickers(data_folder)
+        from etl.catalog import top_universe, list_price_tickers
+        # 거래대금 랭킹이 있으면 상위 N, 없으면(구버전 적재) 적재 종목 앞에서 N개로라도 제한.
+        return top_universe(data_folder, MAX_UNIVERSE) or list_price_tickers(data_folder)[:MAX_UNIVERSE]
     return [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
 
 

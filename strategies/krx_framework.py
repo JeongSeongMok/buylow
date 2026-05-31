@@ -13,6 +13,11 @@ from krx import KoreanFeeModel  # strategies/krx.py
 
 class KrxFrameworkAlgorithm(QCAlgorithm):
     def setup_krx_framework(self, resolution=Resolution.DAILY):
+        # 거래소 시간대를 한국으로(기본은 뉴욕 → 통계 왜곡 경고 + 벤치마크가 SPY로 폴백돼 깨짐).
+        self.set_time_zone("Asia/Seoul")
+        # 무위험금리: LEAN 기본은 미국 금리 CSV(data/alternative/interest-rate/usa)를 찾다 실패.
+        # 한국 국고채 근사로 상수(3%) 모델을 써서 미국 데이터 의존을 제거(Sharpe 등 정상 계산).
+        self.set_risk_free_interest_rate_model(ConstantRiskFreeRateInterestRateModel(0.03))
         # krx 시장 등록 + KRW 계좌 (set_cash 전에 통화 지정)
         Market.add(KRX_MARKET, KRX_MARKET_ID)
         self.set_account_currency(KRX_CURRENCY)
