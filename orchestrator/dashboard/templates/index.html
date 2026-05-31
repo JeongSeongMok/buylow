@@ -1,26 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-{% if missing_secrets %}
-<p class="error">미설정 시크릿: {{ missing_secrets | join(", ") }} — <a href="/settings">설정</a>에서 입력하세요. (가격 백테스트엔 불필요, 펀더멘털 조회 시 필요)</p>
-{% endif %}
 <section class="card">
-  <h2>새 백테스트</h2>
-  <form hx-post="/ui/runs" hx-target="#runs-table" hx-swap="outerHTML" hx-indicator="#run-indicator">
-    <label>전략
-      <select name="strategy">
-        {% for s in strategies %}<option value="{{ s.path }}">{{ s.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>데이터 폴더 (LEAN 포맷)
-      <input type="text" name="data_folder" value="{{ default_data_folder }}" placeholder="/path/to/lean/Data">
-    </label>
-    <button type="submit">백테스트 실행</button>
-    <span id="run-indicator" class="htmx-indicator">실행 중…</span>
-  </form>
-</section>
-
-<section class="card">
-  <h2>실행 이력</h2>
+  <h2>백테스트 결과</h2>
+  <p class="meta">새 백테스트는 <a href="/rules">① 전략 설정</a>에서 조건을 만들어 실행하세요.</p>
   {% include "partials/runs_table.html" %}
 </section>
 {% endblock %}

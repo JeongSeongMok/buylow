@@ -20,7 +20,12 @@ header {
   border-bottom: 1px solid var(--border);
 }
 header h1 { margin: 0; font-size: 1.4rem; }
+header h1 a { color: var(--fg); text-decoration: none; }
 header .sub { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.85rem; }
+nav.chapters { margin-top: 0.5rem; display: flex; gap: 0.5rem; }
+nav.chapters a { padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 6px;
+                 color: var(--fg); text-decoration: none; font-size: 0.9rem; }
+nav.chapters a:hover { background: var(--card); }
 main { max-width: 900px; margin: 0 auto; padding: 1.5rem 2rem; }
 
 .card {

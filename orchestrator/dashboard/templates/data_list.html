@@ -1,37 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
+<p><a href="/settings">← 설정</a></p>
 <section class="card">
-  <h2>데이터 적재</h2>
+  <h2>적재된 데이터</h2>
+  <p class="meta">data: <code>{{ data_dir }}</code> · 적재는 <a href="/settings">설정 → 과거 데이터 적재</a>에서</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <form method="post" action="/data/fetch">
-    <label>종목코드 <input type="text" name="ticker" placeholder="005930"></label>
-    <label>시작일 <input type="text" name="from" placeholder="2023-01-01"></label>
-    <label>종료일(선택) <input type="text" name="to" placeholder="오늘"></label>
-    <label><input type="checkbox" name="kind" value="price" checked> 가격(OHLCV)</label>
-    <label><input type="checkbox" name="kind" value="flow"> 수급(투자자별, KRX 로그인 필요)</label>
-    <label><input type="checkbox" name="kind" value="fundamental"> 펀더멘털(PER/PBR, KRX 로그인 필요)</label>
-    <button type="submit">적재</button>
-  </form>
-
-  <h3>유니버스 일괄 적재 (백그라운드)</h3>
-  <form method="post" action="/data/universe">
-    <label>유니버스
-      <select name="market">
-        <option value="KOSPI200">KOSPI200</option>
-        <option value="KOSPI">KOSPI</option>
-        <option value="KOSDAQ">KOSDAQ</option>
-        <option value="ALL">ALL</option>
-      </select>
-    </label>
-    <label>기간(년) <input type="text" name="years" value="3"></label>
-    <button type="submit">최초 적재 시작</button>
-    <span class="meta">백그라운드로 실행 — 진행상황은 <a href="/jobs">작업</a>에서. 이후 매일 갱신은 설정의 스케줄러.</span>
-  </form>
-</section>
-
-<section class="card">
-  <h2>적재된 종목</h2>
-  <p class="meta">data: <code>{{ data_dir }}</code></p>
   <table class="runs">
     <thead><tr><th>종목</th><th>가격(일봉)</th><th>수급</th><th></th></tr></thead>
     <tbody>
@@ -43,7 +16,7 @@
         <td><a href="/data/{{ t.ticker }}">보기</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="empty">적재된 데이터가 없습니다. 위에서 적재하세요.</td></tr>
+      <tr><td colspan="4" class="empty">적재된 데이터가 없습니다. 설정에서 적재하세요.</td></tr>
       {% endfor %}
     </tbody>
   </table>

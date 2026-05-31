@@ -35,9 +35,7 @@ def test_index_renders(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "buylow" in r.text
-    assert "새 백테스트" in r.text
-    # strategies/ 의 전략이 옵션으로 노출돼야 함
-    assert "SmokeTestAlgorithm" in r.text
+    assert "백테스트 결과" in r.text  # ② 백테스트 챕터(결과/이력)
 
 
 def test_static_css_served(client):

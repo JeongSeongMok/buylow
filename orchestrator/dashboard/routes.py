@@ -56,12 +56,8 @@ def register_dashboard(
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
-        return templates.TemplateResponse(request, "index.html", {
-            "strategies": available_strategies(),
-            "runs": store.list_runs(),
-            "default_data_folder": config.get_data_folder(),
-            "missing_secrets": [s.label for s in config.missing_secrets()],
-        })
+        # ② 백테스트 챕터 — 결과/이력. 새 실행은 ① 전략 설정에서.
+        return templates.TemplateResponse(request, "index.html", {"runs": store.list_runs()})
 
     @app.post("/ui/runs", response_class=HTMLResponse)
     def ui_create_run(
@@ -215,8 +211,8 @@ def register_dashboard(
             if "fundamental" in kinds:
                 from etl import fundamental as etl_fund
                 etl_fund.ingest_fundamental(ticker, start, end, data_dir)
-        except Exception as e:  # 네트워크/로그인/입력 오류를 사용자에게 표시
-            return RedirectResponse(url=f"/data?error={type(e).__name__}: {e}", status_code=303)
+        except Exception as e:  # 네트워크/로그인/입력 오류를 설정 화면에 표시(적재 폼이 설정에 있음)
+            return RedirectResponse(url=f"/settings?error={type(e).__name__}: {e}", status_code=303)
         return RedirectResponse(url=f"/data/{ticker}", status_code=303)
 
     @app.post("/data/universe")
@@ -242,6 +238,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
             "saved": request.query_params.get("saved"),
+            "error": request.query_params.get("error"),
         })
 
     @app.post("/settings")
