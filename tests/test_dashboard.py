@@ -98,6 +98,42 @@ def test_jobs_page_renders(client):
     assert client.get("/jobs").status_code == 200
 
 
+def test_rules_page_renders(tmp_path):
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "r.db")))
+    r = c.get("/rules")
+    assert r.status_code == 200
+    assert "규칙" in r.text and "EMA" in r.text and "MACD" in r.text
+
+
+def test_rules_run_builds_rule_spec(tmp_path):
+    import json
+    runner = FakeRunner()
+    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "r.db")))
+    r = c.post("/rules", data={
+        "EMA__fast": "10", "EMA__slow": "30",
+        "MACD__fast": "12", "MACD__slow": "26", "MACD__signal": "9",
+        "RSI__period": "14", "RSI__oversold": "30", "RSI__overbought": "70",
+        "MOM__lookback": "60",
+        "rule": "(EMA AND MACD) OR RSI",
+        "period_days": "5", "universe": "005930",
+        "start": "2023-01-02", "end": "2023-12-28", "cash": "10000000", "data_folder": "/data",
+    })
+    assert r.status_code == 200
+    req = runner.calls[-1]
+    assert req.algorithm_type == "RuleStrategy"
+    spec = json.loads(req.parameters["rule_spec"])
+    assert spec["rule"] == "(EMA AND MACD) OR RSI"
+    assert spec["signals"]["EMA"]["params"]["fast"] == 10  # 캐스팅(int)
+
+
+def test_rules_run_rejects_bad_expression(tmp_path):
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "r.db")))
+    r = c.post("/rules", data={"rule": "(EMA AND", "universe": "005930",
+                               "start": "2023-01-02", "end": "2023-12-28"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "error" in r.headers["location"]  # 규칙식 오류로 리다이렉트
+
+
 def test_compose_page_lists_catalog(tmp_path):
     c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "c.db")))
     r = c.get("/compose")
