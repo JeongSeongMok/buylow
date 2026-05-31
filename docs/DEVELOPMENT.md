@@ -132,7 +132,6 @@ risk:               # global risk management (%, blank = off) — applies to all
   stop_loss:        # per-security stop-loss %, e.g. 7
   take_profit:      # per-security take-profit %
   trailing:         # trailing-stop %
-  max_drawdown:     # portfolio drawdown limit %
 secrets:
   krx_id: ""      # https://data.krx.co.kr free account — for pykrx fundamentals (PER/PBR)
   krx_pw: ""

@@ -67,11 +67,11 @@ def get_dashboard_port() -> int:
     )
 
 
-RISK_KEYS = ("stop_loss", "take_profit", "trailing", "max_drawdown")
+RISK_KEYS = ("stop_loss", "take_profit", "trailing")
 
 # 리스크 폼 기본값(%). 한 번도 저장하지 않았을 때 대시보드에 미리 채워 보여준다.
 # 엔진(get_risk_config)은 '저장된' 값만 반영하므로, 사용자가 저장해야 실제 적용된다.
-DEFAULT_RISK = {"stop_loss": 7, "take_profit": 20, "trailing": 5, "max_drawdown": 20}
+DEFAULT_RISK = {"stop_loss": 7, "take_profit": 20, "trailing": 5}
 
 
 def get_risk_config() -> dict:

@@ -33,7 +33,7 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
             except (TypeError, ValueError):
                 return None
         sl, tp = pct("risk_stop_loss"), pct("risk_take_profit")
-        tr, md = pct("risk_trailing"), pct("risk_max_drawdown")
+        tr = pct("risk_trailing")
         models = []
         if sl:
             models.append(MaximumDrawdownPercentPerSecurity(sl))          # 종목 손절
@@ -41,8 +41,6 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
             models.append(MaximumUnrealizedProfitPercentPerSecurity(tp))  # 종목 익절
         if tr:
             models.append(TrailingStopRiskManagementModel(tr))            # 트레일링 스탑
-        if md:
-            models.append(MaximumDrawdownPercentPortfolio(md))            # 포트폴리오 손실 한도
         if models:
             self.set_risk_management(CompositeRiskManagementModel(*models))
 

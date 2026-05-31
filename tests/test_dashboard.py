@@ -61,7 +61,7 @@ def _save_default_strategy(client):
     from orchestrator import signals_catalog
     data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
     data.update({"g0_EMA": "1", "g0_MACD": "1", "g1_RSI": "1", "period_days": "5",
-                 "stop_loss": "7", "take_profit": "", "trailing": "", "max_drawdown": ""})
+                 "stop_loss": "7", "take_profit": "", "trailing": ""})
     return client.post("/strategy", data=data)
 
 

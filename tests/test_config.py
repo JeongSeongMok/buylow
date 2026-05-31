@@ -61,20 +61,21 @@ def test_missing_and_status(tmp_config):
 
 def test_risk_save_and_get(tmp_config):
     assert config.get_risk_config()["stop_loss"] is None  # 기본 미적용
-    config.save_risk({"stop_loss": "7", "take_profit": "", "trailing": "5", "max_drawdown": "0"})
+    config.save_risk({"stop_loss": "7", "take_profit": "0", "trailing": "5"})
     rc = config.get_risk_config()
     assert rc["stop_loss"] == 7.0 and rc["trailing"] == 5.0
-    assert rc["take_profit"] is None and rc["max_drawdown"] is None  # 빈값/0 → 미적용
+    assert rc["take_profit"] is None  # 0 → 미적용
+    assert "max_drawdown" not in rc  # 포트폴리오 손실한도 기능 제거됨
 
 
 def test_risk_form_values_defaults_then_saved(tmp_config):
     # 저장 이력 없으면 기본값 제안
     assert config.risk_form_values() == config.DEFAULT_RISK
     # 저장하면 저장값 반영, 일부러 비운 항목은 빈칸(off)으로 구분
-    config.save_risk({"stop_loss": "10", "take_profit": "", "trailing": "5", "max_drawdown": ""})
+    config.save_risk({"stop_loss": "10", "take_profit": "", "trailing": "5"})
     fv = config.risk_form_values()
     assert fv["stop_loss"] == 10.0 and fv["trailing"] == 5.0
-    assert fv["take_profit"] == "" and fv["max_drawdown"] == ""  # 저장 시 비운 건 빈칸 유지
+    assert fv["take_profit"] == ""  # 저장 시 비운 건 빈칸 유지
 
 
 def test_strategy_save_and_get(tmp_config):
