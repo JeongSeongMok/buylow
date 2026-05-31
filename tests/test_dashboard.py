@@ -75,7 +75,7 @@ def test_root_redirects_to_strategy(client):
 def test_backtest_page_renders(client):
     r = client.get("/backtest")
     assert r.status_code == 200
-    assert "buylow" in r.text
+    assert "BuyLow" in r.text
     assert "백테스트" in r.text and "실행 이력" in r.text
 
 
