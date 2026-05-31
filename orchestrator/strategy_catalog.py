@@ -51,6 +51,11 @@ CATALOG: list[AlphaSpec] = [
               "과거 수익률 부호 기반 (LEAN HistoricalReturnsAlphaModel)", [
                   ParamSpec("lookback", "관측(기간)", "int", 60),
               ]),
+    # 한국 특화 커스텀 (LEAN 내장 아님) — 수급 데이터(etl.flow) 필요
+    AlphaSpec("flow", "수급 추종(외국인)", "수급",
+              "외국인 순매수 N일 누적이 양수면 롱 (커스텀; 수급 데이터 필요)", [
+                  ParamSpec("lookback", "누적(일)", "int", 5),
+              ]),
 ]
 
 _BY_NAME = {a.name: a for a in CATALOG}

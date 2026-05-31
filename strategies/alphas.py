@@ -17,4 +17,7 @@ def build_alpha(name: str, p: dict):
         return RsiAlphaModel(int(p["period"]))
     if name == "momentum":
         return HistoricalReturnsAlphaModel(int(p["lookback"]))
+    if name == "flow":  # 한국 특화 커스텀(수급)
+        from custom_alphas import FlowFollowingAlpha
+        return FlowFollowingAlpha(int(p["lookback"]))
     raise ValueError(f"알 수 없는 alpha: {name}")
