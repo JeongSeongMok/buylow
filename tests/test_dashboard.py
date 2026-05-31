@@ -52,11 +52,16 @@ def test_run_backtest_returns_updated_table(client):
     assert 'id="runs-table"' in r.text
 
 
-def test_run_requires_data_folder(client, monkeypatch):
+def test_run_uses_config_default_data_folder(client, tmp_path, monkeypatch):
+    # data_folder 미지정이어도 config 기본값으로 해석돼 실행된다
+    from orchestrator import config
+    cfg = tmp_path / "config.local.yaml"
+    cfg.write_text("data_folder: /cfg/data\n")
+    monkeypatch.setattr(config, "CONFIG_LOCAL", cfg)
     monkeypatch.delenv("LEAN_DATA_DIR", raising=False)
     r = client.post("/ui/runs", data={"strategy": "strategies/SmokeTestAlgorithm.py"})
     assert r.status_code == 200
-    assert "데이터 폴더" in r.text  # 에러 메시지
+    assert "SmokeTestAlgorithm" in r.text  # 실행되어 이력에 표시됨
 
 def test_run_detail_page(client):
     client.post("/ui/runs", data={"strategy": "strategies/SmokeTestAlgorithm.py", "data_folder": "/data"})
@@ -65,3 +70,18 @@ def test_run_detail_page(client):
     assert "fake-run-1" in r.text
     assert "Net Profit" in r.text
     assert client.get("/ui/runs/missing").status_code == 404
+
+
+def test_settings_page_and_save(tmp_path, monkeypatch):
+    # 실제 config.local.yaml/환경변수를 건드리지 않도록 격리
+    from orchestrator import config
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    for spec in config.SECRET_SPECS:
+        monkeypatch.delenv(spec.env, raising=False)
+
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "s.db")))
+    assert c.get("/settings").status_code == 200
+    # 저장(폼) → 303 리다이렉트 따라가 200, 그리고 config에 반영
+    r = c.post("/settings", data={"krx_id": "fake_id", "krx_pw": "fake_pw"})
+    assert r.status_code == 200
+    assert config.get_secret(config.SECRET_SPECS[0]) == "fake_id"

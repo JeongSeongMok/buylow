@@ -52,11 +52,17 @@ def test_create_run_persists_and_returns_record(client):
     assert runner.calls[0].data_folder == "/data"
 
 
-def test_create_run_requires_data_folder(client, monkeypatch):
-    c, _ = client
+def test_create_run_defaults_data_folder_from_config(client, tmp_path, monkeypatch):
+    # data_folder 미지정 시 config(env > config.local.yaml > 기본)에서 해석돼야 함
+    c, runner = client
+    from orchestrator import config
+    cfg = tmp_path / "config.local.yaml"
+    cfg.write_text("data_folder: /cfg/data\n")
+    monkeypatch.setattr(config, "CONFIG_LOCAL", cfg)
     monkeypatch.delenv("LEAN_DATA_DIR", raising=False)
     resp = c.post("/runs", json={"strategy": "strategies/SmokeTestAlgorithm.py"})
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert runner.calls[-1].data_folder == "/cfg/data"
 
 
 def test_list_and_get_run(client):
