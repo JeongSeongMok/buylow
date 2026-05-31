@@ -26,3 +26,27 @@ def test_krx_framework_multialpha_backtest(tmp_path):
     assert result.success
     # 두 Alpha가 결합돼 매매가 발생해야 함
     assert int(result.statistics.get("Total Orders", "0")) >= 1
+
+
+@pytest.mark.integration
+def test_flow_alpha_backtest(tmp_path):
+    """수급 커스텀 데이터 + 수급 alpha end-to-end (KRX 로그인 필요)."""
+    import json
+    from orchestrator.config import apply_krx_credentials
+    if not apply_krx_credentials():
+        pytest.skip("KRX 크리덴셜 미설정")
+    from etl import flow as etl_flow, krx as etl_krx
+    from etl.sources import get_source
+    from orchestrator.lean import LeanRunner, RunRequest
+
+    dd = tmp_path / "data"
+    etl_krx.ingest("005930", date(2023, 1, 1), date(2023, 12, 31), dd, get_source("pykrx"))
+    etl_flow.ingest_flow("005930", date(2023, 1, 1), date(2023, 12, 31), dd)
+
+    spec = {"alphas": [{"name": "flow", "params": {"lookback": 5}}],
+            "universe": ["005930"], "start": "2023-02-01", "end": "2023-12-28", "cash": 10000000}
+    result = LeanRunner().run_backtest(RunRequest(
+        strategy_path="strategies/Composed.py", data_folder=str(dd),
+        algorithm_type="Composed", parameters={"composition": json.dumps(spec)}))
+    assert result.success
+    assert int(result.statistics.get("Total Orders", "0")) >= 1
