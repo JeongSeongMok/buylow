@@ -90,6 +90,10 @@ def test_data_pages(tmp_path, monkeypatch):
     assert r.status_code == 200 and "55,500" in r.text  # 역스케일된 종가 표시
 
 
+def test_jobs_page_renders(client):
+    assert client.get("/jobs").status_code == 200
+
+
 def test_settings_page_and_save(tmp_path, monkeypatch):
     # 실제 config.local.yaml/환경변수를 건드리지 않도록 격리
     from orchestrator import config

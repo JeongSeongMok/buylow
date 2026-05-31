@@ -31,6 +31,20 @@ def test_write_equity_daily_format(tmp_path):
     assert (tmp_path / "equity" / "krx" / "factor_files").is_dir()
 
 
+def test_write_merge_appends_without_duplicates(tmp_path):
+    from etl.lean_format import read_equity_daily
+    write_equity_daily(tmp_path, "krx", "005930", _bars())  # 1/2, 1/3
+    # 1/3(갱신) + 1/4(신규) 를 병합
+    write_equity_daily(tmp_path, "krx", "005930", [
+        Bar(date(2023, 1, 3), 60000, 60000, 60000, 60000, 1),
+        Bar(date(2023, 1, 4), 57000, 57000, 57000, 57000, 999),
+    ], merge=True)
+    bars = read_equity_daily(tmp_path, "krx", "005930")
+    days = [b.day for b in bars]
+    assert days == [date(2023, 1, 2), date(2023, 1, 3), date(2023, 1, 4)]  # 중복 없음
+    assert next(b for b in bars if b.day == date(2023, 1, 3)).close == 60000  # 새 값 우선
+
+
 def test_write_sorts_by_date(tmp_path):
     write_equity_daily(tmp_path, "krx", "005930", list(reversed(_bars())))
     with zipfile.ZipFile(equity_daily_zip_path(tmp_path, "krx", "005930")) as zf:
