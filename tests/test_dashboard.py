@@ -72,6 +72,24 @@ def test_run_detail_page(client):
     assert client.get("/ui/runs/missing").status_code == 404
 
 
+def test_data_pages(tmp_path, monkeypatch):
+    # config의 data_folder를 샘플 적재한 tmp로 지정 → /data, /data/{ticker} 렌더
+    from datetime import date
+    from orchestrator import config
+    from etl.lean_format import write_equity_daily
+    from etl.sources import Bar
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))
+    write_equity_daily(tmp_path / "data", "krx", "005930",
+                       [Bar(date(2023, 1, 2), 55500, 56100, 55200, 55500, 10031448)])
+
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "d.db")))
+    r = c.get("/data")
+    assert r.status_code == 200 and "005930" in r.text
+    r = c.get("/data/005930")
+    assert r.status_code == 200 and "55,500" in r.text  # 역스케일된 종가 표시
+
+
 def test_settings_page_and_save(tmp_path, monkeypatch):
     # 실제 config.local.yaml/환경변수를 건드리지 않도록 격리
     from orchestrator import config
