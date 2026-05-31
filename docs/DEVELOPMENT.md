@@ -146,8 +146,9 @@ LEAN replays historical data from disk; the ETL fetches it and writes LEAN-forma
 python -m etl.krx --ticker 005930 --from 2023-01-01 --to 2023-12-31          # OHLCV via pykrx
 python -m etl.krx --ticker 005930 --from 2023-01-01 --source fdr             # alternative source
 
-# Investor flows (수급: foreign/institution/individual net-buy value) — requires KRX login
+# Investor flows (수급) and fundamentals (PER/PBR/배당) — require KRX login
 python -m etl.flow --ticker 005930 --from 2023-01-01 --to 2023-12-31
+python -m etl.fundamental --ticker 005930 --from 2023-01-01 --to 2023-12-31
 
 # Bulk: a whole universe at once (efficient — one cross-sectional call per trading day,
 # not one per ticker). market: KOSPI200 (default) | KOSPI | KOSDAQ | ALL

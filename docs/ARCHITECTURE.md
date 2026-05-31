@@ -122,10 +122,10 @@ The catalog uses **LEAN's built-in alpha models** (validated, market-agnostic) r
 code: `ema_cross` (EmaCrossAlphaModel), `macd` (MacdAlphaModel), `rsi` (RsiAlphaModel), `momentum`
 (HistoricalReturnsAlphaModel). `alphas.build_alpha` maps catalog names → LEAN classes. Adding a
 built-in = one catalog entry + one factory line. **Korea-specific signals not in LEAN** are added as
-custom alphas + custom data: `flow` (수급 추종) reads `KrxFlow` (PythonData over the `etl.flow`
-output) and goes long when foreign net buying accumulates. 저PBR value / BNF 이격도 come next as
-their data paths land. Custom alphas live in `strategies/custom_alphas.py`; custom data in
-`strategies/krx_data.py`.
+custom alphas + custom data: `flow` (수급 추종, `KrxFlow` over `etl.flow`) goes long on accumulated
+foreign net buying; `value` (저PBR, `KrxFundamental` over `etl.fundamental`) goes long when PBR is
+below a threshold. BNF 이격도 등 추가 예정. Custom alphas live in `strategies/custom_alphas.py`;
+custom data types in `strategies/krx_data.py`.
 
 ## Dashboard
 
