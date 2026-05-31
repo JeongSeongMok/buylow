@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+{% if missing_secrets %}
+<p class="error">미설정 시크릿: {{ missing_secrets | join(", ") }} — <a href="/settings">설정</a>에서 입력하세요. (가격 백테스트엔 불필요, 펀더멘털 조회 시 필요)</p>
+{% endif %}
 <section class="card">
   <h2>새 백테스트</h2>
   <form hx-post="/ui/runs" hx-target="#runs-table" hx-swap="outerHTML" hx-indicator="#run-indicator">

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/">← 대시보드</a></p>
+<section class="card">
+  <h2>설정 · 시크릿</h2>
+  {% if saved %}<p class="ok">저장되었습니다.</p>{% endif %}
+  <p class="meta">키는 로컬 <code>config.local.yaml</code>(gitignore)에만 저장되며 저장소(repo)에는 올라가지 않습니다.</p>
+  <form method="post" action="/settings">
+    {% for s in secrets %}
+    <label>
+      {{ s.label }} <small>({{ s.purpose }})</small> —
+      {% if s.set %}<span class="ok">설정됨 ✓</span>{% else %}<span class="fail">미설정</span>{% endif %}
+      <input type="password" name="{{ s.key }}"
+             placeholder="{% if s.set %}변경하려면 새 값 입력{% else %}입력{% endif %}"
+             autocomplete="off">
+    </label>
+    {% endfor %}
+    <button type="submit">저장</button>
+  </form>
+</section>
+{% endblock %}

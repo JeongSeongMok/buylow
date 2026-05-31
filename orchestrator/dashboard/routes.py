@@ -6,15 +6,15 @@ API 앱에 register_dashboard(app, ...)로 얹는다. 의존성(runner getter, s
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .. import config
 from ..lean import RunRequest
 from ..lean.environment import REPO_ROOT
 
@@ -49,7 +49,8 @@ def register_dashboard(
         return templates.TemplateResponse(request, "index.html", {
             "strategies": available_strategies(),
             "runs": store.list_runs(),
-            "default_data_folder": os.environ.get("LEAN_DATA_DIR", ""),
+            "default_data_folder": config.get_data_folder(),
+            "missing_secrets": [s.label for s in config.missing_secrets()],
         })
 
     @app.post("/ui/runs", response_class=HTMLResponse)
@@ -59,7 +60,7 @@ def register_dashboard(
         data_folder: str = Form(""),
         algorithm_type: str = Form(""),
     ):
-        df = data_folder or os.environ.get("LEAN_DATA_DIR", "")
+        df = data_folder or config.get_data_folder()
         if not df:
             # 데이터 폴더 없이는 실행 불가 — 폼 위치에 에러 partial 반환
             return templates.TemplateResponse(
@@ -82,3 +83,17 @@ def register_dashboard(
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return templates.TemplateResponse(request, "run_detail.html", {"run": record})
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_page(request: Request):
+        return templates.TemplateResponse(request, "settings.html", {
+            "secrets": config.secret_status(),
+            "saved": request.query_params.get("saved"),
+        })
+
+    @app.post("/settings")
+    async def settings_save(request: Request):
+        # 폼은 시크릿 키별 입력(동적). save_secrets가 유효 키/빈값을 필터.
+        form = await request.form()
+        config.save_secrets({k: str(v) for k, v in form.items()})
+        return RedirectResponse(url="/settings?saved=1", status_code=303)
