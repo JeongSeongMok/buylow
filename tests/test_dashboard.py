@@ -11,7 +11,11 @@ from orchestrator.persistence import RunStore
 
 
 class FakeRunner:
+    def __init__(self):
+        self.calls = []
+
     def run_backtest(self, request: RunRequest) -> RunResult:
+        self.calls.append(request)
         return RunResult(
             run_id="fake-run-1",
             exit_code=0,
@@ -92,6 +96,32 @@ def test_data_pages(tmp_path, monkeypatch):
 
 def test_jobs_page_renders(client):
     assert client.get("/jobs").status_code == 200
+
+
+def test_compose_page_lists_catalog(tmp_path):
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "c.db")))
+    r = c.get("/compose")
+    assert r.status_code == 200
+    assert "EMA 교차" in r.text and "BNF" in r.text  # 카탈로그 노출
+
+
+def test_compose_runs_composition(tmp_path):
+    import json
+    runner = FakeRunner()
+    c = TestClient(create_app(runner=runner, store=RunStore(tmp_path / "c.db")))
+    r = c.post("/compose", data={
+        "alpha": ["ema_cross", "bnf"],
+        "ema_cross__fast": "10", "ema_cross__slow": "40", "ema_cross__period_days": "5",
+        "bnf__ma": "25", "bnf__threshold": "0.1", "bnf__period_days": "5",
+        "universe": "005930", "start": "2023-01-02", "end": "2023-12-28",
+        "cash": "10000000", "data_folder": "/data",
+    })
+    assert r.status_code == 200  # 리다이렉트 따라가 run 상세
+    req = runner.calls[-1]
+    assert req.algorithm_type == "Composed"
+    comp = json.loads(req.parameters["composition"])
+    assert {a["name"] for a in comp["alphas"]} == {"ema_cross", "bnf"}
+    assert comp["alphas"][0]["params"]["fast"] == 10  # 타입 캐스팅(int)
 
 
 def test_settings_page_and_save(tmp_path, monkeypatch):
