@@ -194,24 +194,20 @@ def test_friendly_stats_korean_labels():
     assert by["샤프 지수"] == "2.13"
 
 
-def test_update_data_triggers_incremental_job(client, monkeypatch):
-    # '데이터 최신화' → 적재된 최신 다음날부터 증분(merge=True)으로 ingest_all_market 호출
+def test_update_data_triggers_job(client, monkeypatch):
+    # '데이터 최신화' → update_all_market 을 백그라운드 잡으로 실행(여기선 가짜로 대체)
     import etl.universe as universe
-    import etl.catalog as cat
-    monkeypatch.setattr(cat, "latest_loaded_date", lambda d: "2026-05-29")
     called = {}
-    def fake_ingest(data_dir, **kw):
-        called.update(kw)
-        return {"trading_days": 5, "price_tickers": 0}
-    monkeypatch.setattr(universe, "ingest_all_market", fake_ingest)
+    def fake(data_dir, **kw):
+        called["dir"] = str(data_dir)
+        return {"price_tickers": 0, "flow_ok": 0, "fund_ok": 0, "trading_days": 0}
+    monkeypatch.setattr(universe, "update_all_market", fake)
     r = client.post("/data/update", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/jobs"
     deadline = time.time() + 3.0
-    while time.time() < deadline and "merge" not in called:
+    while time.time() < deadline and "dir" not in called:
         time.sleep(0.01)
-    assert called["merge"] is True
-    from datetime import date
-    assert called["start"] == date(2026, 5, 30)  # 최신(5/29) 다음날부터
+    assert "dir" in called  # 잡이 최신화 함수를 호출
 
 
 def test_data_pages(tmp_path, monkeypatch):

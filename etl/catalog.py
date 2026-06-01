@@ -31,17 +31,35 @@ def all_tickers(data_dir: str | Path) -> list[str]:
     return sorted(set(list_price_tickers(data_dir)) | set(list_flow_tickers(data_dir)))
 
 
-def latest_loaded_date(data_dir: str | Path) -> str | None:
-    """적재된 가격 데이터의 최신 날짜(ISO). 없으면 None.
-
-    유니버스 적재는 전 종목이 같은 거래일을 공유하므로 대표 종목(가능하면 005930) 1개만 읽어 판단.
-    """
-    tickers = list_price_tickers(data_dir)
-    if not tickers:
+def _last_csv_date(path: Path) -> str | None:
+    if not path.exists():
         return None
-    ref = "005930" if "005930" in tickers else tickers[0]
-    rows = read_price_daily(data_dir, ref)
-    return rows[-1]["date"] if rows else None
+    lines = path.read_text(encoding="utf-8").strip().splitlines()
+    if not lines:
+        return None
+    return datetime.strptime(lines[-1].split(",")[0], "%Y%m%d").date().isoformat()
+
+
+def latest_loaded_date(data_dir: str | Path, kind: str = "price") -> str | None:
+    """적재된 데이터의 최신 날짜(ISO). 없으면 None. kind: price | flow | fundamental.
+
+    전 종목이 같은 거래일을 공유하므로 대표 종목(가능하면 005930) 1개만 읽어 판단.
+    """
+    if kind == "price":
+        tickers = list_price_tickers(data_dir)
+        if not tickers:
+            return None
+        ref = "005930" if "005930" in tickers else tickers[0]
+        rows = read_price_daily(data_dir, ref)
+        return rows[-1]["date"] if rows else None
+    base = Path(data_dir) / "krx" / ("flow" if kind == "flow" else "fundamental")
+    ref = base / "005930.csv"
+    if not ref.exists():
+        files = sorted(base.glob("*.csv")) if base.is_dir() else []
+        if not files:
+            return None
+        ref = files[0]
+    return _last_csv_date(ref)
 
 
 def read_price_daily(data_dir: str | Path, ticker: str) -> list[dict[str, Any]]:

@@ -23,5 +23,5 @@ def run_data_update(job, data_dir: str) -> str:
         def on_progress(msg):
             f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
         info = update_all_market(data_dir, on_progress=on_progress)
-    return (f"갱신 {info.get('trading_days', 0)}거래일 · "
-            f"OHLCV {info.get('price_tickers', 0)}종목 · 수급 {info.get('flow_ok', 0)}종목")
+    return (f"OHLCV {info.get('price_tickers', 0)}종목 · "
+            f"수급 {info.get('flow_ok', 0)}종목 · 펀더 {info.get('fund_ok', 0)}종목")

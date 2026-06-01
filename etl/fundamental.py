@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,25 @@ def fundamental_csv_path(data_dir: str | Path, ticker: str) -> Path:
     return Path(data_dir) / "krx" / "fundamental" / f"{ticker}.csv"
 
 
-def write_fundamental(data_dir: str | Path, ticker: str, records: list[FundamentalRecord]) -> Path:
+def _read_fundamental_records(data_dir: str | Path, ticker: str) -> list[FundamentalRecord]:
+    fp = fundamental_csv_path(data_dir, ticker)
+    if not fp.exists():
+        return []
+    out = []
+    for line in fp.read_text(encoding="utf-8").strip().splitlines():
+        d, per, pbr, div = line.split(",")
+        out.append(FundamentalRecord(datetime.strptime(d, "%Y%m%d").date(),
+                                     float(per), float(pbr), float(div)))
+    return out
+
+
+def write_fundamental(data_dir: str | Path, ticker: str, records: list[FundamentalRecord],
+                      merge: bool = False) -> Path:
+    if merge:  # 기존 펀더멘털과 날짜 기준 병합(증분 갱신 시 과거 보존)
+        by_day = {r.day: r for r in _read_fundamental_records(data_dir, ticker)}
+        for r in records:
+            by_day[r.day] = r
+        records = list(by_day.values())
     out = fundamental_csv_path(data_dir, ticker)
     out.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"{r.day:%Y%m%d},{r.per},{r.pbr},{r.div}" for r in sorted(records, key=lambda x: x.day)]
@@ -52,14 +70,14 @@ def write_fundamental(data_dir: str | Path, ticker: str, records: list[Fundament
 
 
 def ingest_fundamental(ticker: str, start: date, end: date,
-                       data_dir: str | Path = DEFAULT_DATA_DIR) -> dict[str, Any]:
+                       data_dir: str | Path = DEFAULT_DATA_DIR, merge: bool = False) -> dict[str, Any]:
     from orchestrator.config import apply_krx_credentials
     if not apply_krx_credentials():
         raise RuntimeError("펀더멘털 조회엔 KRX 로그인 필요 — config.local.yaml 또는 /settings 에 krx_id/krx_pw 설정")
     records = fetch_fundamental(ticker, start, end)
     if not records:
         raise RuntimeError(f"{ticker}: 펀더멘털 데이터 없음 ({start}~{end})")
-    path = write_fundamental(data_dir, ticker, records)
+    path = write_fundamental(data_dir, ticker, records, merge=merge)
     return {
         "ticker": ticker, "rows": len(records),
         "first": min(r.day for r in records).isoformat(),

@@ -92,18 +92,45 @@ def ingest_universe(
 DEFAULT_LOAD_YEARS = 5  # 전체 적재 버튼 기본 기간 (백테스트에 충분한 과거 구간)
 
 
+def _trading_days(start: date, end: date) -> list[date]:
+    """[start,end] 실제 거래일 목록(005930 캘린더, 무인증). 주말/휴장 구간 가드용."""
+    from pykrx import stock
+    cal = stock.get_market_ohlcv_by_date(start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), "005930")
+    return [ts.date() for ts in cal.index]
+
+
+def _ingest_per_ticker(tickers, end, data_dir, *, merge, on_progress,
+                       flow_start=None, fund_start=None):
+    """종목별 수급/펀더멘털 적재. 시작일이 None인 종류는 생략. 개별 실패는 건너뛰고 계속."""
+    from etl.flow import ingest_flow
+    from etl.fundamental import ingest_fundamental
+    fok = ffail = uok = ufail = 0
+    for i, tkr in enumerate(tickers, 1):
+        if flow_start is not None:
+            try:
+                ingest_flow(tkr, flow_start, end, data_dir, merge=merge); fok += 1
+            except Exception:
+                ffail += 1
+        if fund_start is not None:
+            try:
+                ingest_fundamental(tkr, fund_start, end, data_dir, merge=merge); uok += 1
+            except Exception:
+                ufail += 1
+        if on_progress and (i % 50 == 0 or i == len(tickers)):
+            on_progress(f"수급/펀더멘털 {i}/{len(tickers)} (수급 {fok}, 펀더 {uok})")
+    return fok, ffail, uok, ufail
+
+
 def ingest_all_market(
     data_dir: str | Path = DEFAULT_DATA_DIR, *, start: date | None = None,
     end: date | None = None, with_flow: bool = True, merge: bool = False, on_progress=None,
 ) -> dict[str, Any]:
-    """한국시장 전체(KOSPI+KOSDAQ)의 OHLCV·수급을 적재.
+    """한국시장 전체(KOSPI+KOSDAQ)의 OHLCV·수급·펀더멘털을 한 구간으로 적재(최초/전체 적재용).
 
-    start 미지정 시 최근 DEFAULT_LOAD_YEARS년(최초 적재). merge=True면 기존 데이터에 증분 병합
-    (데이터 최신화), False면 덮어쓰기. 수급은 KRX 로그인 시에만 best-effort(실패는 건너뜀).
+    종류별 증분은 update_all_market을 쓴다. start 미지정 시 최근 DEFAULT_LOAD_YEARS년.
+    수급·펀더멘털은 KRX 로그인 시에만 best-effort(실패는 건너뜀).
     """
     from datetime import timedelta
-
-    from etl.flow import ingest_flow
     from orchestrator.config import apply_krx_credentials
 
     def progress(msg):
@@ -112,62 +139,87 @@ def ingest_all_market(
 
     end = end or date.today()
     start = start or (end - timedelta(days=365 * DEFAULT_LOAD_YEARS))
-    if start > end:  # 이미 최신 — 받을 구간 없음
-        progress(f"이미 최신 ({start} 이후 새 데이터 없음)")
-        return {"price_tickers": 0, "trading_days": 0, "flow_enabled": False,
-                "flow_ok": 0, "flow_fail": 0, "start": start.isoformat(), "end": end.isoformat()}
     progress(f"적재 구간 {start} ~ {end} ({'증분' if merge else '전체'})")
-
     price = ingest_universe(start, end, market="ALL", data_dir=data_dir, merge=merge,
                             on_progress=on_progress)
 
-    # 신규 거래일이 없으면(주말/휴장 구간 등) 수급은 받지 않는다. 안 그러면 전 종목에 대해
-    # 빈 응답이 와서 pykrx가 종목마다 에러를 찍는다(거래일 0인데 수급만 호출하던 버그).
-    flow_ok = flow_fail = 0
-    flow_enabled = False
+    fok = ffail = uok = ufail = 0
+    enabled = False
     if not with_flow:
-        progress("수급 비활성")
-    elif price["trading_days"] == 0:
-        progress("신규 거래일 없음 — 수급 생략")
+        progress("수급/펀더멘털 비활성")
+    elif price["trading_days"] == 0:  # 주말/휴장 구간 → 빈 응답 폭주 방지
+        progress("신규 거래일 없음 — 수급/펀더멘털 생략")
     elif not apply_krx_credentials():
-        progress("수급 건너뜀 (KRX 로그인 없음 — 설정에서 키 입력 시 가능)")
+        progress("수급/펀더멘털 건너뜀 (KRX 로그인 없음 — 설정에서 키 입력 시 가능)")
     else:
-        flow_enabled = True
+        enabled = True
         tickers = list_universe("ALL", end)
-        progress(f"수급 적재 시작: {len(tickers)}종목 (종목당 1회 호출 → 시간 소요)")
-        for i, tkr in enumerate(tickers, 1):
-            try:
-                ingest_flow(tkr, start, end, data_dir, merge=merge)
-                flow_ok += 1
-            except Exception:  # 개별 종목 실패(데이터 없음/상폐 등)는 건너뛰고 계속
-                flow_fail += 1
-            if i % 50 == 0 or i == len(tickers):
-                progress(f"수급 {i}/{len(tickers)} (성공 {flow_ok}, 실패 {flow_fail})")
+        progress(f"수급·펀더멘털 적재 시작: {len(tickers)}종목 (종목당 2회 호출 → 시간 소요)")
+        fok, ffail, uok, ufail = _ingest_per_ticker(
+            tickers, end, data_dir, merge=merge, on_progress=on_progress,
+            flow_start=start, fund_start=start)
 
-    progress(f"완료: OHLCV {price['ingested']}종목 × {price['trading_days']}거래일, 수급 {flow_ok}종목")
-    return {
-        "price_tickers": price["ingested"],
-        "trading_days": price["trading_days"],
-        "flow_enabled": flow_enabled,
-        "flow_ok": flow_ok,
-        "flow_fail": flow_fail,
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-    }
+    progress(f"완료: OHLCV {price['ingested']}종목, 수급 {fok}종목, 펀더 {uok}종목")
+    return {"price_tickers": price["ingested"], "trading_days": price["trading_days"],
+            "flow_enabled": enabled, "flow_ok": fok, "flow_fail": ffail,
+            "fund_ok": uok, "fund_fail": ufail, "start": start.isoformat(), "end": end.isoformat()}
 
 
 def update_all_market(data_dir: str | Path = DEFAULT_DATA_DIR, *, on_progress=None) -> dict[str, Any]:
-    """데이터 최신화 — 적재된 마지막 날짜 다음날~오늘을 전체 시장 증분 적재.
+    """데이터 최신화 — 가격·수급·펀더멘털을 **각자** 마지막 적재일 다음날~오늘로 증분.
 
-    적재 이력이 없으면 최근 DEFAULT_LOAD_YEARS년 최초 적재. 대시보드 버튼과 스케줄러가 공유한다.
+    어떤 종류가 비어 있으면 그 종류만 최근 DEFAULT_LOAD_YEARS년 백필(다른 종류는 증분 그대로).
+    대시보드 버튼과 스케줄러가 공유한다.
     """
     from datetime import timedelta
     from etl.catalog import latest_loaded_date
-    last = latest_loaded_date(data_dir)
-    if last:
-        start = date.fromisoformat(last) + timedelta(days=1)
-        return ingest_all_market(data_dir, start=start, merge=True, on_progress=on_progress)
-    return ingest_all_market(data_dir, merge=False, on_progress=on_progress)  # 최초 적재
+    from orchestrator.config import apply_krx_credentials
+
+    def progress(msg):
+        if on_progress:
+            on_progress(msg)
+
+    end = date.today()
+    boot = end - timedelta(days=365 * DEFAULT_LOAD_YEARS)
+
+    def gap_start(kind):
+        last = latest_loaded_date(data_dir, kind)
+        return (date.fromisoformat(last) + timedelta(days=1)) if last else boot
+
+    # OHLCV (가격) — 가격 갭만큼만
+    p_start = gap_start("price")
+    if p_start <= end:
+        price = ingest_universe(p_start, end, market="ALL", data_dir=data_dir, merge=True,
+                                on_progress=on_progress)
+    else:
+        progress("OHLCV 이미 최신")
+        price = {"ingested": 0, "trading_days": 0}
+
+    # 수급/펀더멘털 — 각자 갭만큼. 거래일 없는(주말 등) 종류는 생략(빈 응답 폭주 방지).
+    fok = ffail = uok = ufail = 0
+    enabled = False
+    f_start, u_start = gap_start("flow"), gap_start("fundamental")
+    if not apply_krx_credentials():
+        progress("수급/펀더멘털 건너뜀 (KRX 로그인 없음 — 설정에서 키 입력 시 가능)")
+    else:
+        tdays = _trading_days(min(f_start, u_start), end)
+        flow_start = f_start if any(d >= f_start for d in tdays) else None
+        fund_start = u_start if any(d >= u_start for d in tdays) else None
+        if flow_start is None and fund_start is None:
+            progress("수급/펀더멘털 신규 거래일 없음 — 생략")
+        else:
+            enabled = True
+            tickers = list_universe("ALL", end)
+            progress(f"수급/펀더멘털 적재: {len(tickers)}종목 "
+                     f"(수급 {flow_start or '생략'}~, 펀더 {fund_start or '생략'}~)")
+            fok, ffail, uok, ufail = _ingest_per_ticker(
+                tickers, end, data_dir, merge=True, on_progress=on_progress,
+                flow_start=flow_start, fund_start=fund_start)
+
+    progress(f"완료: OHLCV {price['ingested']}종목, 수급 {fok}종목, 펀더 {uok}종목")
+    return {"price_tickers": price["ingested"], "trading_days": price["trading_days"],
+            "flow_enabled": enabled, "flow_ok": fok, "flow_fail": ffail,
+            "fund_ok": uok, "fund_fail": ufail, "end": end.isoformat()}
 
 
 def update_universe(market: str = "KOSPI200", data_dir: str | Path = DEFAULT_DATA_DIR,
