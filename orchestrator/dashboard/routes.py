@@ -311,29 +311,11 @@ def register_dashboard(
 
     @app.post("/data/update")
     def update_data(request: Request):
-        # '데이터 최신화' — 적재된 최신 날짜 다음날부터 오늘까지 증분 적재(없으면 최초 적재).
-        # 무거우니 백그라운드 잡 + 진행 로그 파일로 실시간 표시.
-        from datetime import datetime, date, timedelta
-        from etl.universe import ingest_all_market
-        from etl.catalog import latest_loaded_date
+        # '데이터 최신화' — 전체 시장(OHLCV+수급)을 마지막 적재일 다음날부터 증분 적재.
+        # 스케줄러와 동일한 작업(orchestrator.data_tasks.run_data_update)을 백그라운드로.
+        from ..data_tasks import run_data_update
         data_dir = config.get_data_folder()
-
-        def _job(job):
-            log_path = REPO_ROOT / "runs" / f"update-{job.id}.log"
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            job.log_path = str(log_path)
-            with open(log_path, "a", encoding="utf-8", buffering=1) as f:
-                def on_progress(msg):
-                    f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
-                last = latest_loaded_date(data_dir)  # ISO 또는 None
-                if last:
-                    start = date.fromisoformat(last) + timedelta(days=1)  # 최신 다음날부터
-                    info = ingest_all_market(data_dir, start=start, merge=True, on_progress=on_progress)
-                    return f"{last} 이후 {info['trading_days']}거래일 갱신"
-                info = ingest_all_market(data_dir, merge=False, on_progress=on_progress)  # 최초 적재
-                return f"최초 적재: OHLCV {info['price_tickers']}종목"
-
-        jobs.submit("데이터 최신화", _job)
+        jobs.submit("데이터 최신화", lambda job: run_data_update(job, data_dir))
         return RedirectResponse(url="/jobs", status_code=303)
 
     @app.get("/jobs", response_class=HTMLResponse)

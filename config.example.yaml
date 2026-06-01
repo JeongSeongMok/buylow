@@ -9,10 +9,10 @@ data_folder: ./data
 # 대시보드 포트 (기본: 8420)
 dashboard_port: 8420
 
-# 일일 증분 적재 스케줄 (평일 장마감 후 KST). 켜면 자동으로 매일 새 데이터를 쌓음.
+# 일일 데이터 최신화 스케줄 (평일 장마감 후 KST). 켜면 대시보드 '데이터 최신화'와 동일하게
+# 전체 시장(OHLCV+수급)을 매일 자동 증분 적재.
 scheduler:
   enabled: false
-  market: KOSPI200   # KOSPI200 | KOSPI | KOSDAQ | ALL
   hour: 18
 
 # 전역 리스크 관리(%). 비우면 미적용. 모든 백테스트·라이브에 적용.

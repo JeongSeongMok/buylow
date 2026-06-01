@@ -126,9 +126,8 @@ to `config.local.yaml` (gitignored) and fill values, or enter secrets in the das
 # config.local.yaml (gitignored — never committed)
 data_folder: ~/IdeaProjects/Lean/Data   # or ./data
 dashboard_port: 8420
-scheduler:          # daily incremental ingestion (weekday after close, KST)
-  enabled: false    # turn on to auto-append data daily
-  market: KOSPI200
+scheduler:          # daily 데이터 최신화 (weekday after close, KST) — same as the dashboard button
+  enabled: false    # turn on to auto-update the whole market (OHLCV+flow) daily
   hour: 18
 risk:               # global risk management (%, blank = off) — applies to all backtests + live
   stop_loss:        # per-security stop-loss %, e.g. 7

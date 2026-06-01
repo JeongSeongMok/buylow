@@ -156,9 +156,23 @@ def ingest_all_market(
     }
 
 
+def update_all_market(data_dir: str | Path = DEFAULT_DATA_DIR, *, on_progress=None) -> dict[str, Any]:
+    """데이터 최신화 — 적재된 마지막 날짜 다음날~오늘을 전체 시장 증분 적재.
+
+    적재 이력이 없으면 최근 DEFAULT_LOAD_YEARS년 최초 적재. 대시보드 버튼과 스케줄러가 공유한다.
+    """
+    from datetime import timedelta
+    from etl.catalog import latest_loaded_date
+    last = latest_loaded_date(data_dir)
+    if last:
+        start = date.fromisoformat(last) + timedelta(days=1)
+        return ingest_all_market(data_dir, start=start, merge=True, on_progress=on_progress)
+    return ingest_all_market(data_dir, merge=False, on_progress=on_progress)  # 최초 적재
+
+
 def update_universe(market: str = "KOSPI200", data_dir: str | Path = DEFAULT_DATA_DIR,
                     days: int = 5) -> dict[str, Any]:
-    """최근 days일을 받아 증분 병합 (스케줄러 일일 갱신용). 멱등."""
+    """최근 days일을 받아 증분 병합 (단일 유니버스용 경량 유틸). 멱등."""
     from datetime import timedelta
     end = date.today()
     return ingest_universe(end - timedelta(days=days), end, market, data_dir)
