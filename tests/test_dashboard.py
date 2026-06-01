@@ -81,8 +81,8 @@ def test_backtest_page_renders(client):
 
 def test_first_run_prompts_data_load(client):
     # 적재 0개면 전략/백테스트 화면에 '데이터 먼저 적재' 안내 배너가 뜬다
-    assert "전체 종목 데이터 적재" in client.get("/strategy").text
-    assert "전체 종목 데이터 적재" in client.get("/backtest").text
+    assert "데이터 최신화" in client.get("/strategy").text
+    assert "데이터 최신화" in client.get("/backtest").text
 
 
 def test_static_css_served(client):
