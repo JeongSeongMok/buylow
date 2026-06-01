@@ -17,6 +17,10 @@ Every Claude session working in this repo follows these:
    multiple language versions). (CLAUDE.md = working agreement + decisions; README = user overview.)
 3. **Commit per feature**, using [Conventional Commits](https://www.conventionalcommits.org/)
    (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`). **Push directly to `main`** (no PR).
+   **Always commit as `JeongSeongMok <tjdahr25@naver.com>`** — verify `git config user.name/user.email`
+   before committing and set them locally if they differ (e.g. a corp identity like `retipuj`).
+   (Note: if `git` fails with `invalid value for 'gpg.format': ''`, remove the empty `format =`
+   line under `[gpg]` in `~/.gitconfig` — see docs/DEVELOPMENT.md.)
 4. **Comment the "why."** Keep ordinary functions uncommented, but always explain the
    rationale for non-trivial logic (trading decisions) and special design choices (DLL split,
    process model) so a future session understands the intent.
