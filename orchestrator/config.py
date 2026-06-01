@@ -31,7 +31,7 @@ class SecretSpec:
     purpose: str   # 용도 설명
 
 
-# 현재 필요한 시크릿. 라이브 단계에서 toss_*, ai_* 추가 예정.
+# 현재 필요한 시크릿. 라이브 단계에서 toss_* 추가 예정.
 SECRET_SPECS: list[SecretSpec] = [
     SecretSpec("krx_id", "KRX_ID", "KRX 아이디", "pykrx 펀더멘털(PER/PBR) 조회 로그인"),
     SecretSpec("krx_pw", "KRX_PW", "KRX 비밀번호", "pykrx 펀더멘털 조회 로그인"),

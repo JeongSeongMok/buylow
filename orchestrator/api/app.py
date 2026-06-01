@@ -1,7 +1,7 @@
 """Control API 골격.
 
 대시보드(브라우저)와 CLI가 공유하는 단일 계약(docs/ARCHITECTURE.md). 지금은 백테스트 실행/조회만.
-전략 레지스트리·라이브·AI 등은 같은 패턴으로 이후 확장한다.
+전략 레지스트리·라이브 등은 같은 패턴으로 이후 확장한다.
 
 설계: create_app(runner, store)로 의존성을 주입받아 테스트에서 가짜 runner/임시 DB를 끼울 수 있게 한다.
 기본 runner(LeanRunner)는 생성 시 런처 빌드 등 비용이 크므로, 첫 실행 요청 때 lazy하게 만든다.

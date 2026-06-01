@@ -15,7 +15,7 @@ These constraints drive every decision below:
 
 1. **Clone-and-run, open source.** Users `git clone`, install prerequisites, and run. No
    separate servers to install (no MySQL/Redis/Elasticsearch). Source-only; no prebuilt installer.
-2. **Bring your own keys (BYO).** Toss/AI secrets are supplied by each user and stored
+2. **Bring your own keys (BYO).** Toss secrets are supplied by each user and stored
    locally; **no secrets in the repo**.
 3. **LEAN is never modified or forked.** It is referenced via NuGet and extended only
    through plugins (a DLL) and config.
@@ -31,14 +31,14 @@ These constraints drive every decision below:
 │ ORCHESTRATOR (Python, always-on)▼                                            │
 │  ┌────────────── Control API + Dashboard (FastAPI, 127.0.0.1 only) ───────┐  │
 │  │  strategy on/off · params · schedule · run backtests · view results    │  │
-│  │  · live control + kill switch · key entry · AI strategy generation     │  │
+│  │  · live control + kill switch · key entry                              │  │
 │  │  (dashboard is a client of the API: HTMX + Jinja)                      │  │
 │  └────────────────────────────────┬───────────────────────────────────────┘  │
-│   ┌───────────────┬────────────────┼────────────────┬───────────────────────┐ │
-│   ▼               ▼                ▼                ▼                       ▼ │
-│ Scheduler    Strategy Registry  Config/Secrets   Persistence            AI Svc│
-│ (APScheduler)(strategy catalog) (env→disk→UI)    (SQLite + files)       (NL→py)│
-│   └───────────────┴────────────────┬────────────────┴───────────────────────┘ │
+│   ┌───────────────┬────────────────┼────────────────┐                          │
+│   ▼               ▼                ▼                ▼                          │
+│ Scheduler    Strategy Registry  Config/Secrets   Persistence                   │
+│ (APScheduler)(strategy catalog) (env→disk→UI)    (SQLite + files)              │
+│   └───────────────┴────────────────┬────────────────┘                          │
 │                            ┌────────▼─────────┐                                │
 │                            │   LEAN Runner    │ build config · set env · spawn │
 │                            └────────┬─────────┘ · collect & parse results      │
@@ -92,9 +92,6 @@ strategy.py + parameters ─┬─ [backtest] env=backtesting, historical data i
 - Same file and parameters; only the generated config's `environment` differs.
 - Parameters are injected via LEAN's `parameters` and read with `get_parameter()` (this also
   enables optimization later).
-- **AI-generated strategies**: natural language → a `QCAlgorithm` `.py` in
-  `strategies/generated/` → **must pass a backtest before it may go live** (a safety gate).
-  LEAN serves as the validator, which pairs well with AI generation.
 
 ## Strategies (Alpha framework)
 
@@ -184,11 +181,11 @@ config.local.yaml   (gitignored)   ← user's keys, enabled strategies, schedule
 config.example.yaml (committed)    ← template with empty keys
 ```
 
-Secrets (Toss app key/secret/account, AI provider/key) are **stored on disk** in
+Secrets (KRX login; later Toss app key/secret/account) are **stored on disk** in
 `config.local.yaml`. They are resolved in this order:
 
-1. **Environment variables** (e.g. `BUYLOW_TOSS_APP_KEY`, `BUYLOW_TOSS_SECRET`,
-   `BUYLOW_TOSS_ACCOUNT`, `BUYLOW_AI_API_KEY`) — highest priority; convenient for
+1. **Environment variables** (e.g. `KRX_ID`/`KRX_PW`; later `BUYLOW_TOSS_APP_KEY`,
+   `BUYLOW_TOSS_SECRET`, `BUYLOW_TOSS_ACCOUNT`) — highest priority; convenient for
    `export` before launch.
 2. **On-disk config** (`config.local.yaml`).
 3. **Dashboard prompt** — if neither is set, on first browser access the dashboard shows a
@@ -254,7 +251,6 @@ scripts/  docs/  tests/
 | Control surface | Local browser dashboard via FastAPI on `127.0.0.1:<port>` (default 8420); HTMX+Jinja; SSE |
 | Config & secrets | `config.local.yaml` (gitignored); secrets resolved env var → disk → dashboard prompt |
 | Distribution | Open source, clone-and-run; BYO keys; no installer |
-| AI strategies | NL → `.py`; mandatory backtest validation before live |
 | Live multi-strategy | v1: one strategy per account |
 
 ## Build order
@@ -268,7 +264,7 @@ scripts/  docs/  tests/
    base + `KoreanFeeModel`). KRX backtests need only Python + config — the C# adapter is for live
    only. The runner puts the repo root on `PYTHONPATH` so strategies can import shared libs.
    *(4b next)* real Korean data ETL with a pluggable source (free provider now, Toss later).
-5. Strategy registry & scheduling → **AI strategies** → richer dashboard
+5. Strategy registry & scheduling → richer dashboard
 6. **Toss live adapter** — gated on Toss API availability (not open yet). It is the *only*
    piece that needs the broker API; everything above (backtest, KRX definition, ETL,
-   dashboard, AI strategy generation + backtest validation) works without it.
+   dashboard) works without it.

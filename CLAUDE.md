@@ -49,7 +49,6 @@ Every Claude session working in this repo follows these:
 | Persistence | SQLite (orchestrator-owned, WAL) for state + disk files (`runs/<id>/`) for blobs; no DB server |
 | Control surface | Local browser dashboard via FastAPI on `127.0.0.1:<port>` (default 8420, configurable); HTMX+Jinja; SSE |
 | Config & secrets | `config.local.yaml` (gitignored); secrets resolved env var → disk → dashboard prompt |
-| AI strategies | NL → `.py`; mandatory backtest validation before live |
 | Distribution | Open source, clone-and-run; BYO API keys; no installer |
 
 ## 2. Where to look
@@ -61,19 +60,21 @@ Every Claude session working in this repo follows these:
 ## 3. Current status
 
 **Working (backtest path is complete):**
-- LEAN integration (NuGet + thin launcher, C#/Python e2e)
-- Data ETL — price (OHLCV), 수급 (investor flows), fundamentals (PER/PBR); per-ticker + universe bulk + daily incremental scheduler
-- Orchestrator — LEAN Runner, SQLite persistence, FastAPI Control API, 3-chapter dashboard (전략 설정 / 백테스트 / 설정)
-- Background-job backtests with live status/log
-- Strategy framework (Alpha composition) + catalog (built-in EMA/MACD/RSI/momentum + custom 수급/저PBR)
-- **Rule engine** — boolean conditions `(A AND B) OR C` (`/rules`)
-- Universe selection (scan all loaded tickers)
-- **Risk management** (global stop-loss/take-profit/trailing/portfolio)
-- Config & secrets (env → config.local.yaml → dashboard `/settings`)
+- LEAN integration (NuGet + thin launcher, C#/Python e2e); KRX-correct stats (Asia/Seoul TZ + constant risk-free rate)
+- Data ETL — price (OHLCV), 수급 (investor flows), fundamentals (PER/PBR)
+- **Data update** — one '데이터 최신화' path shared by the button and the daily scheduler: incremental from last loaded date to today over the whole market; dashboard shows the latest loaded date
+- Orchestrator — LEAN Runner, SQLite persistence, FastAPI Control API, dashboard tabs (전략 설정 / 백테스트 / 데이터 / 설정 / 작업중); landing = 전략 설정
+- Background-job backtests with live log + **progress %**
+- **Rule engine** — condition-group builder (AND within a group, OR across groups); single persisted strategy
+- Signals — EMA/MACD/RSI/momentum + **Bollinger (mean-reversion w/ breakout switch)**
+- Universe — scan all loaded tickers + **index bulk-add (KOSPI200/KOSDAQ150)**; portfolio caps concurrent holdings (top by liquidity) so over-diversification still trades
+- **Risk management** (global per-security stop-loss/take-profit/trailing)
+- Korean-friendly result page (억/만원); config & secrets (env → config.local.yaml → dashboard)
 
 **Not done / gated:**
 - ⛔ **Toss live trading** (`TossBrokerage`/`TossDataQueueHandler`, `MyTrading.Toss.dll`) — gated on Toss API (not open). Only piece needing the broker API.
-- Minute-bar ETL (intraday strategies), OpenDART deep financials, news/sentiment, AI NL→strategy, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, alerts, cross-platform packaging, LICENSE.
+- Korea-specific signals (수급 추종·가치/저PBR) into the rule engine, minute-bar ETL (intraday), parameter optimization, OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
+- (No AI/NL strategy generation — intentionally out of scope.)
 
 > See `README.md` 로드맵 for the up-to-date checklist.
 
