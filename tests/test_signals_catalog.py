@@ -33,6 +33,16 @@ def test_default_strategy_has_groups_and_defaults():
     assert s["period_days"] == 3
 
 
+def test_bollinger_signal_in_catalog():
+    labels = {s.label: s for s in sc.CATALOG}
+    assert "BB" in labels and labels["BB"].type == "bollinger"
+    # 폼에서 float 파라미터(스위칭 임계)가 제대로 캐스팅돼 시그널 구성에 들어감
+    sig = sc.signals_from_form({"BB__period": "20", "BB__k": "2.5", "BB__switch_pct": "1.5"})["BB"]
+    assert sig["type"] == "bollinger"
+    assert sig["params"]["k"] == 2.5 and sig["params"]["switch_pct"] == 1.5
+    assert sig["params"]["period"] == 20
+
+
 def test_descriptions_hide_internal_tokens():
     # 사용자 노출 설명에 내부 신호값(UP/DOWN/NONE)이 없어야 함
     for spec in sc.CATALOG:

@@ -67,11 +67,39 @@ class MomentumSignal:
         return NONE
 
 
+class BollingerSignal:
+    # 볼린저밴드 평균회귀 + 강한 돌파 시 스위칭(하이브리드).
+    #  - 상단 터치~+switch% 미만: 과매수 → DOWN(평균회귀 매도)
+    #  - 상단 +switch% 이상 강하게 돌파: UP(돌파 매수로 전환)
+    #  - 하단 터치~−switch% 초과: 과매도 → UP(평균회귀 매수)
+    #  - 하단 −switch% 이하 강하게 이탈: DOWN(돌파 매도로 전환)
+    def __init__(self, algo, symbol, period=20, k=2.0, switch_pct=1.0):
+        self.algo = algo
+        self.symbol = symbol
+        self.bb = algo.bb(symbol, int(period), float(k), resolution=Resolution.DAILY)
+        self.sw = float(switch_pct) / 100.0  # 평균회귀 → 돌파 전환 임계
+
+    def direction(self):
+        if not self.bb.is_ready:
+            return NONE
+        price = float(self.algo.securities[self.symbol].price)
+        if price <= 0:
+            return NONE
+        upper = self.bb.upper_band.current.value
+        lower = self.bb.lower_band.current.value
+        if price >= upper:  # 상단 터치/돌파
+            return UP if price >= upper * (1 + self.sw) else DOWN  # 강한 돌파면 매수, 단순 터치면 매도
+        if price <= lower:  # 하단 터치/이탈
+            return DOWN if price <= lower * (1 - self.sw) else UP  # 강한 이탈이면 매도, 단순 터치면 매수
+        return NONE         # 밴드 안
+
+
 SIGNAL_TYPES = {
     "ema": EmaSignal,
     "macd": MacdSignal,
     "rsi": RsiSignal,
     "momentum": MomentumSignal,
+    "bollinger": BollingerSignal,
 }
 
 

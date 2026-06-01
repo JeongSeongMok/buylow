@@ -46,6 +46,13 @@ CATALOG: list[SignalSpec] = [
     SignalSpec("momentum", "MOM", "모멘텀", "최근 N일 수익률이 플러스면 매수 우호, 마이너스면 매도 우호", [
         ParamSpec("lookback", "관측(일)", "int", 60),
     ]),
+    SignalSpec("bollinger", "BB", "볼린저밴드(평균회귀+돌파전환)",
+               "기본은 평균회귀(상단 터치=매도 우호·하단 터치=매수 우호). 단 상단을 스위칭% 이상 "
+               "강하게 돌파하면 매수로, 하단을 그만큼 이탈하면 매도로 전환", [
+        ParamSpec("period", "기간", "int", 20),
+        ParamSpec("k", "표준편차 배수", "float", 2.0),
+        ParamSpec("switch_pct", "돌파 전환 임계(%)", "float", 1.0),
+    ]),
     # flow / value 는 데이터 연동 후 추가 예정
 ]
 
