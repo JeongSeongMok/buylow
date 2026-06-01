@@ -5,6 +5,23 @@ from datetime import date
 import pytest
 
 
+def test_ingest_all_market_skips_flow_when_no_trading_days(tmp_path, monkeypatch):
+    # 신규 거래일이 0이면(주말/휴장 증분 등) 수급을 호출하지 않아야 함(에러 폭주 방지)
+    import etl.universe as u
+    import etl.flow as flow
+    import orchestrator.config as cfg
+    monkeypatch.setattr(u, "ingest_universe",
+                        lambda *a, **k: {"ingested": 0, "trading_days": 0, "universe": 0, "market": "ALL"})
+    monkeypatch.setattr(cfg, "apply_krx_credentials", lambda: True)
+    calls = {"flow": 0}
+    monkeypatch.setattr(flow, "ingest_flow", lambda *a, **k: calls.__setitem__("flow", calls["flow"] + 1))
+
+    info = u.ingest_all_market(tmp_path, start=date(2026, 5, 30), end=date(2026, 6, 1))
+    assert info["trading_days"] == 0
+    assert info["flow_enabled"] is False
+    assert calls["flow"] == 0  # 수급 호출 안 함
+
+
 @pytest.mark.integration
 def test_ingest_kospi200_small(tmp_path):
     from orchestrator.config import apply_krx_credentials

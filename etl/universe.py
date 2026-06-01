@@ -121,22 +121,28 @@ def ingest_all_market(
     price = ingest_universe(start, end, market="ALL", data_dir=data_dir, merge=merge,
                             on_progress=on_progress)
 
+    # 신규 거래일이 없으면(주말/휴장 구간 등) 수급은 받지 않는다. 안 그러면 전 종목에 대해
+    # 빈 응답이 와서 pykrx가 종목마다 에러를 찍는다(거래일 0인데 수급만 호출하던 버그).
     flow_ok = flow_fail = 0
-    flow_enabled = with_flow and apply_krx_credentials()
-    if flow_enabled:
+    flow_enabled = False
+    if not with_flow:
+        progress("수급 비활성")
+    elif price["trading_days"] == 0:
+        progress("신규 거래일 없음 — 수급 생략")
+    elif not apply_krx_credentials():
+        progress("수급 건너뜀 (KRX 로그인 없음 — 설정에서 키 입력 시 가능)")
+    else:
+        flow_enabled = True
         tickers = list_universe("ALL", end)
         progress(f"수급 적재 시작: {len(tickers)}종목 (종목당 1회 호출 → 시간 소요)")
         for i, tkr in enumerate(tickers, 1):
             try:
                 ingest_flow(tkr, start, end, data_dir, merge=merge)
                 flow_ok += 1
-            except Exception:  # 개별 종목 실패(데이터 없음 등)는 건너뛰고 계속
+            except Exception:  # 개별 종목 실패(데이터 없음/상폐 등)는 건너뛰고 계속
                 flow_fail += 1
             if i % 50 == 0 or i == len(tickers):
                 progress(f"수급 {i}/{len(tickers)} (성공 {flow_ok}, 실패 {flow_fail})")
-    else:
-        progress("수급 건너뜀 (KRX 로그인 없음 — 설정에서 키 입력 시 가능)"
-                 if with_flow else "수급 비활성")
 
     progress(f"완료: OHLCV {price['ingested']}종목 × {price['trading_days']}거래일, 수급 {flow_ok}종목")
     return {
