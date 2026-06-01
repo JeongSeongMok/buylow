@@ -31,6 +31,19 @@ def all_tickers(data_dir: str | Path) -> list[str]:
     return sorted(set(list_price_tickers(data_dir)) | set(list_flow_tickers(data_dir)))
 
 
+def latest_loaded_date(data_dir: str | Path) -> str | None:
+    """적재된 가격 데이터의 최신 날짜(ISO). 없으면 None.
+
+    유니버스 적재는 전 종목이 같은 거래일을 공유하므로 대표 종목(가능하면 005930) 1개만 읽어 판단.
+    """
+    tickers = list_price_tickers(data_dir)
+    if not tickers:
+        return None
+    ref = "005930" if "005930" in tickers else tickers[0]
+    rows = read_price_daily(data_dir, ref)
+    return rows[-1]["date"] if rows else None
+
+
 def read_price_daily(data_dir: str | Path, ticker: str) -> list[dict[str, Any]]:
     zp = equity_daily_zip_path(data_dir, KRX_MARKET, ticker)
     if not zp.exists():

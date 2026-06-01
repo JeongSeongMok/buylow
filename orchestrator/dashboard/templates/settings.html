@@ -20,18 +20,18 @@
 </section>
 
 <section class="card">
-  <h2>과거 데이터 적재</h2>
-  <p class="meta">버튼 하나로 <b>한국시장 전체 종목</b>(KOSPI·KOSDAQ)의 가격(OHLCV)과 수급을 일괄 적재합니다.
-    이미 적재된 데이터가 있어도 다시 누르면 <b>최신 데이터로 덮어씁니다</b>.
-    수급은 KRX 로그인(위 키)이 있을 때만, 종목 수만큼 호출하므로 시간이 걸립니다.</p>
-  <p class="meta">현재 적재 폴더: <code>{{ data_dir }}</code> · 적재 현황 → <a href="/data">데이터 보기</a></p>
+  <h2>데이터</h2>
+  <p class="meta"><b>데이터 최신화</b>를 누르면 적재된 마지막 날짜 다음날부터 오늘까지(한국시장 전 종목 OHLCV·수급)
+    부족한 구간만 받아 채웁니다. 처음이라면 최근 5년치를 받습니다.
+    수급은 KRX 로그인(위 키)이 있을 때만 받으며 종목 수만큼 호출해 시간이 걸립니다.</p>
   {% if data_loaded == 0 %}
-  <p class="notice">아직 적재된 종목이 없습니다. <b>최초 1회 적재가 필요</b>합니다 — 아래 버튼을 누르세요.</p>
+  <p class="notice">아직 적재된 데이터가 없습니다. <b>데이터 최신화</b>를 한 번 눌러 최초 적재하세요.</p>
   {% else %}
-  <p class="meta">현재 적재된 종목: <b>{{ data_loaded }}개</b></p>
+  <p class="meta">적재된 종목: <b>{{ data_loaded }}개</b> · 최신 데이터 날짜: <b>{{ latest_date or "-" }}</b></p>
   {% endif %}
-  <form method="post" action="/data/load-all">
-    <button type="submit">전체 종목 데이터 적재 / 갱신</button>
+  <p class="meta">적재 폴더: <code>{{ data_dir }}</code> · 적재 현황 → <a href="/data">데이터 보기</a></p>
+  <form method="post" action="/data/update">
+    <button type="submit">데이터 최신화</button>
     <span class="meta">백그라운드 실행 — 진행상황 <a href="/jobs">작업</a></span>
   </form>
 </section>

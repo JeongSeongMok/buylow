@@ -110,8 +110,9 @@ backtest), `GET /runs`, `GET /runs/{id}`; HTML routes: `GET /` (② backtest for
 history), `POST /backtest` (run saved strategy → background job), `GET /ui/runs/{id}` (result
 detail), `GET|POST /strategy` (edit + save the rule conditions and global risk; hides internal
 UP/DOWN/NONE), `GET /data` + `GET /data/{ticker}` (view loaded OHLCV & 수급),
-`POST /data/load-all` (③ one button: bulk-load the whole KRX market OHLCV+flow, overwrite,
-background), `GET /jobs` + `GET /jobs/{id}` (background job status + live log), `GET|POST /settings`
+`POST /data/update` (③ '데이터 최신화': incremental load from the last loaded date to today,
+or a 5-year bootstrap if empty; background), `GET /universe/index/{name}` (KOSPI200/KOSDAQ150
+constituents ∩ loaded), `GET /jobs` + `GET /jobs/{id}` (background job status + live log), `GET|POST /settings`
 (③ API keys). Dashboard backtests run as background jobs (non-blocking) with a live log. State is
 persisted in `buylow.db` (SQLite, gitignored). The server binds to `127.0.0.1` only.
 

@@ -299,6 +299,7 @@ def register_dashboard(
                    for t in sorted(price | flow)]
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
+            "latest_date": catalog.latest_loaded_date(data_dir),
             "error": request.query_params.get("error"),
         })
 
@@ -308,25 +309,31 @@ def register_dashboard(
         summary = catalog.ticker_summary(config.get_data_folder(), ticker)
         return templates.TemplateResponse(request, "data_detail.html", {"d": summary})
 
-    @app.post("/data/load-all")
-    def load_all_market(request: Request):
-        # 버튼 하나로 한국시장 전체(OHLCV+수급) 일괄 적재(덮어쓰기). 무거우니 백그라운드 잡.
-        # 오래 걸려 진행이 궁금하므로 진행 로그를 파일로 남기고 job.log_path로 실시간 표시.
-        from datetime import datetime
+    @app.post("/data/update")
+    def update_data(request: Request):
+        # '데이터 최신화' — 적재된 최신 날짜 다음날부터 오늘까지 증분 적재(없으면 최초 적재).
+        # 무거우니 백그라운드 잡 + 진행 로그 파일로 실시간 표시.
+        from datetime import datetime, date, timedelta
         from etl.universe import ingest_all_market
+        from etl.catalog import latest_loaded_date
         data_dir = config.get_data_folder()
 
         def _job(job):
-            log_path = REPO_ROOT / "runs" / f"loadall-{job.id}.log"
+            log_path = REPO_ROOT / "runs" / f"update-{job.id}.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             job.log_path = str(log_path)
             with open(log_path, "a", encoding="utf-8", buffering=1) as f:
                 def on_progress(msg):
                     f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
-                info = ingest_all_market(data_dir, on_progress=on_progress)
-            return f"OHLCV {info['price_tickers']}종목 · 수급 {info['flow_ok']}종목"
+                last = latest_loaded_date(data_dir)  # ISO 또는 None
+                if last:
+                    start = date.fromisoformat(last) + timedelta(days=1)  # 최신 다음날부터
+                    info = ingest_all_market(data_dir, start=start, merge=True, on_progress=on_progress)
+                    return f"{last} 이후 {info['trading_days']}거래일 갱신"
+                info = ingest_all_market(data_dir, merge=False, on_progress=on_progress)  # 최초 적재
+                return f"최초 적재: OHLCV {info['price_tickers']}종목"
 
-        jobs.submit("전체시장 적재(OHLCV+수급)", _job)
+        jobs.submit("데이터 최신화", _job)
         return RedirectResponse(url="/jobs", status_code=303)
 
     @app.get("/jobs", response_class=HTMLResponse)
@@ -348,10 +355,13 @@ def register_dashboard(
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):
+        from etl.catalog import latest_loaded_date
+        data_dir = config.get_data_folder()
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
-            "data_dir": config.get_data_folder(),
+            "data_dir": data_dir,
             "data_loaded": _loaded_count(),
+            "latest_date": latest_loaded_date(data_dir),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })

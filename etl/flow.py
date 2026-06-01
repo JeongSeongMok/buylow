@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +46,24 @@ def flow_csv_path(data_dir: str | Path, ticker: str) -> Path:
     return Path(data_dir) / "krx" / "flow" / f"{ticker}.csv"
 
 
-def write_flow(data_dir: str | Path, ticker: str, records: list[FlowRecord]) -> Path:
+def _read_flow_records(data_dir: str | Path, ticker: str) -> list[FlowRecord]:
+    fp = flow_csv_path(data_dir, ticker)
+    if not fp.exists():
+        return []
+    out = []
+    for line in fp.read_text(encoding="utf-8").strip().splitlines():
+        d, f, i, p = line.split(",")
+        out.append(FlowRecord(datetime.strptime(d, "%Y%m%d").date(), int(f), int(i), int(p)))
+    return out
+
+
+def write_flow(data_dir: str | Path, ticker: str, records: list[FlowRecord],
+               merge: bool = False) -> Path:
+    if merge:  # 기존 수급과 날짜 기준 병합(증분 갱신 시 과거 데이터 보존)
+        by_day = {r.day: r for r in _read_flow_records(data_dir, ticker)}
+        for r in records:
+            by_day[r.day] = r
+        records = list(by_day.values())
     out = flow_csv_path(data_dir, ticker)
     out.parent.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -58,15 +75,15 @@ def write_flow(data_dir: str | Path, ticker: str, records: list[FlowRecord]) -> 
 
 
 def ingest_flow(ticker: str, start: date, end: date,
-                data_dir: str | Path = DEFAULT_DATA_DIR) -> dict[str, Any]:
-    """수급을 받아 적재. KRX 로그인 크리덴셜이 없으면 명확히 실패."""
+                data_dir: str | Path = DEFAULT_DATA_DIR, merge: bool = False) -> dict[str, Any]:
+    """수급을 받아 적재. KRX 로그인 크리덴셜이 없으면 명확히 실패. merge=True면 증분 병합."""
     from orchestrator.config import apply_krx_credentials
     if not apply_krx_credentials():
         raise RuntimeError("수급 조회엔 KRX 로그인 필요 — config.local.yaml 또는 대시보드 /settings 에 krx_id/krx_pw 설정")
     records = fetch_flow(ticker, start, end)
     if not records:
         raise RuntimeError(f"{ticker}: 수급 데이터 없음 ({start}~{end})")
-    path = write_flow(data_dir, ticker, records)
+    path = write_flow(data_dir, ticker, records, merge=merge)
     return {
         "ticker": ticker,
         "rows": len(records),

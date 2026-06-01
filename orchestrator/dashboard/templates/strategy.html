@@ -2,7 +2,7 @@
 {% block content %}
 {% if data_loaded == 0 %}
 <p class="notice">👋 처음이신가요? 백테스트하려면 과거 데이터가 필요합니다.
-  <a href="/settings">설정</a>에서 <b>[전체 종목 데이터 적재]</b>를 먼저 한 번 실행하세요. (전략은 그 다음에 짜도 됩니다)</p>
+  <a href="/settings">설정</a>에서 <b>[데이터 최신화]</b>를 먼저 한 번 실행하세요. (전략은 그 다음에 짜도 됩니다)</p>
 {% endif %}
 <form method="post" action="/strategy">
 <section class="card">

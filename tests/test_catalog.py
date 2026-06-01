@@ -35,3 +35,9 @@ def test_lists_and_summary(tmp_path):
 def test_empty_ticker(tmp_path):
     s = catalog.ticker_summary(tmp_path, "000000")
     assert s["price"]["count"] == 0 and s["flow"]["count"] == 0
+
+
+def test_latest_loaded_date(tmp_path):
+    assert catalog.latest_loaded_date(tmp_path) is None  # 적재 없음
+    _seed(tmp_path)  # 005930: 2023-01-02, 2023-01-03
+    assert catalog.latest_loaded_date(tmp_path) == "2023-01-03"  # 최신 거래일

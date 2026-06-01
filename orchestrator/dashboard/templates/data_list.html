@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card">
-  <h2>적재된 데이터 <small>{{ count }}종목</small></h2>
-  <p class="meta">data: <code>{{ data_dir }}</code> · 적재는 <a href="/settings">설정 → 과거 데이터 적재</a>에서.
+  <h2>적재된 데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
+  <p class="meta">data: <code>{{ data_dir }}</code> · 적재/최신화는 <a href="/settings">설정</a>에서.
     상세 수치는 종목별 <b>보기</b>에서 확인하세요.</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table class="runs">
