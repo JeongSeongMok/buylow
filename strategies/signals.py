@@ -94,12 +94,42 @@ class BollingerSignal:
         return NONE         # 밴드 안
 
 
+class ValueSignal:
+    # 저평가(가치) 필터. 차트가 아니라 KRX 펀더멘털 커스텀 데이터(PER/PBR/배당)를 읽는다.
+    #  - 저PER·저PBR + ROE 기준 이상 + (선택)배당 기준 이상이면 UP(매수 후보), 아니면 NONE.
+    #  - ROE는 별도 데이터 없이 PBR/PER로 파생(ROE = EPS/BPS = PBR/PER). 저PBR인데 ROE 낮은
+    #    '가치 함정'을 걸러낸다. 가치는 매수 필터라 DOWN은 내지 않는다(타이밍 시그널과 AND로 조합).
+    def __init__(self, algo, symbol, per_max=10.0, pbr_max=1.0, roe_min=8.0, div_min=0.0):
+        from krx_data import KrxFundamental
+        self.sec = algo.add_data(KrxFundamental, symbol.value, Resolution.DAILY)
+        self.per_max = float(per_max)
+        self.pbr_max = float(pbr_max)
+        self.roe_min = float(roe_min)  # %
+        self.div_min = float(div_min)  # 배당수익률 %
+
+    def direction(self):
+        d = self.sec.get_last_data()
+        if d is None:
+            return NONE
+        per, pbr, div = d["per"], d["pbr"], d["div"]
+        if not (0 < per <= self.per_max):   # 흑자 + 이익 대비 안 비쌈
+            return NONE
+        if not (0 < pbr <= self.pbr_max):   # 저PBR
+            return NONE
+        if (pbr / per) * 100.0 < self.roe_min:  # ROE(%)=PBR/PER → 가치 함정 제거
+            return NONE
+        if div < self.div_min:              # (선택) 배당 하한
+            return NONE
+        return UP
+
+
 SIGNAL_TYPES = {
     "ema": EmaSignal,
     "macd": MacdSignal,
     "rsi": RsiSignal,
     "momentum": MomentumSignal,
     "bollinger": BollingerSignal,
+    "value": ValueSignal,
 }
 
 

@@ -53,7 +53,15 @@ CATALOG: list[SignalSpec] = [
         ParamSpec("k", "표준편차 배수", "float", 2.0),
         ParamSpec("switch_pct", "돌파 전환 임계(%)", "float", 1.0),
     ]),
-    # flow / value 는 데이터 연동 후 추가 예정
+    SignalSpec("value", "VAL", "저평가(가치)",
+               "저PER·저PBR이면서 ROE(=PBR/PER)가 기준 이상이면 매수 우호(싼 우량주). "
+               "ROE 조건으로 '싸기만 한' 가치 함정을 거른다. 배당수익률 하한은 선택", [
+        ParamSpec("per_max", "PER 상한", "float", 10.0),
+        ParamSpec("pbr_max", "PBR 상한", "float", 1.0),
+        ParamSpec("roe_min", "ROE 하한(%)", "float", 8.0),
+        ParamSpec("div_min", "배당수익률 하한(%)", "float", 0.0),
+    ]),
+    # 수급 추종 시그널은 데이터 연동 후 추가 예정
 ]
 
 DEFAULT_RULE = "(EMA AND MACD) OR RSI"

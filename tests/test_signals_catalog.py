@@ -43,6 +43,16 @@ def test_bollinger_signal_in_catalog():
     assert sig["params"]["period"] == 20
 
 
+def test_value_signal_in_catalog():
+    labels = {s.label: s for s in sc.CATALOG}
+    assert "VAL" in labels and labels["VAL"].type == "value"
+    sig = sc.signals_from_form({"VAL__per_max": "12", "VAL__pbr_max": "0.8",
+                                "VAL__roe_min": "10", "VAL__div_min": "2"})["VAL"]
+    assert sig["type"] == "value"
+    assert sig["params"]["per_max"] == 12.0 and sig["params"]["pbr_max"] == 0.8
+    assert sig["params"]["roe_min"] == 10.0 and sig["params"]["div_min"] == 2.0
+
+
 def test_descriptions_hide_internal_tokens():
     # 사용자 노출 설명에 내부 신호값(UP/DOWN/NONE)이 없어야 함
     for spec in sc.CATALOG:
