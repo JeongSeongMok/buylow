@@ -34,11 +34,13 @@
         <input type="text" id="ticker-input" placeholder="예: 005930"
                onkeydown="if(event.key==='Enter'){event.preventDefault();addTicker();}">
         <button type="button" class="ghost" onclick="addTicker()">추가</button>
-        <button type="button" class="ghost" onclick="addIndex('KOSPI200')">KOSPI200 일괄추가</button>
-        <button type="button" class="ghost" onclick="addIndex('KOSDAQ150')">KOSDAQ150 일괄추가</button>
         <button type="button" class="ghost" onclick="clearTickers()">비우기</button>
       </div>
-      <p id="universe-msg" class="meta"></p>
+      <div class="add-row">
+        <span class="meta">인덱스 일괄추가</span>
+        <button type="button" class="ghost" onclick="addIndex('KOSPI200')">KOSPI200 추가</button>
+        <button type="button" class="ghost" onclick="addIndex('KOSDAQ150')">KOSDAQ150 추가</button>
+      </div>
       <div id="chips"></div>
       <input type="hidden" name="universe" id="universe-hidden" value="005930">
     </div>
@@ -88,19 +90,15 @@
       inp.value = '';
       syncTickers();
     }
-    function clearTickers() { tickers = []; document.getElementById('universe-msg').textContent = ''; syncTickers(); }
+    function clearTickers() { tickers = []; syncTickers(); }
     async function addIndex(name) {
-      const msg = document.getElementById('universe-msg');
-      msg.textContent = name + ' 구성종목 불러오는 중…';
       try {
         const res = await fetch('/universe/index/' + name);
         const data = await res.json();
-        if (data.error) { msg.textContent = '⚠️ ' + data.error; return; }
-        let added = 0;
-        data.tickers.forEach(t => { if (!tickers.includes(t)) { tickers.push(t); added++; } });
+        if (data.error) { alert(data.error); return; }
+        data.tickers.forEach(t => { if (!tickers.includes(t)) tickers.push(t); });
         syncTickers();
-        msg.textContent = `${name}: ${added}종목 추가 (적재된 구성종목 ${data.available}/${data.total})`;
-      } catch (e) { msg.textContent = '⚠️ 조회 실패'; }
+      } catch (e) { alert('인덱스 구성종목 조회 실패'); }
     }
     function toggleAll() {
       const on = document.getElementById('universe-all').checked;
