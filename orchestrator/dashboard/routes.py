@@ -93,6 +93,40 @@ def _pct(stats: dict, key: str):
     return f"{n:.1f}".rstrip("0").rstrip(".") + "%"
 
 
+def parse_orders(result_json) -> list[dict]:
+    """LEAN 결과 JSON에서 체결 주문 내역을 사람이 보기 좋게 추출(거래 히스토리용).
+
+    '왜'는 LEAN이 시그널 단위로 기록하지 않으므로, 방향(매수/매도) + 리스크 태그(손절/익절 등)
+    수준으로만 보여준다(정확한 트리거 시그널까지는 미기록).
+    """
+    if not result_json or not Path(result_json).exists():
+        return []
+    try:
+        data = json.loads(Path(result_json).read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    orders = data.get("orders") or {}
+    rows = []
+    for o in (orders.values() if isinstance(orders, dict) else orders):
+        if o.get("status") != 3:  # 3 = Filled (체결된 것만)
+            continue
+        qty = o.get("quantity", 0) or 0
+        tag = (o.get("tag") or "").strip()
+        buy = qty > 0
+        rows.append({
+            "time": (o.get("lastFillTime") or o.get("time") or "")[:10],
+            "ticker": (o.get("symbol") or {}).get("value", "-"),
+            "side": "매수" if buy else "매도",
+            "buy": buy,
+            "qty": abs(int(qty)),
+            "price": f"{o.get('price', 0):,.0f}",
+            "amount": format_won(abs(o.get("value", 0))),
+            "reason": tag or ("진입(전략 신호)" if buy else "청산(신호 변화/리스크)"),
+        })
+    rows.sort(key=lambda r: r["time"])
+    return rows
+
+
 def friendly_stats(stats: dict) -> list[dict]:
     """LEAN 통계(영문·원시)를 사용자용 한국어 핵심 지표로 변환. 이해 어려운 항목은 생략."""
     rows: list[dict] = []
@@ -242,7 +276,8 @@ def register_dashboard(
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return templates.TemplateResponse(request, "run_detail.html", {
-            "run": record, "summary": friendly_stats(record.get("statistics") or {})})
+            "run": record, "summary": friendly_stats(record.get("statistics") or {}),
+            "trades": parse_orders(record.get("result_json"))})
 
     # ── ① 전략 설정 탭 ───────────────────────────────────────────────
     @app.get("/strategy", response_class=HTMLResponse)

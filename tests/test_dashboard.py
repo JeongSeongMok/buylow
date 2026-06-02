@@ -178,6 +178,24 @@ def test_format_won_korean():
     assert format_won(-4700000) == "-470만원"
 
 
+def test_parse_orders(tmp_path):
+    import json
+    from orchestrator.dashboard.routes import parse_orders
+    assert parse_orders(None) == []
+    rj = tmp_path / "r.json"
+    rj.write_text(json.dumps({"orders": {
+        "1": {"status": 3, "quantity": 10, "price": 80000, "value": 800000, "tag": "",
+              "lastFillTime": "2026-03-10T04:00:00Z", "symbol": {"value": "005930"}},
+        "2": {"status": 3, "quantity": -10, "price": 90000, "value": -900000, "tag": "Stop Loss",
+              "lastFillTime": "2026-03-12T04:00:00Z", "symbol": {"value": "005930"}},
+        "3": {"status": 5, "quantity": 5, "price": 1, "value": 5, "symbol": {"value": "X"}},  # 미체결
+    }}), encoding="utf-8")
+    rows = parse_orders(str(rj))
+    assert len(rows) == 2  # 체결(3)만, 미체결(5) 제외
+    assert rows[0]["side"] == "매수" and rows[0]["time"] == "2026-03-10" and rows[0]["ticker"] == "005930"
+    assert rows[1]["side"] == "매도" and rows[1]["reason"] == "Stop Loss"  # 태그 있으면 그대로
+
+
 def test_friendly_stats_korean_labels():
     from orchestrator.dashboard.routes import friendly_stats
     rows = friendly_stats({

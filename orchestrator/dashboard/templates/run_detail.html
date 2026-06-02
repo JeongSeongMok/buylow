@@ -17,6 +17,26 @@
     {% endfor %}
   </table>
 
+  {% if trades %}
+  <h3>거래 내역 <small>{{ trades|length }}건</small></h3>
+  <table class="runs">
+    <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>금액</th><th>사유</th></tr></thead>
+    <tbody>
+      {% for t in trades %}
+      <tr>
+        <td>{{ t.time }}</td>
+        <td>{{ t.ticker }}</td>
+        <td>{% if t.buy %}<span class="ok">매수</span>{% else %}<span class="fail">매도</span>{% endif %}</td>
+        <td>{{ "{:,}".format(t.qty) }}</td>
+        <td>{{ t.price }}</td>
+        <td>{{ t.amount }}</td>
+        <td class="meta">{{ t.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
   <details>
     <summary class="meta">원본 통계 전체 보기</summary>
     <table class="stats">
