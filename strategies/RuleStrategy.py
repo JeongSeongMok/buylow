@@ -42,19 +42,29 @@ class RuleAlpha(AlphaModel):
             self._evals.pop(sec.symbol, None)
 
     def update(self, algorithm, data):
-        ups, exits = [], []
+        ups, exits, reason = [], [], {}
         for symbol, evals in self._evals.items():
             directions = {label: ev.direction() for label, ev in evals.items()}
             result = eval_rule(self.ast, directions)
             if result == UP:
                 ups.append(symbol)
-            elif result == DOWN:  # 매도 신호는 항상 내보낸다(청산은 막지 않음)
+                reason[symbol] = "+".join(l for l, d in directions.items() if d == UP)
+            elif result == DOWN and algorithm.portfolio[symbol].invested:  # 보유 중일 때만 청산 신호
                 exits.append(Insight.price(symbol, self.hold, InsightDirection.DOWN))
+                self._log_hit(algorithm, symbol, "SELL",
+                              "+".join(l for l, d in directions.items() if d == DOWN))
         # 매수 신호가 상한보다 많으면 유동성(당일 거래대금=가격×거래량) 상위만 보유.
         if self.max_positions and len(ups) > self.max_positions:
             ups.sort(key=lambda s: self._liquidity(algorithm, s), reverse=True)
             ups = ups[:self.max_positions]
+        for s in ups:
+            self._log_hit(algorithm, s, "BUY", reason.get(s, ""))
         return [Insight.price(s, self.hold, InsightDirection.UP) for s in ups] + exits
+
+    def _log_hit(self, algorithm, symbol, side, labels):
+        # 트리거 사유를 로그로 남겨 결과 페이지(거래 내역)가 파싱해 표시한다.
+        # 형식: RULEHIT YYYY-MM-DD <종목> BUY|SELL <발동시그널들>
+        algorithm.log(f"RULEHIT {algorithm.time:%Y-%m-%d} {symbol.value} {side} {labels}")
 
     def _liquidity(self, algorithm, symbol):
         # 당일 거래대금 = 종가 × 거래량 (시장에서 실제 체결 가능한 규모의 척도).

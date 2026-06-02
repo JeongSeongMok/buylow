@@ -11,6 +11,20 @@ from market.krx import KRX_MARKET, KRX_MARKET_ID, KRX_CURRENCY
 from krx import KoreanFeeModel  # strategies/krx.py
 
 
+class LongOnlyEqualWeighting(EqualWeightingPortfolioConstructionModel):
+    """롱온리 동일비중. UP 인사이트에만 1/N 비중을 주고 그 외(DOWN/FLAT)는 0으로 청산.
+
+    기본 EqualWeighting은 DOWN 인사이트에 음수 비중(=공매도)을 줘서, KRX 백테스트가 공매도까지
+    하게 된다. 한국 개인 계좌는 일반적으로 공매도가 안 되므로 음수 비중을 막아 롱온리로 강제한다.
+    """
+
+    def determine_target_percent(self, activeInsights):
+        ups = [i for i in activeInsights if i.direction == InsightDirection.UP]
+        n = len(ups)
+        return {i: (1.0 / n if (n and i.direction == InsightDirection.UP) else 0.0)
+                for i in activeInsights}
+
+
 class KrxFrameworkAlgorithm(QCAlgorithm):
     def setup_krx_framework(self, resolution=Resolution.DAILY):
         # 거래소 시간대를 한국으로(기본은 뉴욕 → 통계 왜곡 경고 + 벤치마크가 SPY로 폴백돼 깨짐).
@@ -24,8 +38,8 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
         self.universe_settings.resolution = resolution
         # 유니버스가 편입하는 모든 종목에 한국 수수료모델 부착 (프레임워크에선 initializer로)
         self.set_security_initializer(lambda s: s.set_fee_model(KoreanFeeModel()))
-        # 결합/실행 기본값: 동일비중(=활성 신호들을 종목당 1목표로 합산) + 즉시 체결
-        self.set_portfolio_construction(EqualWeightingPortfolioConstructionModel())
+        # 결합/실행 기본값: 롱온리 동일비중(공매도 차단) + 즉시 체결
+        self.set_portfolio_construction(LongOnlyEqualWeighting())
         self.set_execution(ImmediateExecutionModel())
         self._apply_risk_management()
         self._setup_progress_logging()

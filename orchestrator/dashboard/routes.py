@@ -93,12 +93,30 @@ def _pct(stats: dict, key: str):
     return f"{n:.1f}".rstrip("0").rstrip(".") + "%"
 
 
-def parse_orders(result_json) -> list[dict]:
+def parse_rule_reasons(run_dir) -> dict:
+    """RuleAlpha가 남긴 'RULEHIT 날짜 종목 BUY|SELL 시그널들' 로그를 파싱.
+
+    반환: {(YYYY-MM-DD, 종목, 'BUY'|'SELL'): '발동 시그널들'} — 거래 내역의 '사유'에 병합.
+    """
+    reasons: dict = {}
+    if not run_dir or not Path(run_dir).is_dir():
+        return reasons
+    for f in Path(run_dir).glob("*.txt"):
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        for m in re.finditer(r"RULEHIT (\d{4}-\d{2}-\d{2}) (\S+) (BUY|SELL) ?(.*)", text):
+            reasons[(m.group(1), m.group(2), m.group(3))] = m.group(4).strip()
+    return reasons
+
+
+def parse_orders(result_json, reasons=None) -> list[dict]:
     """LEAN 결과 JSON에서 체결 주문 내역을 사람이 보기 좋게 추출(거래 히스토리용).
 
-    '왜'는 LEAN이 시그널 단위로 기록하지 않으므로, 방향(매수/매도) + 리스크 태그(손절/익절 등)
-    수준으로만 보여준다(정확한 트리거 시그널까지는 미기록).
+    '사유'는 리스크 태그(손절/익절) > RuleAlpha 로그의 트리거 시그널 > 일반 라벨 순으로 채운다.
     """
+    reasons = reasons or {}
     if not result_json:
         return []
     p = Path(result_json)
@@ -119,15 +137,18 @@ def parse_orders(result_json) -> list[dict]:
         qty = o.get("quantity", 0) or 0
         tag = (o.get("tag") or "").strip()
         buy = qty > 0
+        time10 = (o.get("lastFillTime") or o.get("time") or "")[:10]
+        ticker = (o.get("symbol") or {}).get("value", "-")
+        hit = reasons.get((time10, ticker, "BUY" if buy else "SELL"))
         rows.append({
-            "time": (o.get("lastFillTime") or o.get("time") or "")[:10],
-            "ticker": (o.get("symbol") or {}).get("value", "-"),
+            "time": time10,
+            "ticker": ticker,
             "side": "매수" if buy else "매도",
             "buy": buy,
             "qty": abs(int(qty)),
             "price": f"{o.get('price', 0):,.0f}",
             "amount": format_won(abs(o.get("value", 0))),
-            "reason": tag or ("진입(전략 신호)" if buy else "청산(신호 변화/리스크)"),
+            "reason": tag or hit or ("진입(전략 신호)" if buy else "청산(신호 변화/리스크)"),
         })
     rows.sort(key=lambda r: r["time"])
     return rows
@@ -281,9 +302,10 @@ def register_dashboard(
         record = store.get_run(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
+        reasons = parse_rule_reasons(record.get("run_dir"))
         return templates.TemplateResponse(request, "run_detail.html", {
             "run": record, "summary": friendly_stats(record.get("statistics") or {}),
-            "trades": parse_orders(record.get("result_json"))})
+            "trades": parse_orders(record.get("result_json"), reasons)})
 
     # ── ① 전략 설정 탭 ───────────────────────────────────────────────
     @app.get("/strategy", response_class=HTMLResponse)

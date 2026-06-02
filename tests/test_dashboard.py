@@ -196,6 +196,23 @@ def test_parse_orders(tmp_path):
     assert rows[1]["side"] == "매도" and rows[1]["reason"] == "Stop Loss"  # 태그 있으면 그대로
 
 
+def test_parse_rule_reasons_and_merge(tmp_path):
+    import json
+    from orchestrator.dashboard.routes import parse_rule_reasons, parse_orders
+    (tmp_path / "x-log.txt").write_text(
+        "20260310 ...\nRULEHIT 2026-03-10 005930 BUY EMA+FLOW\nRULEHIT 2026-03-12 005930 SELL FLOW\n",
+        encoding="utf-8")
+    reasons = parse_rule_reasons(str(tmp_path))
+    assert reasons[("2026-03-10", "005930", "BUY")] == "EMA+FLOW"
+    # 거래 내역에 사유로 병합 (리스크 태그 없을 때 RULEHIT 사유 사용)
+    rj = tmp_path / "r.json"
+    rj.write_text(json.dumps({"orders": {
+        "1": {"status": 3, "quantity": 10, "price": 1, "value": 10, "tag": "",
+              "lastFillTime": "2026-03-10T04:00:00Z", "symbol": {"value": "005930"}}}}), encoding="utf-8")
+    rows = parse_orders(str(rj), reasons)
+    assert rows[0]["reason"] == "EMA+FLOW"
+
+
 def test_friendly_stats_korean_labels():
     from orchestrator.dashboard.routes import friendly_stats
     rows = friendly_stats({
