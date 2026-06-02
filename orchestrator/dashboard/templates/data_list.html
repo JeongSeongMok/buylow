@@ -10,7 +10,7 @@
     <tbody>
       {% for t in tickers %}
       <tr>
-        <td>{{ t.ticker }}</td>
+        <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
         <td>{% if t.price %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
         <td>{% if t.flow %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
         <td><a href="/data/{{ t.ticker }}">보기</a></td>

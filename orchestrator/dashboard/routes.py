@@ -111,12 +111,14 @@ def parse_rule_reasons(run_dir) -> dict:
     return reasons
 
 
-def parse_orders(result_json, reasons=None) -> list[dict]:
+def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
     """LEAN 결과 JSON에서 체결 주문 내역을 사람이 보기 좋게 추출(거래 히스토리용).
 
     '사유'는 리스크 태그(손절/익절) > RuleAlpha 로그의 트리거 시그널 > 일반 라벨 순으로 채운다.
+    names(코드→이름)가 있으면 종목명도 채운다.
     """
     reasons = reasons or {}
+    names = names or {}
     if not result_json:
         return []
     p = Path(result_json)
@@ -143,6 +145,7 @@ def parse_orders(result_json, reasons=None) -> list[dict]:
         rows.append({
             "time": time10,
             "ticker": ticker,
+            "name": names.get(ticker, ""),
             "side": "매수" if buy else "매도",
             "buy": buy,
             "qty": abs(int(qty)),
@@ -302,10 +305,12 @@ def register_dashboard(
         record = store.get_run(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
+        from etl.names import load_names
         reasons = parse_rule_reasons(record.get("run_dir"))
+        names = load_names(config.get_data_folder())
         return templates.TemplateResponse(request, "run_detail.html", {
             "run": record, "summary": friendly_stats(record.get("statistics") or {}),
-            "trades": parse_orders(record.get("result_json"), reasons)})
+            "trades": parse_orders(record.get("result_json"), reasons, names)})
 
     # ── ① 전략 설정 탭 ───────────────────────────────────────────────
     @app.get("/strategy", response_class=HTMLResponse)
@@ -356,9 +361,11 @@ def register_dashboard(
         # 페이지가 멈추므로, 상세 행 수는 종목 상세(/data/{ticker})에서만 계산한다.
         from etl import catalog
         data_dir = config.get_data_folder()
+        from etl.names import load_names
+        names = load_names(data_dir)
         price = set(catalog.list_price_tickers(data_dir))
         flow = set(catalog.list_flow_tickers(data_dir))
-        tickers = [{"ticker": t, "price": t in price, "flow": t in flow}
+        tickers = [{"ticker": t, "name": names.get(t, ""), "price": t in price, "flow": t in flow}
                    for t in sorted(price | flow)]
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,

@@ -213,6 +213,22 @@ def test_parse_rule_reasons_and_merge(tmp_path):
     assert rows[0]["reason"] == "EMA+FLOW"
 
 
+def test_trade_history_shows_stock_name(tmp_path):
+    import json
+    from etl.names import names_csv_path, load_names
+    from orchestrator.dashboard.routes import parse_orders
+    p = names_csv_path(tmp_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("005930,삼성전자\n000660,SK하이닉스\n", encoding="utf-8")
+    names = load_names(tmp_path)
+    assert names["005930"] == "삼성전자"
+    rj = tmp_path / "r.json"
+    rj.write_text(json.dumps({"orders": {"1": {"status": 3, "quantity": 1, "price": 1, "value": 1,
+                  "symbol": {"value": "005930"}, "lastFillTime": "2026-01-02T00:00:00Z"}}}), encoding="utf-8")
+    rows = parse_orders(str(rj), None, names)
+    assert rows[0]["name"] == "삼성전자" and rows[0]["ticker"] == "005930"
+
+
 def test_friendly_stats_korean_labels():
     from orchestrator.dashboard.routes import friendly_stats
     rows = friendly_stats({

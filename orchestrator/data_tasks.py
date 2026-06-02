@@ -23,5 +23,10 @@ def run_data_update(job, data_dir: str) -> str:
         def on_progress(msg):
             f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
         info = update_all_market(data_dir, on_progress=on_progress)
+        try:  # 종목코드→이름 매핑(무인증, 1회) — 실패해도 데이터 적재엔 영향 없음
+            from etl.names import fetch_and_save_names
+            on_progress(f"종목명 {fetch_and_save_names(data_dir)}개 적재")
+        except Exception as e:
+            on_progress(f"종목명 적재 건너뜀: {type(e).__name__}")
     return (f"OHLCV {info.get('price_tickers', 0)}종목 · "
             f"수급 {info.get('flow_ok', 0)}종목 · 펀더 {info.get('fund_ok', 0)}종목")

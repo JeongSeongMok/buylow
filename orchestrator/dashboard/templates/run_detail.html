@@ -25,7 +25,7 @@
       {% for t in trades %}
       <tr>
         <td>{{ t.time }}</td>
-        <td>{{ t.ticker }}</td>
+        <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
         <td>{% if t.buy %}<span class="ok">매수</span>{% else %}<span class="fail">매도</span>{% endif %}</td>
         <td>{{ "{:,}".format(t.qty) }}</td>
         <td>{{ t.price }}</td>
