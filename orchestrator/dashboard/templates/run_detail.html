@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
 {% block content %}
-<div class="cols2">
+<div class="cols2 fit">
   <section class="card">
     <h2>백테스트 결과
       {% if run.success %}<span class="ok">성공 ✓</span>{% else %}<span class="fail">실패 ✗</span>{% endif %}

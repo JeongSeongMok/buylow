@@ -29,9 +29,19 @@ nav.chapters a { padding: 0.35rem 0.8rem; border: 1px solid var(--border); borde
 nav.chapters a:hover { background: var(--card); }
 main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
 
+/* 넓은 페이지(전략설정·결과): 화면 폭의 85% */
+main.wide { max-width: 85vw; }
+
 /* 2컬럼 레이아웃 (좁으면 1컬럼) */
 .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
 @media (max-width: 860px) { .cols2 { grid-template-columns: 1fr; } }
+
+/* 내용 크기에 맞춰 두 컬럼을 묶어 가운데 정렬(결과 페이지: 요약이 비지 않게) */
+.cols2.fit { grid-template-columns: auto auto; justify-content: center; }
+.cols2.fit > section:first-child { max-width: 30rem; }     /* 요약 컬럼은 너무 넓지 않게 */
+.cols2.fit .scrolly { max-width: 60vw; }                    /* 거래내역 넓으면 가로 스크롤 */
+.cols2.fit .stats td small.meta { white-space: normal; }    /* 설명 문구는 컬럼 안에서 줄바꿈 허용 */
+@media (max-width: 860px) { .cols2.fit { grid-template-columns: 1fr; } }
 
 /* 상단 액션바 (저장/실행 버튼을 화면 상단에) */
 .actionbar { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; margin-bottom: 1rem; }
