@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -99,6 +101,13 @@ def _trading_days(start: date, end: date) -> list[date]:
     return [ts.date() for ts in cal.index]
 
 
+def _quiet(fn, *args, **kwargs):
+    """pykrx 호출의 stdout/stderr를 억제. 데이터 없는 종목(상폐·ETF·우선주 등)마다 pykrx가
+    'Error occurred in ...'를 찍어 콘솔이 폭주하므로 출력만 막는다(예외는 그대로 전파→상위에서 카운트)."""
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return fn(*args, **kwargs)
+
+
 def _ingest_per_ticker(tickers, end, data_dir, *, merge, on_progress,
                        flow_start=None, fund_start=None):
     """종목별 수급/펀더멘털 적재. 시작일이 None인 종류는 생략. 개별 실패는 건너뛰고 계속."""
@@ -108,12 +117,12 @@ def _ingest_per_ticker(tickers, end, data_dir, *, merge, on_progress,
     for i, tkr in enumerate(tickers, 1):
         if flow_start is not None:
             try:
-                ingest_flow(tkr, flow_start, end, data_dir, merge=merge); fok += 1
+                _quiet(ingest_flow, tkr, flow_start, end, data_dir, merge=merge); fok += 1
             except Exception:
                 ffail += 1
         if fund_start is not None:
             try:
-                ingest_fundamental(tkr, fund_start, end, data_dir, merge=merge); uok += 1
+                _quiet(ingest_fundamental, tkr, fund_start, end, data_dir, merge=merge); uok += 1
             except Exception:
                 ufail += 1
         if on_progress and (i % 50 == 0 or i == len(tickers)):
