@@ -61,7 +61,14 @@ CATALOG: list[SignalSpec] = [
         ParamSpec("roe_min", "ROE 하한(%)", "float", 8.0),
         ParamSpec("div_min", "배당수익률 하한(%)", "float", 0.0),
     ]),
-    # 수급 추종 시그널은 데이터 연동 후 추가 예정
+    SignalSpec("flow", "FLOW", "수급 추종",
+               "선택한 투자자(외국인/기관/개인)의 최근 N일 누적 순매수가 양수면 매수 우호, "
+               "음수면 매도 우호. 개인은 보통 역지표라 기본 제외. 포함 여부는 1=포함/0=제외", [
+        ParamSpec("lookback", "누적(일)", "int", 7),
+        ParamSpec("foreign", "외국인 포함(1/0)", "int", 1),
+        ParamSpec("institution", "기관 포함(1/0)", "int", 1),
+        ParamSpec("individual", "개인 포함(1/0)", "int", 0),
+    ]),
 ]
 
 DEFAULT_RULE = "(EMA AND MACD) OR RSI"

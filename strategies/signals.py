@@ -2,6 +2,8 @@
 #
 # 종류 추가 = 클래스 하나 + SIGNAL_TYPES 등록 + orchestrator/signals_catalog.py 스펙.
 # 방향은 "상태"로 평가(매일 참/거짓) — AND/OR 결합이 의미를 갖도록.
+from collections import deque
+
 from AlgorithmImports import *
 
 from orchestrator.rules import UP, DOWN, NONE
@@ -123,6 +125,36 @@ class ValueSignal:
         return UP
 
 
+class FlowSignal:
+    # 수급 추종. 선택한 투자자(외국인/기관/개인)의 최근 lookback일 누적 순매수 부호로 판단.
+    #  - 누적 > 0 → UP(매수세 추종), 누적 < 0 → DOWN(매도세), 데이터 부족/미선택 → NONE.
+    # KrxFlow 커스텀 데이터를 구독해 매 거래일 최신 순매수를 롤링 윈도우에 쌓는다(날짜 중복 방지).
+    def __init__(self, algo, symbol, lookback=7, foreign=1, institution=1, individual=0):
+        from krx_data import KrxFlow
+        self.sec = algo.add_data(KrxFlow, symbol.value, Resolution.DAILY)
+        self.lookback = int(lookback)
+        self.keys = [k for k, on in (("foreign", foreign), ("institution", institution),
+                                     ("individual", individual)) if int(on)]
+        self.window = deque(maxlen=self.lookback)
+        self._last_day = None
+
+    def direction(self):
+        if not self.keys:
+            return NONE
+        d = self.sec.get_last_data()
+        if d is not None and d.time != self._last_day:  # 새 거래일 수급만 적재(중복 방지)
+            self._last_day = d.time
+            self.window.append(sum(d[k] for k in self.keys))
+        if len(self.window) < self.lookback:  # 워밍업
+            return NONE
+        net = sum(self.window)
+        if net > 0:
+            return UP
+        if net < 0:
+            return DOWN
+        return NONE
+
+
 SIGNAL_TYPES = {
     "ema": EmaSignal,
     "macd": MacdSignal,
@@ -130,6 +162,7 @@ SIGNAL_TYPES = {
     "momentum": MomentumSignal,
     "bollinger": BollingerSignal,
     "value": ValueSignal,
+    "flow": FlowSignal,
 }
 
 

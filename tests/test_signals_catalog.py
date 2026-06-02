@@ -53,6 +53,17 @@ def test_value_signal_in_catalog():
     assert sig["params"]["roe_min"] == 10.0 and sig["params"]["div_min"] == 2.0
 
 
+def test_flow_signal_in_catalog():
+    labels = {s.label: s for s in sc.CATALOG}
+    assert "FLOW" in labels and labels["FLOW"].type == "flow"
+    # 주체 조합(외국인+개인, 5일) — 0/1 플래그가 int로 캐스팅
+    sig = sc.signals_from_form({"FLOW__lookback": "5", "FLOW__foreign": "1",
+                                "FLOW__institution": "0", "FLOW__individual": "1"})["FLOW"]
+    assert sig["params"]["lookback"] == 5
+    assert sig["params"]["foreign"] == 1 and sig["params"]["institution"] == 0
+    assert sig["params"]["individual"] == 1
+
+
 def test_descriptions_hide_internal_tokens():
     # 사용자 노출 설명에 내부 신호값(UP/DOWN/NONE)이 없어야 함
     for spec in sc.CATALOG:
