@@ -59,21 +59,20 @@ Every Claude session working in this repo follows these:
 
 ## 3. Current status
 
-**Working (backtest path is complete):**
+**Essentially complete except live trading.** The whole backtest path — data, strategy, backtest, results — works end to end; only Toss live is gated.
+
 - LEAN integration (NuGet + thin launcher, C#/Python e2e); KRX-correct stats (Asia/Seoul TZ + constant risk-free rate)
-- Data ETL — price (OHLCV), 수급 (investor flows), fundamentals (PER/PBR)
-- **Data update** — one '데이터 최신화' path shared by the button and the daily scheduler: incremental from last loaded date to today over the whole market; dashboard shows the latest loaded date
-- Orchestrator — LEAN Runner, SQLite persistence, FastAPI Control API, dashboard tabs (전략 설정 / 백테스트 / 데이터 / 설정 / 작업중); landing = 전략 설정
-- Background-job backtests with live log + **progress %**
-- **Rule engine** — condition-group builder (AND within a group, OR across groups); single persisted strategy
-- Signals — EMA/MACD/RSI/momentum + **Bollinger (mean-reversion w/ breakout switch)**
-- Universe — scan all loaded tickers + **index bulk-add (KOSPI200/KOSDAQ150)**; portfolio caps concurrent holdings (top by liquidity) so over-diversification still trades
-- **Risk management** (global per-security stop-loss/take-profit/trailing)
-- Korean-friendly result page (억/만원); config & secrets (env → config.local.yaml → dashboard)
+- Data — one '데이터 최신화' path (button + daily scheduler): whole-market incremental per data type (price by-date, fundamentals by-date cross-section, flow per-ticker), 5y backfill when empty; code→name map (`etl.names`); dashboard shows latest loaded date, search, per-ticker detail with date filter
+- Orchestrator — LEAN Runner, SQLite persistence, FastAPI Control API; dashboard tabs (전략 설정 / 백테스트 / 데이터 / 설정 / 작업중), landing = 전략 설정; 2-column layouts, no-wrap tables, scroll
+- Background-job backtests with live log + progress %; run history; Korean result summary (억/만원) + **trade history** (date/name/side/qty/amount/reason; risk tag > signal reason)
+- **Rule engine** — condition-group builder (AND within group, OR across groups); single persisted strategy; signal-hold period
+- **Signals (7)** — EMA, MACD, RSI, momentum, Bollinger (mean-reversion + breakout switch), value (저PER/저PBR + derived ROE), flow (수급: foreign/inst/individual selectable, N-day cumulative)
+- Universe — scan all loaded + index bulk-add (KOSPI200/KOSDAQ150) + name/code search; portfolio is **long-only** + concurrent-holding cap (top by liquidity)
+- **Risk management** (global per-security stop-loss/take-profit/trailing); config & secrets (env → config.local.yaml → dashboard)
 
 **Not done / gated:**
-- ⛔ **Toss live trading** (`TossBrokerage`/`TossDataQueueHandler`, `MyTrading.Toss.dll`) — gated on Toss API (not open). Only piece needing the broker API.
-- Korea-specific signals (수급 추종·가치/저PBR) into the rule engine, minute-bar ETL (intraday), parameter optimization, OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
+- ⛔ **Toss live trading** (`TossBrokerage`/`TossDataQueueHandler`, `MyTrading.Toss.dll`) — gated on Toss API (not open). Only piece needing the broker API; live execution engine depends on it.
+- Minute-bar ETL (intraday/변동성 돌파), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
 - (No AI/NL strategy generation — intentionally out of scope.)
 
 > See `README.md` 로드맵 for the up-to-date checklist.
