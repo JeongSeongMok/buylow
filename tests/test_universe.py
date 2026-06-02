@@ -23,26 +23,28 @@ def test_ingest_all_market_skips_flow_when_no_trading_days(tmp_path, monkeypatch
 
 
 def test_update_all_market_backfills_missing_fundamental(tmp_path, monkeypatch):
-    # 가격·수급은 최신(5/29), 펀더멘털만 비어 있으면 → 펀더멘털만 과거(5년) 백필, 수급은 신규 거래일 없어 생략
+    # 펀더멘털만 비어 있으면 → 펀더멘털(단면)만 과거 5년 백필. 수급 갭에 거래일 없으면 수급은 생략.
     import etl.universe as u
     import etl.catalog as cat
+    import etl.fundamental as fund
     import orchestrator.config as cfg
     monkeypatch.setattr(cat, "latest_loaded_date",
                         lambda d, kind="price": {"price": "2026-05-29", "flow": "2026-05-29",
                                                  "fundamental": None}[kind])
     monkeypatch.setattr(u, "ingest_universe", lambda *a, **k: {"ingested": 0, "trading_days": 0})
     monkeypatch.setattr(cfg, "apply_krx_credentials", lambda: True)
-    monkeypatch.setattr(u, "list_universe", lambda *a, **k: ["005930"])
-    monkeypatch.setattr(u, "_trading_days", lambda s, e: [date(2026, 5, 29)])  # 5/29만 거래일
+    monkeypatch.setattr(u, "_trading_days", lambda s, e: [])  # 수급 갭에 거래일 없음 → 수급 생략
     cap = {}
-    monkeypatch.setattr(u, "_ingest_per_ticker",
-                        lambda tickers, end, data_dir, *, merge, on_progress, flow_start, fund_start:
-                        cap.update(flow_start=flow_start, fund_start=fund_start) or (0, 0, 1, 0))
+    monkeypatch.setattr(fund, "ingest_fundamental_universe",
+                        lambda start, end, data_dir, **k: cap.update(fund_start=start) or {"tickers": 7})
+    flow_calls = {"n": 0}
+    monkeypatch.setattr(u, "_ingest_flow_per_ticker",
+                        lambda *a, **k: flow_calls.__setitem__("n", flow_calls["n"] + 1) or (0, 0))
 
-    u.update_all_market(tmp_path)
-    assert cap["flow_start"] is None          # 수급 갭(5/30~)엔 거래일 없음 → 생략
-    assert cap["fund_start"] is not None       # 펀더멘털은 비어 있어 과거부터 백필
-    assert cap["fund_start"].year <= date.today().year - 4
+    info = u.update_all_market(tmp_path)
+    assert cap["fund_start"].year <= date.today().year - 4   # 펀더멘털은 비어 5년 백필
+    assert info["fund_ok"] == 7
+    assert flow_calls["n"] == 0                              # 수급은 신규 거래일 없어 생략(per-ticker 미호출)
 
 
 @pytest.mark.integration
