@@ -1,49 +1,59 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card">
-  <h2>백테스트 결과
-    {% if run.success %}<span class="ok">성공 ✓</span>{% else %}<span class="fail">실패 ✗</span>{% endif %}
-  </h2>
-  <p class="meta">{{ run.created_at }}</p>
+<div class="cols2">
+  <section class="card">
+    <h2>백테스트 결과
+      {% if run.success %}<span class="ok">성공 ✓</span>{% else %}<span class="fail">실패 ✗</span>{% endif %}
+    </h2>
+    <p class="meta">{{ run.created_at[:10] }} {{ run.created_at[11:13] }}시{{ run.created_at[14:16] }}분{{ run.created_at[17:19] }}초</p>
 
-  <table class="stats">
-    {% for r in summary %}
-    <tr>
-      <th>{{ r.label }}</th>
-      <td><b>{{ r.value }}</b>{% if r.note %} <small class="meta">{{ r.note }}</small>{% endif %}</td>
-    </tr>
-    {% else %}
-    <tr><td class="empty">통계 없음</td></tr>
-    {% endfor %}
-  </table>
-
-  {% if trades %}
-  <h3>거래 내역 <small>{{ trades|length }}건</small></h3>
-  <table class="runs">
-    <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>금액</th><th>사유</th></tr></thead>
-    <tbody>
-      {% for t in trades %}
-      <tr>
-        <td>{{ t.time }}</td>
-        <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
-        <td>{% if t.buy %}<span class="ok">매수</span>{% else %}<span class="fail">매도</span>{% endif %}</td>
-        <td>{{ "{:,}".format(t.qty) }}</td>
-        <td>{{ t.price }}</td>
-        <td>{{ t.amount }}</td>
-        <td class="meta">{{ t.reason }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  <details>
-    <summary class="meta">원본 통계 전체 보기</summary>
     <table class="stats">
-      {% for k, v in run.statistics.items() %}
-      <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+      {% for r in summary %}
+      <tr>
+        <th>{{ r.label }}</th>
+        <td><b>{{ r.value }}</b>{% if r.note %} <small class="meta">{{ r.note }}</small>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td class="empty">통계 없음</td></tr>
       {% endfor %}
     </table>
-  </details>
-</section>
+
+    <details>
+      <summary class="meta">원본 통계 전체 보기</summary>
+      <div class="scrolly">
+        <table class="stats">
+          {% for k, v in run.statistics.items() %}
+          <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>거래 내역 <small>{{ trades|length }}건</small></h2>
+    {% if trades %}
+    <div class="scrolly">
+      <table class="runs">
+        <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>금액</th><th>사유</th></tr></thead>
+        <tbody>
+          {% for t in trades|reverse %}
+          <tr>
+            <td>{{ t.time }}</td>
+            <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
+            <td>{% if t.buy %}<span class="ok">매수</span>{% else %}<span class="fail">매도</span>{% endif %}</td>
+            <td>{{ "{:,}".format(t.qty) }}</td>
+            <td>{{ t.price }}</td>
+            <td>{{ t.amount }}</td>
+            <td class="meta">{{ t.reason }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="meta">체결된 거래가 없습니다.</p>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}

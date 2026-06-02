@@ -7,7 +7,7 @@
     <tbody>
       {% for r in runs %}
       <tr>
-        <td>{{ r.created_at }}</td>
+        <td>{{ r.created_at[:10] }} {{ r.created_at[11:13] }}시{{ r.created_at[14:16] }}분{{ r.created_at[17:19] }}초</td>
         <td>{% if r.success %}✅{% else %}❌{% endif %}</td>
         <td>{{ r.statistics.get("Net Profit", "-") }}</td>
         <td>{{ r.statistics.get("Total Orders", "-") }}</td>

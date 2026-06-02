@@ -2,118 +2,158 @@
 {% block content %}
 {% if data_loaded == 0 %}
 <p class="notice">⚠️ 적재된 과거 데이터가 없습니다. 백테스트엔 데이터가 필요해요 —
-  먼저 <a href="/settings">설정</a>에서 <b>[데이터 최신화]</b>를 실행하세요.</p>
+  <a href="/data">데이터</a> 탭에서 <b>[데이터 최신화]</b>를 먼저 실행하세요.</p>
 {% endif %}
-<section class="card">
-  <h2>백테스트 실행</h2>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if not has_strategy %}
-  <p class="meta">아직 저장된 전략이 없습니다. 먼저 <a href="/strategy">전략 설정</a>에서 전략을 만들어 저장하세요.</p>
-  {% else %}
-  <p class="meta">저장된 전략(<a href="/strategy">전략 설정</a>)을 아래 조건으로 실행합니다.
-    초기자본은 <b>1억원으로 고정</b>됩니다.</p>
-  <form method="post" action="/backtest">
-    <label>기간
-      <span class="dates">
-        <input type="date" name="start" id="start" value="{{ start_default }}">
-        <span class="meta">~</span>
-        <input type="date" name="end" id="end" value="{{ end_default }}">
-      </span>
-    </label>
-    <div class="quick">시작일 빠른 설정:
-      <button type="button" class="ghost" onclick="setStart('1w')">1주 전</button>
-      <button type="button" class="ghost" onclick="setStart('1m')">1달 전</button>
-      <button type="button" class="ghost" onclick="setStart('3m')">3달 전</button>
-      <button type="button" class="ghost" onclick="setStart('6m')">6달 전</button>
-      <button type="button" class="ghost" onclick="setStart('1y')">1년 전</button>
-    </div>
-    <hr>
-    <div id="universe-box">
-      <label>종목 추가</label>
-      <div class="add-row">
-        <input type="text" id="ticker-input" placeholder="예: 005930"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();addTicker();}">
-        <button type="button" class="ghost" onclick="addTicker()">추가</button>
-        <button type="button" class="ghost" onclick="clearTickers()">비우기</button>
-      </div>
-      <div class="add-row">
-        <span class="meta">인덱스 일괄추가</span>
-        <button type="button" class="ghost" onclick="addIndex('KOSPI200')">KOSPI200 추가</button>
-        <button type="button" class="ghost" onclick="addIndex('KOSDAQ150')">KOSDAQ150 추가</button>
-      </div>
-      <div id="chips"></div>
-      <input type="hidden" name="universe" id="universe-hidden" value="005930">
-    </div>
-    <label class="cond"><input type="checkbox" name="universe_all" value="1" id="universe-all"
-           onchange="toggleAll()"> 전체 종목 대상 <small>(적재된 전 종목 스캔 · 보유는 최대 {{ max_positions }}종목)</small></label>
-    <button type="submit">백테스트 실행</button>
-  </form>
-  <script>
-    // 시작일 빠른 설정 — 오늘 기준 상대 날짜
-    function setStart(kind) {
-      const d = new Date();
-      if (kind === '1w') d.setDate(d.getDate() - 7);
-      else if (kind === '1m') d.setMonth(d.getMonth() - 1);
-      else if (kind === '3m') d.setMonth(d.getMonth() - 3);
-      else if (kind === '6m') d.setMonth(d.getMonth() - 6);
-      else if (kind === '1y') d.setFullYear(d.getFullYear() - 1);
-      document.getElementById('start').value = d.toISOString().slice(0, 10);
-    }
-    // 종목 칩 관리 — hidden universe(쉼표구분)에 동기화
-    const CHIP_LIMIT = 40;  // 칩이 너무 많으면(인덱스 일괄추가 등) 일부만 표시
-    let tickers = (document.getElementById('universe-hidden').value || '').split(',').filter(Boolean);
-    function syncTickers() {
-      const box = document.getElementById('chips');
-      box.innerHTML = '';
-      tickers.slice(0, CHIP_LIMIT).forEach((t, i) => {
-        const chip = document.createElement('span');
-        chip.className = 'chip';
-        chip.textContent = t;
-        const x = document.createElement('a');
-        x.href = '#'; x.textContent = '×';
-        x.onclick = (e) => { e.preventDefault(); tickers.splice(i, 1); syncTickers(); };
-        chip.appendChild(x);
-        box.appendChild(chip);
-      });
-      if (tickers.length > CHIP_LIMIT) {
-        const more = document.createElement('span');
-        more.className = 'meta';
-        more.textContent = ` 외 ${tickers.length - CHIP_LIMIT}종목 (총 ${tickers.length})`;
-        box.appendChild(more);
-      }
-      document.getElementById('universe-hidden').value = tickers.join(',');
-    }
-    function addTicker() {
-      const inp = document.getElementById('ticker-input');
-      const v = inp.value.trim();
-      if (v && !tickers.includes(v)) tickers.push(v);
-      inp.value = '';
-      syncTickers();
-    }
-    function clearTickers() { tickers = []; syncTickers(); }
-    async function addIndex(name) {
-      try {
-        const res = await fetch('/universe/index/' + name);
-        const data = await res.json();
-        if (data.error) { alert(data.error); return; }
-        data.tickers.forEach(t => { if (!tickers.includes(t)) tickers.push(t); });
-        syncTickers();
-      } catch (e) { alert('인덱스 구성종목 조회 실패'); }
-    }
-    function toggleAll() {
-      const on = document.getElementById('universe-all').checked;
-      const box = document.getElementById('universe-box');
-      box.classList.toggle('disabled', on);
-      document.getElementById('ticker-input').disabled = on;
-      box.querySelectorAll('button').forEach(b => b.disabled = on);
-    }
-    syncTickers();
-  </script>
-  {% endif %}
-</section>
 
-<section class="card">
-  <h2>실행 이력</h2>
-  {% include "partials/runs_table.html" %}
-</section>
+<div class="cols2">
+  <section class="card">
+    <h2>백테스트 실행</h2>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% if not has_strategy %}
+    <p class="meta">아직 저장된 전략이 없습니다. 먼저 <a href="/strategy">전략 설정</a>에서 전략을 만들어 저장하세요.</p>
+    {% else %}
+    <form method="post" action="/backtest">
+      <div class="actionbar"><span class="grow"></span><button type="submit">백테스트 실행</button></div>
+
+      <p class="meta">초기자본은 <b>1억원으로 고정</b>됩니다.</p>
+
+      <label>기간
+        <span class="dates">
+          <input type="date" name="start" id="start" value="{{ start_default }}">
+          <span class="meta">~</span>
+          <input type="date" name="end" id="end" value="{{ end_default }}">
+        </span>
+      </label>
+      <div class="quick">시작일 빠른 설정:
+        <button type="button" class="ghost" onclick="setStart('1w')">1주 전</button>
+        <button type="button" class="ghost" onclick="setStart('1m')">1달 전</button>
+        <button type="button" class="ghost" onclick="setStart('3m')">3달 전</button>
+        <button type="button" class="ghost" onclick="setStart('6m')">6달 전</button>
+        <button type="button" class="ghost" onclick="setStart('1y')">1년 전</button>
+      </div>
+      <hr>
+
+      <div id="universe-box">
+        <label>종목 추가</label>
+        <div class="add-row">
+          <span class="meta">인덱스 일괄추가</span>
+          <button type="button" class="ghost" onclick="addIndex('KOSPI200')">KOSPI200</button>
+          <button type="button" class="ghost" onclick="addIndex('KOSDAQ150')">KOSDAQ150</button>
+        </div>
+        <div class="add-row search-wrap">
+          <input type="text" id="ticker-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();addTyped();}">
+          <button type="button" class="ghost" onclick="addTyped()">추가</button>
+          <button type="button" class="ghost" onclick="clearTickers()">비우기</button>
+          <div id="search-results" class="search-results" hidden></div>
+        </div>
+        <label class="cond"><input type="checkbox" name="universe_all" value="1" id="universe-all"
+               onchange="toggleAll()"> 전체 종목 대상 <small>(적재 전 종목 스캔 · 보유 최대 {{ max_positions }})</small></label>
+        <p class="meta spaced">추가된 종목 <span id="chip-count"></span></p>
+        <div id="chips"></div>
+        <input type="hidden" name="universe" id="universe-hidden" value="005930">
+      </div>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>실행 이력</h2>
+    <div class="scrolly">{% include "partials/runs_table.html" %}</div>
+  </section>
+</div>
+
+{% if has_strategy %}
+<script>
+  const NAMES = {{ names|tojson }};
+  function setStart(kind) {
+    const d = new Date();
+    if (kind === '1w') d.setDate(d.getDate() - 7);
+    else if (kind === '1m') d.setMonth(d.getMonth() - 1);
+    else if (kind === '3m') d.setMonth(d.getMonth() - 3);
+    else if (kind === '6m') d.setMonth(d.getMonth() - 6);
+    else if (kind === '1y') d.setFullYear(d.getFullYear() - 1);
+    document.getElementById('start').value = d.toISOString().slice(0, 10);
+  }
+
+  const CHIP_LIMIT = 60;
+  let tickers = (document.getElementById('universe-hidden').value || '').split(',').filter(Boolean);
+  function label(code) { return NAMES[code] ? (NAMES[code] + ' ' + code) : code; }
+  function syncTickers() {
+    const box = document.getElementById('chips');
+    box.innerHTML = '';
+    tickers.slice(0, CHIP_LIMIT).forEach((t, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = label(t);
+      const x = document.createElement('a');
+      x.href = '#'; x.textContent = '×';
+      x.onclick = (e) => { e.preventDefault(); tickers.splice(i, 1); syncTickers(); };
+      chip.appendChild(x);
+      box.appendChild(chip);
+    });
+    if (tickers.length > CHIP_LIMIT) {
+      const more = document.createElement('span'); more.className = 'meta';
+      more.textContent = ` 외 ${tickers.length - CHIP_LIMIT}종목`;
+      box.appendChild(more);
+    }
+    document.getElementById('chip-count').textContent = `(${tickers.length})`;
+    document.getElementById('universe-hidden').value = tickers.join(',');
+  }
+  function addCode(code) { if (code && !tickers.includes(code)) tickers.push(code); syncTickers(); }
+
+  // 종목명/코드 검색 — 임베드된 NAMES에서 클라이언트 필터
+  const sIn = document.getElementById('ticker-search');
+  const sRes = document.getElementById('search-results');
+  function doSearch() {
+    const q = sIn.value.trim().toLowerCase();
+    sRes.innerHTML = '';
+    if (!q) { sRes.hidden = true; return; }
+    let n = 0;
+    for (const code in NAMES) {
+      if (code.includes(q) || NAMES[code].toLowerCase().includes(q)) {
+        const d = document.createElement('div');
+        d.textContent = NAMES[code];
+        const s = document.createElement('small'); s.textContent = code; d.appendChild(s);
+        d.onclick = () => { addCode(code); sIn.value = ''; sRes.hidden = true; };
+        sRes.appendChild(d);
+        if (++n >= 30) break;
+      }
+    }
+    sRes.hidden = (n === 0);
+  }
+  function addTyped() {
+    const v = sIn.value.trim();
+    if (!v) return;
+    // 코드 형태면 그대로, 아니면 검색 첫 결과 코드
+    if (/^\d{6}$/.test(v)) { addCode(v); }
+    else {
+      const q = v.toLowerCase();
+      for (const code in NAMES) { if (NAMES[code].toLowerCase().includes(q)) { addCode(code); break; } }
+    }
+    sIn.value = ''; sRes.hidden = true;
+  }
+  sIn.addEventListener('input', doSearch);
+  document.addEventListener('click', (e) => { if (!sRes.contains(e.target) && e.target !== sIn) sRes.hidden = true; });
+
+  function clearTickers() { tickers = []; syncTickers(); }
+  async function addIndex(name) {
+    try {
+      const res = await fetch('/universe/index/' + name);
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      data.tickers.forEach(t => { if (!tickers.includes(t)) tickers.push(t); });
+      syncTickers();
+    } catch (e) { alert('인덱스 구성종목 조회 실패'); }
+  }
+  function toggleAll() {
+    const on = document.getElementById('universe-all').checked;
+    const box = document.getElementById('universe-box');
+    box.classList.toggle('disabled', on);
+    sIn.disabled = on;
+    box.querySelectorAll('button').forEach(b => b.disabled = on);
+  }
+  syncTickers();
+</script>
+{% endif %}
 {% endblock %}

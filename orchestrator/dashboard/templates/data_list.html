@@ -1,24 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
 <section class="card">
-  <h2>적재된 데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
-  <p class="meta">data: <code>{{ data_dir }}</code> · 적재/최신화는 <a href="/settings">설정</a>에서.
-    상세 수치는 종목별 <b>보기</b>에서 확인하세요.</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <table class="runs">
-    <thead><tr><th>종목</th><th>가격</th><th>수급</th><th></th></tr></thead>
-    <tbody>
-      {% for t in tickers %}
-      <tr>
-        <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
-        <td>{% if t.price %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
-        <td>{% if t.flow %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
-        <td><a href="/data/{{ t.ticker }}">보기</a></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4" class="empty">적재된 데이터가 없습니다. 설정에서 적재하세요.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <h2>데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
+  <p class="meta"><b>데이터 최신화</b>를 누르면 한국시장 전 종목의 가격(OHLCV)·수급·펀더멘털(PER/PBR)을
+    종류별로 마지막 적재일 다음날부터 오늘까지 부족한 구간만 채웁니다(비어있는 종류는 최근 5년 백필).
+    수급·펀더멘털은 KRX 로그인(설정)이 있을 때만 받습니다.</p>
+  {% if count == 0 %}
+  <p class="notice">아직 적재된 데이터가 없습니다. <b>데이터 최신화</b>를 한 번 눌러 최초 적재하세요.</p>
+  {% endif %}
+  <form method="post" action="/data/update"><button type="submit">데이터 최신화</button></form>
 </section>
+
+<section class="card">
+  <h2>적재 현황</h2>
+  <label>검색 <input type="text" id="data-search" placeholder="종목명 또는 코드" oninput="filterData()"></label>
+  <div class="scrolly">
+    <table class="runs" id="data-table">
+      <thead><tr><th>종목</th><th>가격</th><th>수급</th><th></th></tr></thead>
+      <tbody>
+        {% for t in tickers %}
+        <tr data-q="{{ t.name|lower }} {{ t.ticker }}">
+          <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
+          <td>{% if t.price %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
+          <td>{% if t.flow %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
+          <td><a href="/data/{{ t.ticker }}">보기</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty">적재된 데이터가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<script>
+  function filterData() {
+    const q = document.getElementById('data-search').value.trim().toLowerCase();
+    document.querySelectorAll('#data-table tbody tr').forEach(tr => {
+      const hay = tr.getAttribute('data-q') || '';
+      tr.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+    });
+  }
+</script>
 {% endblock %}

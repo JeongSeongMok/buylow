@@ -235,12 +235,14 @@ def register_dashboard(
     @app.get("/backtest", response_class=HTMLResponse)
     def backtest_page(request: Request):
         from datetime import date, timedelta
+        from etl.names import load_names
         today = date.today()
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
             "has_strategy": config.get_strategy() is not None,
             "data_loaded": _loaded_count(),
             "default_data_folder": config.get_data_folder(),
+            "names": load_names(config.get_data_folder()),  # 종목명 검색·칩 표시용(클라이언트 임베드)
             "start_default": (today - timedelta(days=90)).isoformat(),  # 3개월 전
             "end_default": (today - timedelta(days=1)).isoformat(),     # 오늘 - 1
             "cash": BACKTEST_CASH,
@@ -325,6 +327,7 @@ def register_dashboard(
             "param_value": signals_catalog.param_value,
             "risk": config.risk_form_values(),
             "data_loaded": _loaded_count(),
+            "saved_exists": config.get_strategy() is not None,
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })
@@ -376,8 +379,14 @@ def register_dashboard(
     @app.get("/data/{ticker}", response_class=HTMLResponse)
     def data_detail(request: Request, ticker: str):
         from etl import catalog
-        summary = catalog.ticker_summary(config.get_data_folder(), ticker)
-        return templates.TemplateResponse(request, "data_detail.html", {"d": summary})
+        from etl.names import load_names
+        data_dir = config.get_data_folder()
+        # 전체 날짜를 최신순으로(스크롤 + 날짜 필터는 화면에서). 한 종목이라 비용 작음.
+        price = list(reversed(catalog.read_price_daily(data_dir, ticker)))
+        flow = list(reversed(catalog.read_flow(data_dir, ticker)))
+        return templates.TemplateResponse(request, "data_detail.html", {
+            "ticker": ticker, "name": load_names(data_dir).get(ticker, ""),
+            "price": price, "flow": flow})
 
     @app.post("/data/update")
     def update_data(request: Request):

@@ -29,42 +29,52 @@ class SignalSpec:
 # 기본 라벨 = type 키를 대문자로. 식에서 EMA/MACD/RSI/MOM 으로 참조.
 # 설명은 사용자 친화 표현(매수/매도/중립)만 — 내부 신호값(UP/DOWN/NONE)은 노출하지 않는다.
 CATALOG: list[SignalSpec] = [
-    SignalSpec("ema", "EMA", "이동평균 추세", "단기 이동평균이 장기 이동평균보다 높으면 매수 우호, 낮으면 매도 우호", [
-        ParamSpec("fast", "단기 이동평균", "int", 12),
-        ParamSpec("slow", "장기 이동평균", "int", 26),
+    SignalSpec("ema", "EMA", "이동평균 추세(EMA 교차)",
+               "단기·장기 지수이동평균(EMA)의 교차로 추세를 본다. 단기선이 장기선 위에 있으면 상승 추세로 "
+               "보고 매수 우호, 아래면 매도 우호. 숫자가 작을수록 가격 변화에 민감(잦은 신호), 클수록 둔감(추세 위주).", [
+        ParamSpec("fast", "단기 이동평균(일)", "int", 12),
+        ParamSpec("slow", "장기 이동평균(일)", "int", 26),
     ]),
-    SignalSpec("macd", "MACD", "MACD", "MACD선이 시그널선 위면 매수 우호, 아래면 매도 우호", [
-        ParamSpec("fast", "단기", "int", 12),
-        ParamSpec("slow", "장기", "int", 26),
-        ParamSpec("signal", "시그널", "int", 9),
+    SignalSpec("macd", "MACD", "MACD (추세·모멘텀)",
+               "단기 EMA와 장기 EMA의 차이(MACD선)와 그 평활선(시그널선)을 비교한다. MACD선이 시그널선 위로 "
+               "올라오면 상승 모멘텀으로 보고 매수 우호, 아래로 내려가면 매도 우호. EMA 교차보다 전환을 빨리 잡는 편.", [
+        ParamSpec("fast", "단기(일)", "int", 12),
+        ParamSpec("slow", "장기(일)", "int", 26),
+        ParamSpec("signal", "시그널(일)", "int", 9),
     ]),
-    SignalSpec("rsi", "RSI", "RSI 과열도", "과매도 구간이면 매수 우호, 과매수 구간이면 매도 우호, 중간은 중립", [
-        ParamSpec("period", "기간", "int", 14),
-        ParamSpec("oversold", "과매도(%)", "float", 30),
-        ParamSpec("overbought", "과매수(%)", "float", 70),
+    SignalSpec("rsi", "RSI", "RSI 과열도(역추세)",
+               "최근 상승/하락 강도를 0~100으로 나타낸다. 과매도(하한 아래)면 반등을 노려 매수 우호, "
+               "과매수(상한 위)면 매도 우호, 중간 구간은 중립. 횡보장에서 잘 맞고 강한 추세장에선 일찍 반대 신호가 날 수 있음.", [
+        ParamSpec("period", "기간(일)", "int", 14),
+        ParamSpec("oversold", "과매도 기준(%)", "float", 30),
+        ParamSpec("overbought", "과매수 기준(%)", "float", 70),
     ]),
-    SignalSpec("momentum", "MOM", "모멘텀", "최근 N일 수익률이 플러스면 매수 우호, 마이너스면 매도 우호", [
-        ParamSpec("lookback", "관측(일)", "int", 60),
+    SignalSpec("momentum", "MOM", "모멘텀(수익률)",
+               "최근 N일 수익률의 부호로 추세를 본다. N일 전보다 올랐으면 매수 우호, 내렸으면 매도 우호. "
+               "단순하지만 강한 추세를 잘 따라감. N이 길수록 장기 추세, 짧을수록 단기 변동에 반응.", [
+        ParamSpec("lookback", "관측 기간(일)", "int", 60),
     ]),
-    SignalSpec("bollinger", "BB", "볼린저밴드(평균회귀+돌파전환)",
-               "기본은 평균회귀(상단 터치=매도 우호·하단 터치=매수 우호). 단 상단을 스위칭% 이상 "
-               "강하게 돌파하면 매수로, 하단을 그만큼 이탈하면 매도로 전환", [
-        ParamSpec("period", "기간", "int", 20),
+    SignalSpec("bollinger", "BB", "볼린저밴드(평균회귀+돌파 전환)",
+               "이동평균 ± (표준편차×배수)로 밴드를 그린다. 기본은 평균회귀 — 상단 터치=매도 우호, 하단 터치=매수 우호. "
+               "다만 상단을 '돌파 전환 임계%' 이상 강하게 뚫으면 추세 시작으로 보고 매수로 전환, 하단을 그만큼 이탈하면 매도로 전환.", [
+        ParamSpec("period", "기간(일)", "int", 20),
         ParamSpec("k", "표준편차 배수", "float", 2.0),
         ParamSpec("switch_pct", "돌파 전환 임계(%)", "float", 1.0),
     ]),
     SignalSpec("value", "VAL", "저평가(가치)",
-               "저PER·저PBR이면서 ROE(=PBR/PER)가 기준 이상이면 매수 우호(싼 우량주). "
-               "ROE 조건으로 '싸기만 한' 가치 함정을 거른다. 배당수익률 하한은 선택", [
+               "펀더멘털(PER·PBR·배당)로 '싼 우량주'를 고른다. PER·PBR이 상한 이하이고 ROE(=PBR/PER)가 하한 이상이면 "
+               "매수 우호. ROE 조건이 '싸기만 하고 돈은 못 버는' 가치 함정을 걸러준다. 매수 필터형이라 단독보다 타이밍 신호와 함께 쓰면 좋음. "
+               "(펀더멘털 데이터 적재 필요)", [
         ParamSpec("per_max", "PER 상한", "float", 10.0),
         ParamSpec("pbr_max", "PBR 상한", "float", 1.0),
         ParamSpec("roe_min", "ROE 하한(%)", "float", 8.0),
         ParamSpec("div_min", "배당수익률 하한(%)", "float", 0.0),
     ]),
     SignalSpec("flow", "FLOW", "수급 추종",
-               "선택한 투자자(외국인/기관/개인)의 최근 N일 누적 순매수가 양수면 매수 우호, "
-               "음수면 매도 우호. 개인은 보통 역지표라 기본 제외", [
-        ParamSpec("lookback", "누적(일)", "int", 7),
+               "선택한 투자자(외국인·기관·개인)의 최근 N거래일 누적 순매수 방향을 따라간다. 누적이 양수(순매수)면 "
+               "매수 우호, 음수(순매도)면 매도 우호. 개인은 보통 역지표라 기본 제외. N이 짧으면 신호가 자주 바뀌니 "
+               "잡음이 많으면 N을 늘리세요. (수급 데이터 적재 필요)", [
+        ParamSpec("lookback", "누적 기간(일)", "int", 7),
         ParamSpec("foreign", "외국인", "bool", 1),
         ParamSpec("institution", "기관", "bool", 1),
         ParamSpec("individual", "개인", "bool", 0),

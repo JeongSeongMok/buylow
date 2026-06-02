@@ -1,43 +1,69 @@
 {% extends "base.html" %}
 {% block content %}
-<p><a href="/data">← 데이터 목록</a></p>
 <section class="card">
-  <h2>{{ d.ticker }}</h2>
-
-  <h3>가격(일봉)
-    <small>{% if d.price.count %}{{ d.price.count }}일 · {{ d.price.first }} ~ {{ d.price.last }}{% else %}없음{% endif %}</small>
-  </h3>
-  {% if d.price.recent %}
-  <table class="runs">
-    <thead><tr><th>날짜</th><th>시가</th><th>고가</th><th>저가</th><th>종가</th><th>거래량</th></tr></thead>
-    <tbody>
-      {% for r in d.price.recent %}
-      <tr><td>{{ r.date }}</td>
-        <td>{{ "{:,.0f}".format(r.open) }}</td>
-        <td>{{ "{:,.0f}".format(r.high) }}</td>
-        <td>{{ "{:,.0f}".format(r.low) }}</td>
-        <td>{{ "{:,.0f}".format(r.close) }}</td>
-        <td>{{ "{:,}".format(r.volume) }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  <h3>수급 (순매수, 억원)
-    <small>{% if d.flow.count %}{{ d.flow.count }}행 · {{ d.flow.first }} ~ {{ d.flow.last }}{% else %}없음{% endif %}</small>
-  </h3>
-  {% if d.flow.recent %}
-  <table class="runs">
-    <thead><tr><th>날짜</th><th>외국인</th><th>기관</th><th>개인</th></tr></thead>
-    <tbody>
-      {% for r in d.flow.recent %}
-      <tr><td>{{ r.date }}</td>
-        <td>{{ "{:,.0f}".format(r.foreign / 100000000) }}</td>
-        <td>{{ "{:,.0f}".format(r.institution / 100000000) }}</td>
-        <td>{{ "{:,.0f}".format(r.individual / 100000000) }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
+  <h2>{% if name %}{{ name }} <small class="meta">{{ ticker }}</small>{% else %}{{ ticker }}{% endif %}</h2>
+  <div class="quick">날짜
+    <input type="date" id="from" onchange="filterDates()"> ~
+    <input type="date" id="to" onchange="filterDates()">
+    <button type="button" class="ghost" onclick="document.getElementById('from').value='';document.getElementById('to').value='';filterDates()">전체</button>
+    <span class="meta">두 표에 동시 적용</span>
+  </div>
 </section>
+
+<div class="cols2">
+  <section class="card">
+    <h3>가격(일봉) <small>{{ price|length }}일{% if price %} · {{ price[-1].date }} ~ {{ price[0].date }}{% endif %}</small></h3>
+    {% if price %}
+    <div class="scrolly">
+      <table class="runs" id="price-tbl">
+        <thead><tr><th>날짜</th><th>시가</th><th>고가</th><th>저가</th><th>종가</th><th>거래량</th></tr></thead>
+        <tbody>
+          {% for r in price %}
+          <tr data-d="{{ r.date }}">
+            <td>{{ r.date }}</td>
+            <td>{{ "{:,.0f}".format(r.open) }}</td>
+            <td>{{ "{:,.0f}".format(r.high) }}</td>
+            <td>{{ "{:,.0f}".format(r.low) }}</td>
+            <td>{{ "{:,.0f}".format(r.close) }}</td>
+            <td>{{ "{:,}".format(r.volume) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="meta">가격 데이터 없음</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h3>수급 (순매수, 억원) <small>{{ flow|length }}행{% if flow %} · {{ flow[-1].date }} ~ {{ flow[0].date }}{% endif %}</small></h3>
+    {% if flow %}
+    <div class="scrolly">
+      <table class="runs" id="flow-tbl">
+        <thead><tr><th>날짜</th><th>외국인</th><th>기관</th><th>개인</th></tr></thead>
+        <tbody>
+          {% for r in flow %}
+          <tr data-d="{{ r.date }}">
+            <td>{{ r.date }}</td>
+            <td>{{ "{:,.0f}".format(r.foreign / 100000000) }}</td>
+            <td>{{ "{:,.0f}".format(r.institution / 100000000) }}</td>
+            <td>{{ "{:,.0f}".format(r.individual / 100000000) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="meta">수급 데이터 없음</p>{% endif %}
+  </section>
+</div>
+<script>
+  function filterDates() {
+    const f = document.getElementById('from').value;
+    const t = document.getElementById('to').value;
+    document.querySelectorAll('#price-tbl tbody tr, #flow-tbl tbody tr').forEach(tr => {
+      const d = tr.getAttribute('data-d') || '';
+      const ok = (!f || d >= f) && (!t || d <= t);  // ISO 날짜는 문자열 비교로 정렬
+      tr.style.display = ok ? '' : 'none';
+    });
+  }
+</script>
 {% endblock %}
