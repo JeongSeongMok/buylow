@@ -99,10 +99,16 @@ def parse_orders(result_json) -> list[dict]:
     '왜'는 LEAN이 시그널 단위로 기록하지 않으므로, 방향(매수/매도) + 리스크 태그(손절/익절 등)
     수준으로만 보여준다(정확한 트리거 시그널까지는 미기록).
     """
-    if not result_json or not Path(result_json).exists():
+    if not result_json:
+        return []
+    p = Path(result_json)
+    # 저장된 경로는 보통 '-summary.json'(주문 미포함 요약본) → 주문이 든 전체 결과 파일로 교체
+    if p.name.endswith("-summary.json"):
+        p = p.with_name(p.name.replace("-summary.json", ".json"))
+    if not p.exists():
         return []
     try:
-        data = json.loads(Path(result_json).read_text(encoding="utf-8"))
+        data = json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return []
     orders = data.get("orders") or {}
