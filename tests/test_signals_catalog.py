@@ -56,12 +56,18 @@ def test_value_signal_in_catalog():
 def test_flow_signal_in_catalog():
     labels = {s.label: s for s in sc.CATALOG}
     assert "FLOW" in labels and labels["FLOW"].type == "flow"
-    # 주체 조합(외국인+개인, 5일) — 0/1 플래그가 int로 캐스팅
+    # 체크박스: 체크한 주체만 폼에 키가 존재(외국인·개인 체크, 기관 미체크 → 키 부재)
     sig = sc.signals_from_form({"FLOW__lookback": "5", "FLOW__foreign": "1",
-                                "FLOW__institution": "0", "FLOW__individual": "1"})["FLOW"]
+                                "FLOW__individual": "1"})["FLOW"]
     assert sig["params"]["lookback"] == 5
-    assert sig["params"]["foreign"] == 1 and sig["params"]["institution"] == 0
-    assert sig["params"]["individual"] == 1
+    assert sig["params"]["foreign"] == 1 and sig["params"]["individual"] == 1
+    assert sig["params"]["institution"] == 0  # 미체크(키 부재) → 0
+
+
+def test_bool_param_unchecked_is_zero():
+    # bool 파라미터는 키가 없으면 0(기본값 1을 쓰지 않음)
+    p = sc.cast_params("FLOW", {"FLOW__lookback": "7"})  # 아무 주체도 체크 안 함
+    assert p["foreign"] == 0 and p["institution"] == 0 and p["individual"] == 0
 
 
 def test_descriptions_hide_internal_tokens():

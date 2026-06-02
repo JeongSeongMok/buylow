@@ -17,9 +17,14 @@
     <b>{{ s.label }}</b> — {{ s.name }} <small>{{ s.description }}</small>
     <div class="params">
       {% for p in s.params %}
+      {% if p.type == "bool" %}
+      <label class="cond"><input type="checkbox" name="{{ s.label }}__{{ p.key }}" value="1"
+             {% if param_value(strategy, s.label, p.key) %}checked{% endif %}> {{ p.label }}</label>
+      {% else %}
       <label class="param">{{ p.label }}
         <input type="text" name="{{ s.label }}__{{ p.key }}"
                value="{{ param_value(strategy, s.label, p.key) }}" size="6"></label>
+      {% endif %}
       {% endfor %}
     </div>
   </fieldset>

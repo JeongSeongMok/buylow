@@ -63,11 +63,11 @@ CATALOG: list[SignalSpec] = [
     ]),
     SignalSpec("flow", "FLOW", "수급 추종",
                "선택한 투자자(외국인/기관/개인)의 최근 N일 누적 순매수가 양수면 매수 우호, "
-               "음수면 매도 우호. 개인은 보통 역지표라 기본 제외. 포함 여부는 1=포함/0=제외", [
+               "음수면 매도 우호. 개인은 보통 역지표라 기본 제외", [
         ParamSpec("lookback", "누적(일)", "int", 7),
-        ParamSpec("foreign", "외국인 포함(1/0)", "int", 1),
-        ParamSpec("institution", "기관 포함(1/0)", "int", 1),
-        ParamSpec("individual", "개인 포함(1/0)", "int", 0),
+        ParamSpec("foreign", "외국인", "bool", 1),
+        ParamSpec("institution", "기관", "bool", 1),
+        ParamSpec("individual", "개인", "bool", 0),
     ]),
 ]
 
@@ -85,7 +85,12 @@ def cast_params(label: str, raw: dict[str, str]) -> dict:
     spec = _BY_LABEL[label]
     out: dict = {}
     for p in spec.params:
-        v = raw.get(f"{label}__{p.key}", "")
+        key = f"{label}__{p.key}"
+        if p.type == "bool":
+            # 체크박스: 체크 시 폼에 키 존재(=1), 미체크 시 키 부재(=0). 기본값을 쓰지 않는다.
+            out[p.key] = 1 if raw.get(key) else 0
+            continue
+        v = raw.get(key, "")
         if v in ("", None):
             out[p.key] = p.default
         else:
