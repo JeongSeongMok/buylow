@@ -55,6 +55,41 @@
     {% else %}<p class="meta">수급 데이터 없음</p>{% endif %}
   </section>
 </div>
+
+<section class="card">
+  <h3>분봉 <small>{{ minute_days|length }}일 적재{% if minute_sel %} · {{ minute_sel }}{% endif %}</small></h3>
+  {% if minute_days %}
+  <div class="quick">날짜
+    <select onchange="location.href='/data/{{ ticker }}?minute=' + this.value">
+      {% for d in minute_days %}
+      <option value="{{ d }}" {{ 'selected' if d == minute_sel }}>{{ d }}</option>
+      {% endfor %}
+    </select>
+    <span class="meta">하루치 분봉 ({{ minute_bars|length }}개)</span>
+  </div>
+  <div class="scrolly">
+    <table class="runs">
+      <thead><tr><th>시각</th><th>시가</th><th>고가</th><th>저가</th><th>종가</th><th>거래량</th></tr></thead>
+      <tbody>
+        {% for b in minute_bars %}
+        <tr>
+          <td>{{ b.time }}</td>
+          <td>{{ "{:,.0f}".format(b.open) }}</td>
+          <td>{{ "{:,.0f}".format(b.high) }}</td>
+          <td>{{ "{:,.0f}".format(b.low) }}</td>
+          <td>{{ "{:,.0f}".format(b.close) }}</td>
+          <td>{{ "{:,}".format(b.volume) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">선택한 날짜의 분봉이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="meta">적재된 분봉이 없습니다. 데이터 탭의 <b>누적 분봉 적재</b>로 받으세요.</p>
+  {% endif %}
+</section>
 <script>
   function filterDates() {
     const f = document.getElementById('from').value;

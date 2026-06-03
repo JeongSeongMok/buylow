@@ -381,6 +381,22 @@ def test_data_pages(tmp_path, monkeypatch):
     assert r.status_code == 200 and "55,500" in r.text  # 역스케일된 종가
 
 
+def test_data_detail_shows_minute_bars(tmp_path, monkeypatch):
+    from datetime import date
+    from orchestrator import config
+    from etl.lean_format import write_equity_minute
+    from etl.sources import MinuteBar
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))
+    write_equity_minute(tmp_path / "data", "krx", "005930", date(2026, 6, 1),
+                        [MinuteBar(9 * 3600 * 1000, 71000, 71500, 70900, 71200, 1234)])
+    c = TestClient(create_app(runner=FakeRunner(), store=RunStore(tmp_path / "d.db")))
+    r = c.get("/data/005930")
+    assert r.status_code == 200
+    assert "2026-06-01" in r.text and "09:00" in r.text  # 날짜 선택 + 분봉 시각
+    assert "71,200" in r.text                            # 분봉 종가
+
+
 def test_universe_index_returns_loaded_constituents(client, monkeypatch):
     import etl.universe as u
     import etl.catalog as cat

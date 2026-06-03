@@ -432,13 +432,32 @@ def register_dashboard(
     def data_detail(request: Request, ticker: str):
         from etl import catalog
         from etl.names import load_names
+        from etl.lean_format import list_minute_days, read_equity_minute
+        from market.krx import KRX_MARKET
         data_dir = config.get_data_folder()
         # 전체 날짜를 최신순으로(스크롤 + 날짜 필터는 화면에서). 한 종목이라 비용 작음.
         price = list(reversed(catalog.read_price_daily(data_dir, ticker)))
         flow = list(reversed(catalog.read_flow(data_dir, ticker)))
+        # 분봉: 적재된 날짜 목록(최신순) + 선택한 하루치 분봉(기본 최신일). 분봉은 하루 ~390개라
+        # 하루 단위로만 보여준다(전체를 한 번에 그리면 무거움).
+        minute_days = sorted(list_minute_days(data_dir, KRX_MARKET, ticker), reverse=True)
+        minute_days_iso = [d.isoformat() for d in minute_days]
+        sel = request.query_params.get("minute")
+        if sel not in minute_days_iso:
+            sel = minute_days_iso[0] if minute_days_iso else None
+        minute_bars = []
+        if sel:
+            from datetime import date as _date
+            y, m, dd = sel.split("-")
+            mb = read_equity_minute(data_dir, KRX_MARKET, ticker, _date(int(y), int(m), int(dd)))
+            for b in mb:  # ms(자정기준) → HH:MM
+                minute_bars.append({"time": f"{b.ms // 3600000:02d}:{(b.ms % 3600000) // 60000:02d}",
+                                    "open": b.open, "high": b.high, "low": b.low,
+                                    "close": b.close, "volume": b.volume})
         return templates.TemplateResponse(request, "data_detail.html", {
             "ticker": ticker, "name": load_names(data_dir).get(ticker, ""),
-            "price": price, "flow": flow})
+            "price": price, "flow": flow,
+            "minute_days": minute_days_iso, "minute_sel": sel, "minute_bars": minute_bars})
 
     @app.post("/data/update")
     def update_data(request: Request):
