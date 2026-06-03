@@ -2,6 +2,8 @@
 {% block content %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
+<div class="cols2">
+<div>  {# 왼쪽: 적재 액션 (데이터 최신화 + 누적 분봉 적재) #}
 <section class="card">
   <h2>데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
   <p class="meta"><b>데이터 최신화</b>를 누르면 한국시장 전 종목의 가격(OHLCV)·수급·펀더멘털(PER/PBR)을
@@ -104,8 +106,9 @@
   document.addEventListener('click', (e) => { if (!mRes.contains(e.target) && e.target !== mIn) mRes.hidden = true; });
   mSync();
 </script>
+</div>  {# /왼쪽 컬럼 #}
 
-<section class="card">
+<section class="card">  {# 오른쪽: 적재 현황 #}
   <h2>적재 현황</h2>
   <label>검색 <input type="text" id="data-search" placeholder="종목명 또는 코드" oninput="filterData()"></label>
   <div class="scrolly">
@@ -126,6 +129,7 @@
     </table>
   </div>
 </section>
+</div>  {# /.cols2 #}
 <script>
   function filterData() {
     const q = document.getElementById('data-search').value.trim().toLowerCase();
