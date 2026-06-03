@@ -26,13 +26,16 @@ def run_minute_update(job, data_dir: str, tickers: list[str], days: int = 365) -
     today = date.today()
     start = today - timedelta(days=min(days, MAX_LOOKBACK_DAYS))
     ok = total = skipped = 0
+    # 클라이언트 1개를 재사용 — 레이트리밋 스로틀이 종목 경계에서도 연속 적용되고 토큰도 1회만 발급.
+    from brokers.kis import from_config
+    client = from_config()
     with open(log_path, "a", encoding="utf-8", buffering=1) as f:
         def log(msg):
             f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
         log(f"분봉 적재 시작: {len(tickers)}종목, {start}~{today}")
         for i, t in enumerate(tickers, 1):
             try:
-                info = ingest_minute(t, start, today, data_dir, today=today)
+                info = ingest_minute(t, start, today, data_dir, client=client, today=today)
                 ok += 1
                 total += info["bars"]
                 skipped += info.get("skipped", 0)

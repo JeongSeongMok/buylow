@@ -41,6 +41,10 @@ _MINUTE_CHART_TR = "FHKST03010230"
 _MAX_MIN_ROWS_PER_CALL = 120
 
 
+# KIS 레이트리밋 에러코드 — 초당 거래건수 초과. 분봉처럼 호출을 연발하면 즉시 걸린다.
+RATE_LIMIT_CODE = "EGW00201"
+
+
 class KisError(RuntimeError):
     """KIS API 오류(인증 실패, rt_cd != 0 등)."""
 
@@ -53,6 +57,9 @@ class KisClient:
         env: str = "real",
         token_cache_path: str | Path | None = None,
         session=None,
+        min_interval: float = 0.12,
+        max_retries: int = 4,
+        backoff: float = 0.5,
     ):
         if not app_key or not app_secret:
             raise KisError("KIS app_key/app_secret이 필요합니다 (대시보드 설정에서 입력).")
@@ -66,6 +73,20 @@ class KisClient:
         self._session = session  # 테스트에서 가짜 세션 주입; 없으면 지연 생성
         self._token: str | None = None
         self._token_exp: float = 0.0
+        # 레이트리밋 대응: 호출 간 최소 간격(초) + EGW00201 시 지수 백오프 재시도.
+        self._min_interval = float(min_interval)
+        self._max_retries = int(max_retries)
+        self._backoff = float(backoff)
+        self._last_call = 0.0
+
+    def _throttle(self) -> None:
+        """직전 호출과 최소 간격을 두어 초당 호출 폭주를 막는다."""
+        if self._min_interval <= 0:
+            return
+        wait = self._last_call + self._min_interval - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        self._last_call = time.monotonic()
 
     # ── HTTP 세션 (지연 생성) ────────────────────────────────────────────────
     def _get_session(self):
@@ -124,6 +145,7 @@ class KisClient:
             "appkey": self.app_key,
             "appsecret": self.app_secret,
         }
+        self._throttle()
         resp = self._get_session().post(
             url, data=json.dumps(body),
             headers={"content-type": "application/json"}, timeout=10,
@@ -152,15 +174,26 @@ class KisClient:
 
     # ── 시세 조회 ──────────────────────────────────────────────────────────────
     def _get(self, path: str, tr_id: str, params: dict) -> dict:
-        resp = self._get_session().get(
-            f"{self.base_url}{path}", headers=self._headers(tr_id), params=params, timeout=10,
-        )
-        if resp.status_code != 200:
-            raise KisError(f"{path} HTTP {resp.status_code} {resp.text[:200]}")
-        data = resp.json()
-        if str(data.get("rt_cd", "0")) != "0":
+        # KIS는 레이트리밋 초과 시 HTTP 500 + 본문 msg_cd=EGW00201을 준다 → 백오프 후 재시도.
+        for attempt in range(self._max_retries + 1):
+            self._throttle()
+            resp = self._get_session().get(
+                f"{self.base_url}{path}", headers=self._headers(tr_id), params=params, timeout=10,
+            )
+            try:
+                data = resp.json()
+            except ValueError:
+                data = None
+            if resp.status_code == 200 and data is not None and str(data.get("rt_cd", "0")) == "0":
+                return data
+            # 레이트리밋이면 지수 백오프 후 재시도(상태코드 무관 — 본문 코드로 판단).
+            if data and data.get("msg_cd") == RATE_LIMIT_CODE and attempt < self._max_retries:
+                time.sleep(self._backoff * (2 ** attempt))
+                continue
+            if resp.status_code != 200:
+                raise KisError(f"{path} HTTP {resp.status_code} {resp.text[:200]}")
             raise KisError(f"{path} rt_cd={data.get('rt_cd')} {data.get('msg1')}")
-        return data
+        raise KisError(f"{path} 레이트리밋 재시도 초과({RATE_LIMIT_CODE})")
 
     def _fetch_daily_window(self, ticker: str, start: date, end: date,
                             adjusted: bool) -> list[dict]:

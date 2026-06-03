@@ -114,6 +114,29 @@ def test_http_error_raises(tmp_path):
         c.fetch_today("005930", date(2026, 6, 1))
 
 
+def test_rate_limit_retries_then_succeeds(tmp_path):
+    # KIS 레이트리밋(HTTP 500 + EGW00201) → 백오프 후 재시도 → 성공
+    rl = FakeResp(500, {"rt_cd": "1", "msg_cd": "EGW00201", "msg1": "초당 거래건수 초과"})
+    ok = FakeResp(200, {"rt_cd": "0", "output2": [_row("20260601", 1, 1, 1, 1, 1)]})
+    sess = FakeSession(get_responses=[rl, rl, ok])
+    c = KisClient("appkey12345678", "secret", env="real",
+                  token_cache_path=tmp_path / ".kis_token.json", session=sess,
+                  min_interval=0, backoff=0)  # 테스트는 지연 0
+    rows = c.fetch_daily("005930", date(2026, 6, 1), date(2026, 6, 1))
+    assert len(rows) == 1 and len(sess.get_calls) == 3  # 2번 재시도 후 성공
+
+
+def test_rate_limit_exhausts_retries(tmp_path):
+    rl = FakeResp(500, {"rt_cd": "1", "msg_cd": "EGW00201", "msg1": "초당 거래건수 초과"})
+    sess = FakeSession(get_responses=[rl, rl, rl, rl, rl, rl])
+    c = KisClient("appkey12345678", "secret", env="real",
+                  token_cache_path=tmp_path / ".kis_token.json", session=sess,
+                  min_interval=0, backoff=0, max_retries=2)
+    with pytest.raises(KisError):
+        c.fetch_today("005930", date(2026, 6, 1))
+    assert len(sess.get_calls) == 3  # 최초 + 재시도 2회
+
+
 def _mrow(hhmmss, o, h, low, c, v):
     return {"stck_cntg_hour": hhmmss, "stck_oprc": str(o), "stck_hgpr": str(h),
             "stck_lwpr": str(low), "stck_prpr": str(c), "cntg_vol": str(v)}
