@@ -14,10 +14,11 @@
   </div>
 
   <div class="cols2">
-    <section class="card">
-      <h2>지표 설정</h2>
-      <p class="meta">사용할 지표의 값을 정합니다(기본값 제공). 어떤 지표를 어떻게 조합할지는 오른쪽 <b>매수 규칙</b>에서.</p>
-      <div class="grid2">
+    <!-- 왼쪽: 지표 설정(1열, 한 지표 1행) + 매수 규칙 -->
+    <div>
+      <section class="card">
+        <h2>지표 설정</h2>
+        <p class="meta">사용할 지표의 값을 정합니다(기본값 제공). 어떤 지표를 어떻게 조합할지는 아래 <b>매수 규칙</b>에서.</p>
         {% for s in catalog %}
         <fieldset class="alpha">
           <b>{{ s.label }}</b> · {{ s.name }}
@@ -36,34 +37,45 @@
           </div>
         </fieldset>
         {% endfor %}
-      </div>
-    </section>
+      </section>
 
-    <section class="card">
-      <h2>신호 및 리스크 관리</h2>
-
-      <h3>매수 규칙</h3>
-      <p class="meta">한 <b>그룹</b> 안의 조건은 <b>모두 충족(AND)</b>, 그룹끼리는 <b>하나만 충족(OR)</b>하면 매수합니다.
-        예: [EMA + MACD] 그룹과 [RSI] 그룹 → (EMA 그리고 MACD) 또는 (RSI).</p>
-      <div id="groups">
-        {% for grp in groups %}
-        {% set gi = loop.index0 %}
-        <fieldset class="group">
-          <legend>그룹 {{ loop.index }} <small>— 모두 충족(AND)</small></legend>
-          {% for s in catalog %}
-          <label class="cond"><input type="checkbox" name="g{{ gi }}_{{ s.label }}" value="1"
-                 {% if s.label in grp %}checked{% endif %}> {{ s.label }}</label>
+      <section class="card">
+        <h2>매수 규칙</h2>
+        <p class="meta">한 <b>그룹</b> 안의 조건은 <b>모두 충족(AND)</b>, 그룹끼리는 <b>하나만 충족(OR)</b>하면 매수합니다.
+          예: [EMA + MACD] 그룹과 [RSI] 그룹 → (EMA 그리고 MACD) 또는 (RSI).</p>
+        <div id="groups">
+          {% for grp in groups %}
+          {% set gi = loop.index0 %}
+          <fieldset class="group">
+            <legend>그룹 {{ loop.index }} <small>— 모두 충족(AND)</small></legend>
+            {% for s in catalog %}
+            <label class="cond"><input type="checkbox" name="g{{ gi }}_{{ s.label }}" value="1"
+                   {% if s.label in grp %}checked{% endif %}> {{ s.label }}</label>
+            {% endfor %}
+            <button type="button" class="ghost" onclick="this.closest('.group').remove(); checkDirty()">그룹 삭제</button>
+          </fieldset>
           {% endfor %}
-          <button type="button" class="ghost" onclick="this.closest('.group').remove(); checkDirty()">그룹 삭제</button>
-        </fieldset>
-        {% endfor %}
-      </div>
-      <button type="button" class="ghost" onclick="addGroup()">＋ 조건 그룹 추가 (OR)</button>
+        </div>
+        <button type="button" class="ghost" onclick="addGroup()">＋ 조건 그룹 추가 (OR)</button>
+      </section>
+    </div>
 
-      <h3 class="spaced">신호 보유 기간</h3>
+    <!-- 오른쪽: 신호 보유 기간 → 리스크 관리 → 체결 타이밍 -->
+    <section class="card">
+      <h2>운용 설정</h2>
+
+      <h3>신호 보유 기간</h3>
       <p class="meta">매수 신호가 마지막으로 뜬 날로부터 며칠 더 보유할지(기본 3일). 보유 중 매도 신호가 나오면
         기간과 무관하게 즉시 청산, 신호가 사라지면 이 기간 후 청산. 짧을수록 반응 빠름·잡음에 잘 털림.</p>
       <label>보유 기간(일) <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6"></label>
+
+      <h3 class="spaced">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
+      <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
+        <small>매수가 대비 이만큼 떨어지면 매도</small></label>
+      <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">
+        <small>평가이익이 이만큼 나면 매도</small></label>
+      <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
+        <small>매수 후 고점 대비 이만큼 떨어지면 매도(고점 자동 추적 → 이익 보호)</small></label>
 
       {% set ex = strategy.get('execution') or {} %}
       {% set res = strategy.get('resolution') or 'daily' %}
@@ -90,14 +102,6 @@
         <small>VWAP/TWAP 방식에서 정규장을 몇 등분해 나눠 체결할지</small></label>
       <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
         장 마감 전 미체결 잔량 강제 체결</label>
-
-      <h3 class="spaced">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
-      <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
-        <small>매수가 대비 이만큼 떨어지면 매도</small></label>
-      <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">
-        <small>평가이익이 이만큼 나면 매도</small></label>
-      <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
-        <small>매수 후 고점 대비 이만큼 떨어지면 매도(고점 자동 추적 → 이익 보호)</small></label>
     </section>
   </div>
 </form>
