@@ -161,6 +161,7 @@ def test_settings_page_two_columns_and_no_storage_wording(client):
     t = client.get("/settings").text
     assert "한국거래소" in t and "증권사" in t          # 2개 컬럼
     assert "연동 테스트" in t                            # 테스트 버튼
+    assert "toggle-pw" in t and "togglePw" in t          # 표준 password show/hide 토글
     assert "저장소에는 올라가지 않습니다" not in t        # 삭제된 워딩
 
 

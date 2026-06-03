@@ -4,14 +4,15 @@
 {% if saved %}<p class="ok">저장되었습니다.</p>{% endif %}
 
 {% macro secret_field(s) %}
-<label>
-  <span class="field-head">
-    <b>{{ s.label }}</b> <small>({{ s.purpose }})</small>
-    <span class="grow">{% if s.set %}<span class="ok">설정됨 ✓</span>{% else %}<span class="meta">미설정</span>{% endif %}</span>
-  </span>
-  <input type="password" name="{{ s.key }}" autocomplete="off"
-         placeholder="{% if s.set %}변경하려면 새 값 입력 (비워두면 유지){% else %}입력{% endif %}">
-</label>
+<div class="field">
+  <label for="f_{{ s.key }}">{{ s.label }} <small>({{ s.purpose }})</small></label>
+  <div class="input-wrap">
+    <input type="password" id="f_{{ s.key }}" name="{{ s.key }}" autocomplete="off"
+           placeholder="{% if s.set %}변경하려면 새 값 입력 (비워두면 유지){% else %}입력{% endif %}">
+    <button type="button" class="secondary toggle-pw" onclick="togglePw('f_{{ s.key }}', this)">표시</button>
+  </div>
+  <small class="status {{ 'ok' if s.set else 'meta' }}">{{ '설정됨 ✓' if s.set else '미설정' }}</small>
+</div>
 {% endmacro %}
 
 <div class="cols2">
@@ -34,16 +35,16 @@
     <h2>증권사</h2>
     <p class="meta">분봉·당일 데이터와 (추후) 실주문에 사용합니다.</p>
     <form method="post" action="/settings">
-      <label>
-        <span class="field-head"><b>증권사 선택</b></span>
-        <select name="broker">
+      <div class="field">
+        <label for="broker">증권사 선택</label>
+        <select id="broker" name="broker">
           {% for b in brokers %}
           <option value="{{ b }}" {{ 'selected' if broker == b }} {{ 'disabled' if b == 'toss' }}>
             {{ '한국투자증권 (KIS)' if b == 'kis' else '토스증권 (미구현)' }}
           </option>
           {% endfor %}
         </select>
-      </label>
+      </div>
       {% for s in broker_secrets %}{{ secret_field(s) }}{% endfor %}
       {% if not broker_secrets %}
       <p class="meta">선택한 증권사는 아직 연동 키 입력이 지원되지 않습니다.</p>
@@ -62,6 +63,12 @@
 <p class="meta">데이터 적재·최신화는 <a href="/data">데이터</a> 탭에서.</p>
 
 <script>
+  function togglePw(id, btn) {
+    const el = document.getElementById(id);
+    const show = el.type === 'password';
+    el.type = show ? 'text' : 'password';
+    btn.textContent = show ? '숨김' : '표시';
+  }
   async function testConn(kind) {
     const el = document.getElementById(kind + '-test-result');
     el.className = 'test-result meta';

@@ -72,9 +72,14 @@ form select, form input[type=text], form input[type=password] {
   border: 1px solid var(--border);
   border-radius: 5px;
 }
-/* 설정 폼: 라벨/상태 한 줄, 입력은 그 아래. 액션(저장+테스트)은 한 줄에. */
-.field-head { display: flex; align-items: baseline; gap: 0.4rem; }
-.field-head .grow { margin-left: auto; }
+/* 설정 폼: 표준 필드 — 라벨(위) · 입력+표시토글(중) · 상태(아래). */
+.field { margin-bottom: 1.1rem; }
+.field > label { display: block; margin-bottom: 0.3rem; color: var(--fg); font-size: 0.88rem; }
+.field > label small { color: var(--muted); font-weight: normal; }
+.input-wrap { display: flex; gap: 0.4rem; align-items: stretch; }
+.input-wrap input { flex: 1; width: auto; margin-top: 0; }
+.toggle-pw { white-space: nowrap; padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+.field .status { display: block; margin-top: 0.3rem; font-size: 0.8rem; }
 .form-actions { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
 .form-actions .test-result { font-size: 0.85rem; }
 button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); }
