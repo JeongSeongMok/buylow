@@ -43,11 +43,13 @@ def ingest_minute(
     client=None,
     skip_existing: bool = True,
     today: date | None = None,
+    on_progress=None,
 ) -> dict[str, Any]:
     """[start, end] 각 거래일의 분봉을 받아 하루 1개 zip으로 적재. 주말은 건너뛴다.
 
     - skip_existing: 이미 디스크에 있는 날짜는 API 호출 없이 건너뛴다(증분·재적재 비용 절감).
     - start는 KIS 보관 한계(약 1년)로 클램프된다 — 그보다 과거는 어차피 빈 결과.
+    - on_progress(msg): 주기적 진행 보고(분봉 한 종목 적재가 수 분 걸리므로 하트비트용).
     - client 주입 가능(테스트). 없으면 config의 KIS 자격증명으로 생성.
     """
     if client is None:
@@ -60,20 +62,24 @@ def ingest_minute(
     if clamped:
         start = floor
 
+    weekdays = [start + timedelta(days=i) for i in range((end - start).days + 1)
+                if (start + timedelta(days=i)).weekday() < 5]
+    total = len(weekdays)
     days_written, days_skipped, total_bars = [], 0, 0
-    d = start
-    while d <= end:
-        if d.weekday() < 5:  # 월~금만(공휴일은 빈 결과 → 스킵)
-            if skip_existing and equity_minute_zip_path(data_dir, KRX_MARKET, ticker, d).exists():
-                days_skipped += 1
-            else:
-                rows = client.fetch_minute(ticker, d)
-                bars = _to_minute_bars(rows)
-                if bars:
-                    write_equity_minute(data_dir, KRX_MARKET, ticker, d, bars)
-                    days_written.append(d.isoformat())
-                    total_bars += len(bars)
-        d += timedelta(days=1)
+    for i, d in enumerate(weekdays, 1):
+        if skip_existing and equity_minute_zip_path(data_dir, KRX_MARKET, ticker, d).exists():
+            days_skipped += 1
+        else:
+            rows = client.fetch_minute(ticker, d)
+            bars = _to_minute_bars(rows)
+            if bars:
+                write_equity_minute(data_dir, KRX_MARKET, ticker, d, bars)
+                days_written.append(d.isoformat())
+                total_bars += len(bars)
+        # 진행 하트비트: ~20거래일마다(또는 마지막) — 분봉은 종목당 수백 호출이라 오래 걸린다.
+        if on_progress and (i % 20 == 0 or i == total):
+            on_progress(f"{ticker}: {i}/{total}거래일 처리 (적재 {len(days_written)}일 "
+                        f"{total_bars}개 · 기존 {days_skipped}일)")
     inject_krx_market(data_dir)
     return {"ticker": ticker, "days": len(days_written), "bars": total_bars,
             "skipped": days_skipped, "clamped": clamped,

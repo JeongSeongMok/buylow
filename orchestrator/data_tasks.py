@@ -32,10 +32,13 @@ def run_minute_update(job, data_dir: str, tickers: list[str], days: int = 365) -
     with open(log_path, "a", encoding="utf-8", buffering=1) as f:
         def log(msg):
             f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
-        log(f"분봉 적재 시작: {len(tickers)}종목, {start}~{today}")
+        log(f"분봉 적재 시작: {len(tickers)}종목, {start}~{today} "
+            f"(종목당 수백 호출 — 1년치는 수 분 걸릴 수 있음)")
         for i, t in enumerate(tickers, 1):
+            log(f"[{i}/{len(tickers)}] {t} 시작…")
             try:
-                info = ingest_minute(t, start, today, data_dir, client=client, today=today)
+                info = ingest_minute(t, start, today, data_dir, client=client, today=today,
+                                     on_progress=lambda m: log("  " + m))
                 ok += 1
                 total += info["bars"]
                 skipped += info.get("skipped", 0)

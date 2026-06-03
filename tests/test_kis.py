@@ -205,6 +205,20 @@ def test_minute_etl_skips_existing(tmp_path):
     assert list_minute_days(tmp_path, KRX_MARKET, "005930") == {date(2026, 6, 1)}
 
 
+def test_minute_etl_reports_progress(tmp_path):
+    from etl.kis_minute import ingest_minute
+
+    class C:
+        def fetch_minute(self, ticker, day, **kw):
+            return [{"ms": 0, "time": "090000", "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+
+    msgs = []
+    # 약 한 달(>20거래일) → 진행 콜백이 최소 1회 이상 호출됨
+    ingest_minute("005930", date(2026, 1, 1), date(2026, 2, 28), data_dir=tmp_path,
+                  client=C(), today=date(2026, 3, 1), on_progress=msgs.append)
+    assert msgs and "거래일 처리" in msgs[-1]
+
+
 def test_minute_etl_clamps_to_one_year(tmp_path):
     from etl.kis_minute import ingest_minute
 
