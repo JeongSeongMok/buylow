@@ -15,15 +15,11 @@
 
 <section class="card">
   <h2>누적 분봉 적재 <small>(장중 타이밍 백테스트용 · 증권사 API)</small></h2>
-  <p class="meta">선택한 종목·인덱스의 분봉을 최근 구간만큼 받아 디스크에 저장합니다(이미 받은 날짜는 건너뜀).
+  <p class="meta">선택한 종목의 분봉을 최근 구간만큼 받아 디스크에 저장합니다(이미 받은 날짜는 건너뜀).
     분봉이 있는 날은 백테스트가 장중 타점 전략을 쓰고, 없는 날은 시가 기준으로 진행합니다.
     증권사(KIS)는 과거 분봉을 <b>최대 약 1년</b>만 보관하므로 그 이전은 받을 수 없습니다. (설정 탭에서 증권사 키 필요)</p>
   <form method="post" action="/data/minute">
-    <label>인덱스 일괄
-      <span><input type="checkbox" name="index" value="KOSPI200"> KOSPI200</span>
-      <span><input type="checkbox" name="index" value="KOSDAQ150"> KOSDAQ150</span>
-    </label>
-    <label>직접 입력(쉼표 구분) <input type="text" name="universe" placeholder="005930, 000660"></label>
+    <div class="actionbar"><span class="grow"></span><button type="submit">분봉 적재</button></div>
     <label>기간
       <select name="days">
         <option value="30">최근 1달</option>
@@ -32,9 +28,82 @@
         <option value="365" selected>최근 1년</option>
       </select>
     </label>
-    <button type="submit">분봉 적재</button>
+    <hr>
+    <div id="m-universe-box">
+      <label>종목 추가</label>
+      <div class="add-row">
+        <span class="meta">인덱스 일괄추가</span>
+        <button type="button" class="ghost" onclick="mAddIndex('KOSPI200')">KOSPI200</button>
+        <button type="button" class="ghost" onclick="mAddIndex('KOSDAQ150')">KOSDAQ150</button>
+      </div>
+      <div class="add-row search-wrap">
+        <input type="text" id="m-ticker-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();mAddTyped();}">
+        <button type="button" class="ghost" onclick="mAddTyped()">추가</button>
+        <button type="button" class="ghost" onclick="mClear()">비우기</button>
+        <div id="m-search-results" class="search-results" hidden></div>
+      </div>
+      <p class="meta spaced">추가된 종목 <span id="m-chip-count"></span></p>
+      <div id="m-chips"></div>
+      <input type="hidden" name="universe" id="m-universe-hidden" value="">
+    </div>
   </form>
 </section>
+<script>
+  const M_NAMES = {{ names|tojson }};
+  let mTickers = [];
+  const M_LIMIT = 60;
+  function mLabel(c) { return M_NAMES[c] ? (M_NAMES[c] + ' ' + c) : c; }
+  function mSync() {
+    const box = document.getElementById('m-chips'); box.innerHTML = '';
+    mTickers.slice(0, M_LIMIT).forEach((t, i) => {
+      const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = mLabel(t);
+      const x = document.createElement('a'); x.href = '#'; x.textContent = '×';
+      x.onclick = (e) => { e.preventDefault(); mTickers.splice(i, 1); mSync(); };
+      chip.appendChild(x); box.appendChild(chip);
+    });
+    if (mTickers.length > M_LIMIT) {
+      const more = document.createElement('span'); more.className = 'meta';
+      more.textContent = ` 외 ${mTickers.length - M_LIMIT}종목`; box.appendChild(more);
+    }
+    document.getElementById('m-chip-count').textContent = `(${mTickers.length})`;
+    document.getElementById('m-universe-hidden').value = mTickers.join(',');
+  }
+  function mAdd(code) { if (code && !mTickers.includes(code)) mTickers.push(code); mSync(); }
+  const mIn = document.getElementById('m-ticker-search');
+  const mRes = document.getElementById('m-search-results');
+  mIn.addEventListener('input', () => {
+    const q = mIn.value.trim().toLowerCase(); mRes.innerHTML = '';
+    if (!q) { mRes.hidden = true; return; }
+    let n = 0;
+    for (const code in M_NAMES) {
+      if (code.includes(q) || M_NAMES[code].toLowerCase().includes(q)) {
+        const d = document.createElement('div'); d.textContent = M_NAMES[code];
+        const s = document.createElement('small'); s.textContent = code; d.appendChild(s);
+        d.onclick = () => { mAdd(code); mIn.value = ''; mRes.hidden = true; };
+        mRes.appendChild(d); if (++n >= 30) break;
+      }
+    }
+    mRes.hidden = (n === 0);
+  });
+  function mAddTyped() {
+    const v = mIn.value.trim(); if (!v) return;
+    if (/^\d{6}$/.test(v)) { mAdd(v); }
+    else { const q = v.toLowerCase(); for (const c in M_NAMES) { if (M_NAMES[c].toLowerCase().includes(q)) { mAdd(c); break; } } }
+    mIn.value = ''; mRes.hidden = true;
+  }
+  function mClear() { mTickers = []; mSync(); }
+  async function mAddIndex(name) {
+    try {
+      const r = await fetch('/universe/index/' + name); const d = await r.json();
+      if (d.error) { alert(d.error); return; }
+      d.tickers.forEach(t => { if (!mTickers.includes(t)) mTickers.push(t); });
+      mSync();
+    } catch (e) { alert('인덱스 구성종목 조회 실패'); }
+  }
+  document.addEventListener('click', (e) => { if (!mRes.contains(e.target) && e.target !== mIn) mRes.hidden = true; });
+  mSync();
+</script>
 
 <section class="card">
   <h2>적재 현황</h2>

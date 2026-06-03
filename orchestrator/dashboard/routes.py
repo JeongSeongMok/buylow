@@ -421,6 +421,7 @@ def register_dashboard(
                    for t in sorted(price | flow)]
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
+            "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
             "latest_date": catalog.latest_loaded_date(data_dir),
             "error": request.query_params.get("error"),
         })
