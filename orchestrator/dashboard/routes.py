@@ -47,6 +47,29 @@ def _resolve_universe(form, data_folder: str) -> list[str]:
     return [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
 
 
+def _resolve_minute_tickers(form) -> list[str]:
+    """분봉 적재 대상 = 직접 입력(universe csv) + 인덱스(KOSPI200/KOSDAQ150) 구성종목. 중복 제거.
+
+    적재가 목적이라 '이미 로드된 것'과 교집합하지 않는다(새 분봉을 받는 것이므로).
+    """
+    from etl.universe import INDEX_CODES, list_universe
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in (form.get("universe") or "").split(","):
+        t = t.strip()
+        if t and t not in seen:
+            seen.add(t); out.append(t)
+    for key in (form.getlist("index") if hasattr(form, "getlist") else [form.get("index")]):
+        if key and key.upper() in INDEX_CODES:
+            try:
+                for t in list_universe(key.upper()):
+                    if t not in seen:
+                        seen.add(t); out.append(t)
+            except Exception:
+                pass  # 인덱스 조회 실패(KRX 로그인 필요 등) — 직접 입력분만 사용
+    return out
+
+
 def _loaded_count() -> int:
     """적재된 종목 수 — 최초 실행 시 '데이터 먼저 적재' 안내 판단용."""
     from etl.catalog import all_tickers
@@ -267,11 +290,12 @@ def register_dashboard(
         if not data_folder:
             return RedirectResponse(url="/backtest?error=데이터 폴더가 필요합니다(설정)", status_code=303)
         spec = {
-            **strategy,  # signals, rule, period_days
+            **strategy,  # signals, rule, period_days, resolution, execution
             "universe": _resolve_universe(form, data_folder),
             "start": form.get("start"), "end": form.get("end"),
             "cash": BACKTEST_CASH,  # 초기자본은 1억으로 고정(입력받지 않음)
             "max_positions": MAX_POSITIONS,  # 동시 보유 상한(균등분할 가능하게)
+            "data_folder": data_folder,  # 분봉 적재 여부 스캔(장중 타점/시가 폴백 판단)용
         }
         if not spec["universe"]:
             return RedirectResponse(url="/backtest?error=유니버스(종목)를 지정하세요", status_code=303)
@@ -400,6 +424,21 @@ def register_dashboard(
         from ..data_tasks import run_data_update
         data_dir = config.get_data_folder()
         jobs.submit("데이터 최신화", lambda job: run_data_update(job, data_dir))
+        return RedirectResponse(url="/jobs", status_code=303)
+
+    @app.post("/data/minute")
+    async def update_minute(request: Request):
+        # 누적 분봉 적재(증권사 API) — 선택 종목/인덱스의 최근 N일 분봉을 백그라운드 적재.
+        # 백테스트 장중 타이밍용 데이터. KIS 보관 한계로 최대 약 1년.
+        from ..data_tasks import run_minute_update
+        form = await request.form()
+        tickers = _resolve_minute_tickers(form)
+        if not tickers:
+            return RedirectResponse(url="/data?error=분봉 적재할 종목/인덱스를 선택하세요", status_code=303)
+        days = int(form.get("days") or 365)
+        data_dir = config.get_data_folder()
+        jobs.submit(f"분봉 적재 ({len(tickers)}종목)",
+                    lambda job: run_minute_update(job, data_dir, tickers, days))
         return RedirectResponse(url="/jobs", status_code=303)
 
     @app.get("/jobs", response_class=HTMLResponse)

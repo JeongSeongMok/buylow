@@ -113,7 +113,11 @@ class RuleStrategy(KrxFrameworkAlgorithm):
                 slices=int(ex.get("slices", 6)),
                 force_by_close=bool(ex.get("force_by_close", True)),
             )
-            self.set_execution(IntradayExecutionModel(cfg))
+            # (종목,일)별 분봉 적재 여부 맵 — 있으면 장중 타점, 없으면 시가 폴백.
+            from etl.lean_format import list_minute_days
+            data_dir = spec.get("data_folder", "./data")
+            avail = {t: list_minute_days(data_dir, "krx", t) for t in spec["universe"]}
+            self.set_execution(IntradayExecutionModel(cfg, available_days=avail))
 
         self.add_alpha(RuleAlpha(spec["signals"], spec["rule"],
                                  int(spec.get("period_days", 5)),

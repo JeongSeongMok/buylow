@@ -73,7 +73,8 @@ Every Claude session working in this repo follows these:
 - **Risk management** (global per-security stop-loss/take-profit/trailing); config & secrets (env → config.local.yaml → dashboard)
 - **Broker selection** (`config.get_broker`, dashboard) — KIS now; per-broker secrets separate from always-needed pykrx login
 - **KIS data layer** — `brokers/kis.py` `KisClient` (OAuth + disk-cached token), daily (수정주가) + `fetch_today` + minute (`fetch_minute`); selectable ETL source (`etl.sources.KisSource`); minute ETL → LEAN minute format (`etl/kis_minute.py`, `lean_format.write_equity_minute`)
-- **Intraday timing layer (②) for backtest** — `Resolution.MINUTE` runs daily selection (signals stay `Resolution.DAILY`, decide once/day) + intraday execution; styles: pullback (default), TWAP slicing, immediate; pure logic unit-tested
+- **Minute ingestion (data tab)** — `/data/minute` job ingests minute bars for selected tickers + index bulk-select (KOSPI200/KOSDAQ150), period 1m–1y; **incremental skip** of days already on disk + clamp to KIS's ~1y window (`ingest_minute(skip_existing, today)`)
+- **Intraday timing layer (②) for backtest** — `Resolution.MINUTE` runs daily selection (signals stay `Resolution.DAILY`, decide once/day) + intraday execution; styles: pullback (default), TWAP slicing, immediate; pure logic unit-tested. **Per-(symbol,day) fallback**: days with minute data on disk use the timing style; days without fall back to open fill (`TimingConfig.for_availability`, `lean_format.list_minute_days`)
 
 **Not done / gated:**
 - ⛔ **Live trading (real orders)** — KIS/Toss `IBrokerage`+`IDataQueueHandler` C# adapter DLL. **Design only** (per decision): backtest path complete; live execution intentionally not built — no real-order code ships without explicit user arming + a real account. Toss also gated on its API (not open).

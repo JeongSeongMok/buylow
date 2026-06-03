@@ -83,6 +83,19 @@ def equity_minute_zip_path(data_dir: str | Path, market: str, ticker: str, day: 
     return (Path(data_dir) / "equity" / market / "minute" / t / f"{day:%Y%m%d}_trade.zip")
 
 
+def list_minute_days(data_dir: str | Path, market: str, ticker: str) -> set[date]:
+    """디스크에 분봉이 적재된 날짜 집합. 백테스트가 (종목,일)별로 장중타이밍/시가폴백을 고르는 근거."""
+    d = Path(data_dir) / "equity" / market / "minute" / ticker.lower()
+    if not d.is_dir():
+        return set()
+    out: set[date] = set()
+    for p in d.glob("*_trade.zip"):
+        s = p.name.split("_")[0]
+        if len(s) == 8 and s.isdigit():
+            out.add(date(int(s[:4]), int(s[4:6]), int(s[6:8])))
+    return out
+
+
 def read_equity_minute(data_dir: str | Path, market: str, ticker: str,
                        day: date) -> list[MinuteBar]:
     """저장된 LEAN 분봉(하루치)을 MinuteBar 리스트로 되읽기(가격 역스케일)."""

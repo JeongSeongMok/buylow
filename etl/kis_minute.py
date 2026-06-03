@@ -19,11 +19,14 @@ from typing import Any
 
 from market.krx import KRX_MARKET, inject_krx_market
 
-from .lean_format import write_equity_minute
+from .lean_format import write_equity_minute, equity_minute_zip_path
 from .sources import MinuteBar
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
+
+# KIS 분봉 보관 한계(약 1년). 그보다 과거는 빈 결과라 호출 자체를 막아 낭비를 줄인다.
+MAX_LOOKBACK_DAYS = 365
 
 
 def _to_minute_bars(rows: list[dict]) -> list[MinuteBar]:
@@ -38,28 +41,42 @@ def ingest_minute(
     end: date,
     data_dir: str | Path = DEFAULT_DATA_DIR,
     client=None,
+    skip_existing: bool = True,
+    today: date | None = None,
 ) -> dict[str, Any]:
     """[start, end] 각 거래일의 분봉을 받아 하루 1개 zip으로 적재. 주말은 건너뛴다.
 
-    client 주입 가능(테스트). 없으면 config의 KIS 자격증명으로 생성.
+    - skip_existing: 이미 디스크에 있는 날짜는 API 호출 없이 건너뛴다(증분·재적재 비용 절감).
+    - start는 KIS 보관 한계(약 1년)로 클램프된다 — 그보다 과거는 어차피 빈 결과.
+    - client 주입 가능(테스트). 없으면 config의 KIS 자격증명으로 생성.
     """
     if client is None:
         from brokers.kis import from_config
         client = from_config()
 
-    days_written, total_bars = [], 0
+    today = today or date.today()
+    floor = today - timedelta(days=MAX_LOOKBACK_DAYS)
+    clamped = start < floor
+    if clamped:
+        start = floor
+
+    days_written, days_skipped, total_bars = [], 0, 0
     d = start
     while d <= end:
         if d.weekday() < 5:  # 월~금만(공휴일은 빈 결과 → 스킵)
-            rows = client.fetch_minute(ticker, d)
-            bars = _to_minute_bars(rows)
-            if bars:
-                write_equity_minute(data_dir, KRX_MARKET, ticker, d, bars)
-                days_written.append(d.isoformat())
-                total_bars += len(bars)
+            if skip_existing and equity_minute_zip_path(data_dir, KRX_MARKET, ticker, d).exists():
+                days_skipped += 1
+            else:
+                rows = client.fetch_minute(ticker, d)
+                bars = _to_minute_bars(rows)
+                if bars:
+                    write_equity_minute(data_dir, KRX_MARKET, ticker, d, bars)
+                    days_written.append(d.isoformat())
+                    total_bars += len(bars)
         d += timedelta(days=1)
     inject_krx_market(data_dir)
     return {"ticker": ticker, "days": len(days_written), "bars": total_bars,
+            "skipped": days_skipped, "clamped": clamped,
             "first": days_written[0] if days_written else None,
             "last": days_written[-1] if days_written else None}
 
@@ -74,11 +91,12 @@ def main() -> None:
     args = p.parse_args()
 
     info = ingest_minute(args.ticker, args.start, args.end or date.today(), Path(args.data_dir))
+    tail = f" (기존 {info['skipped']}일 건너뜀)" if info.get("skipped") else ""
     if info["days"]:
         print(f"적재 완료: {info['ticker']} {info['days']}일 {info['bars']}개 분봉 "
-              f"({info['first']}~{info['last']})")
+              f"({info['first']}~{info['last']}){tail}")
     else:
-        print(f"적재된 분봉 없음: {info['ticker']} — KIS 보관기간(약 1년) 밖이거나 데이터 없음")
+        print(f"신규 적재 분봉 없음: {info['ticker']}{tail} — KIS 보관기간(약 1년) 밖이거나 데이터 없음")
 
 
 if __name__ == "__main__":

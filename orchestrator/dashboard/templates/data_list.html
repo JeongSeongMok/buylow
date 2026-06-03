@@ -14,6 +14,29 @@
 </section>
 
 <section class="card">
+  <h2>누적 분봉 적재 <small>(장중 타이밍 백테스트용 · 증권사 API)</small></h2>
+  <p class="meta">선택한 종목·인덱스의 분봉을 최근 구간만큼 받아 디스크에 저장합니다(이미 받은 날짜는 건너뜀).
+    분봉이 있는 날은 백테스트가 장중 타점 전략을 쓰고, 없는 날은 시가 기준으로 진행합니다.
+    증권사(KIS)는 과거 분봉을 <b>최대 약 1년</b>만 보관하므로 그 이전은 받을 수 없습니다. (설정 탭에서 증권사 키 필요)</p>
+  <form method="post" action="/data/minute">
+    <label>인덱스 일괄
+      <span><input type="checkbox" name="index" value="KOSPI200"> KOSPI200</span>
+      <span><input type="checkbox" name="index" value="KOSDAQ150"> KOSDAQ150</span>
+    </label>
+    <label>직접 입력(쉼표 구분) <input type="text" name="universe" placeholder="005930, 000660"></label>
+    <label>기간
+      <select name="days">
+        <option value="30">최근 1달</option>
+        <option value="90">최근 3달</option>
+        <option value="180">최근 6달</option>
+        <option value="365" selected>최근 1년</option>
+      </select>
+    </label>
+    <button type="submit">분봉 적재</button>
+  </form>
+</section>
+
+<section class="card">
   <h2>적재 현황</h2>
   <label>검색 <input type="text" id="data-search" placeholder="종목명 또는 코드" oninput="filterData()"></label>
   <div class="scrolly">

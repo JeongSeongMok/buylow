@@ -17,10 +17,12 @@ from orchestrator.execution import (
 
 
 class IntradayExecutionModel(ExecutionModel):
-    def __init__(self, cfg: TimingConfig):
+    def __init__(self, cfg: TimingConfig, available_days: dict | None = None):
         self.cfg = cfg.normalized()
+        # {티커: {분봉 적재된 date}} — 그 (종목,일)에 분봉이 있으면 장중 타점, 없으면 시가 폴백.
+        self.available_days = available_days or {}
         self._targets = PortfolioTargetCollection()
-        self._state = {}  # symbol -> {"day": date, "ref": float, "total": int}
+        self._state = {}  # symbol -> {"day": date, "ref": float, "total": int, "cfg": TimingConfig}
 
     def execute(self, algorithm, targets):
         self._targets.add_range(targets)
@@ -45,14 +47,17 @@ class IntradayExecutionModel(ExecutionModel):
             st = self._state.get(symbol)
             if st is None or st["day"] != day:
                 # 새 거래일: 기준가=당일 첫 가격(≈시초가), total_delta=오늘 채울 총량 고정.
-                st = {"day": day, "ref": price, "total": remaining}
+                # 그 (종목,일)에 분봉이 있으면 설정 스타일, 없으면 시가 즉시 폴백.
+                avail = day in self.available_days.get(symbol.value, ())
+                st = {"day": day, "ref": price, "total": remaining,
+                      "cfg": self.cfg.for_availability(avail)}
                 self._state[symbol] = st
             elif st["total"] == 0 and remaining != 0:
                 # 장중 새 목표가 들어온 드문 경우 — total_delta 갱신.
                 st["total"] = remaining
 
             qty = decide_submit(
-                self.cfg,
+                st["cfg"],
                 remaining=remaining,
                 total_delta=int(st["total"]),
                 current_price=price,

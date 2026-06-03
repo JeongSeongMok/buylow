@@ -116,6 +116,20 @@ def test_zero_remaining_is_noop():
                              reference_price=100, elapsed_min=10, last_bar=False) == 0
 
 
+def test_for_availability_fallback_to_immediate():
+    cfg = TimingConfig(style=PULLBACK, entry_drop_pct=5.0)
+    # 분봉 있음 → 설정 스타일(pullback): 안 눌렸으면 미체결
+    avail = cfg.for_availability(True)
+    assert avail.style == PULLBACK
+    assert decide_submit(avail, remaining=10, total_delta=10, current_price=100,
+                         reference_price=100, elapsed_min=10, last_bar=False) == 0
+    # 분봉 없음 → 시가 즉시(immediate): 첫 호출에 전량
+    fb = cfg.for_availability(False)
+    assert fb.style == "immediate"
+    assert decide_submit(fb, remaining=10, total_delta=10, current_price=100,
+                         reference_price=100, elapsed_min=0, last_bar=False) == 10
+
+
 def test_unknown_style_falls_back_to_pullback():
     cfg = TimingConfig(style="bogus", entry_drop_pct=1.0)
     # normalized() → pullback. 안 눌렸으면 0

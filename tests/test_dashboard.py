@@ -131,6 +131,25 @@ def test_settings_page_shows_broker_and_kis_keys(client):
     assert "증권사" in t and "한국투자증권" in t and "KIS App Key" in t
 
 
+def test_data_page_shows_minute_ingest(client):
+    t = client.get("/data").text
+    assert "누적 분봉 적재" in t and "KOSPI200" in t
+
+
+def test_minute_ingest_submits_job(client):
+    r = client.post("/data/minute", data={"universe": "005930, 000660", "days": "30"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/jobs"
+    # 잡은 submit 시점에 등록되므로 /jobs 목록에 즉시 나타난다(이름에 종목 수 포함).
+    assert "분봉 적재" in client.get("/jobs").text
+
+
+def test_minute_ingest_requires_tickers(client):
+    r = client.post("/data/minute", data={"universe": "", "days": "30"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and "error" in r.headers["location"]
+
+
 def test_settings_save_broker_and_kis_secret(client, isolated_config):
     r = client.post("/settings", data={"broker": "kis", "kis_app_key": "MYKEY"})
     assert r.status_code == 200

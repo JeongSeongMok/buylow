@@ -158,6 +158,52 @@ def test_minute_etl_round_trip(tmp_path):
     assert back[0].close == 105.0 and back[0].ms == 9 * 3600 * 1000 and back[0].volume == 50
 
 
+def test_minute_etl_skips_existing(tmp_path):
+    from etl.kis_minute import ingest_minute
+    from market.krx import KRX_MARKET
+    from etl.lean_format import list_minute_days
+
+    class CountingClient:
+        def __init__(self): self.calls = 0
+        def fetch_minute(self, ticker, day, **kw):
+            self.calls += 1
+            return [{"ms": 9 * 3600 * 1000, "time": "090000", "open": 100, "high": 100,
+                     "low": 100, "close": 100, "volume": 1}]
+
+    c = CountingClient()
+    # 6/1(월) 적재
+    ingest_minute("005930", date(2026, 6, 1), date(2026, 6, 1), data_dir=tmp_path,
+                  client=c, today=date(2026, 6, 2))
+    assert c.calls == 1
+    # 다시 같은 날 → 디스크에 있으니 호출 0 (skip_existing 기본)
+    info = ingest_minute("005930", date(2026, 6, 1), date(2026, 6, 1), data_dir=tmp_path,
+                         client=c, today=date(2026, 6, 2))
+    assert c.calls == 1 and info["skipped"] == 1
+    assert list_minute_days(tmp_path, KRX_MARKET, "005930") == {date(2026, 6, 1)}
+
+
+def test_minute_etl_clamps_to_one_year(tmp_path):
+    from etl.kis_minute import ingest_minute
+
+    class C:
+        def __init__(self): self.days = []
+        def fetch_minute(self, ticker, day, **kw):
+            self.days.append(day); return []
+
+    c = C()
+    # 3년 전~오늘 요청 → 약 1년으로 클램프되어 그 이전 날짜는 호출 안 함
+    info = ingest_minute("005930", date(2023, 1, 1), date(2026, 6, 2), data_dir=tmp_path,
+                         client=c, today=date(2026, 6, 2))
+    assert info["clamped"] is True
+    assert c.days and min(c.days) >= date(2025, 6, 2)  # today-365 이후만
+
+
+def test_list_minute_days_empty(tmp_path):
+    from etl.lean_format import list_minute_days
+    from market.krx import KRX_MARKET
+    assert list_minute_days(tmp_path, KRX_MARKET, "000660") == set()
+
+
 def test_kis_source_maps_to_bars(tmp_path):
     out2 = [_row("20260602", 100, 120, 95, 118, 20), _row("20260601", 100, 105, 99, 0, 30)]
     sess = FakeSession(get_responses=[FakeResp(200, {"rt_cd": "0", "output2": out2})])

@@ -44,6 +44,17 @@ class TimingConfig:
         return TimingConfig(s, float(self.entry_drop_pct), float(self.exit_rebound_pct),
                             max(1, int(self.slices)), bool(self.force_by_close))
 
+    def for_availability(self, available: bool) -> "TimingConfig":
+        """그 (종목,일)에 분봉이 없으면 장중 타점이 불가하므로 '시가 즉시(IMMEDIATE)'로 폴백.
+
+        분봉이 있으면 설정 스타일 그대로. 마감 강제체결 옵션은 보존한다.
+        """
+        if available:
+            return self.normalized()
+        n = self.normalized()
+        return TimingConfig(IMMEDIATE, n.entry_drop_pct, n.exit_rebound_pct,
+                            n.slices, n.force_by_close)
+
 
 def minutes_since_open(hh: int, mm: int) -> int:
     """정규장 시작(09:00) 이후 경과 분. 장전이면 0, 장후면 SESSION_MIN으로 클램프."""
