@@ -21,7 +21,7 @@ from intraday_execution import IntradayExecutionModel
 
 class RuleAlpha(AlphaModel):
     def __init__(self, signals_config: dict, rule: str, period_days: int = 5,
-                 max_positions: int = 0, intraday: bool = False):
+                 max_positions: int = 0, minute_res: bool = False, select_eval: str = "close"):
         self.signals_config = signals_config          # 라벨 -> {type, params}
         self.ast = parse_rule(rule)
         self.used = signal_labels(self.ast)            # 식에 실제 쓰인 라벨만 평가
@@ -29,11 +29,13 @@ class RuleAlpha(AlphaModel):
         # 동시 보유 상한. 매수 신호가 자본 대비 너무 많으면 균등분할 시 종목당 배분이 1주 미만이
         # 되어 매매가 안 된다. 전체 종목 스캔은 유지하되, 매수 신호가 이보다 많으면 유동성 상위만 낸다.
         self.max_positions = max_positions
-        # 분봉 실행 모드: update()가 매 분봉 호출되므로, 선별은 '거래일 1회'로 제한한다.
-        # (지표는 Resolution.DAILY라 전날 종가까지만 반영 → 장중 실행은 ExecutionModel 몫.)
-        self.intraday = intraday
+        self.minute_res = minute_res          # 분봉 구독(update가 매 분봉 호출)
+        # 선별 주기: 'intraday'면 매 분봉 진행 중 일봉(현재가) 포함 재평가, 아니면 전날 종가 1회.
+        self.select_intraday = minute_res and select_eval == "intraday"
         self._decided_day = None
-        self._evals = {}                               # symbol -> {라벨: 평가기}
+        self._day = None
+        self._exited_today = {}               # symbol -> date (당일 청산 → 재진입 금지 쿨다운)
+        self._evals = {}                       # symbol -> {라벨: 평가기}
 
     def on_securities_changed(self, algorithm, changes):
         for sec in changes.added_securities:
@@ -42,28 +44,38 @@ class RuleAlpha(AlphaModel):
             evals = {}
             for label in self.used:
                 cfg = self.signals_config[label]
-                evals[label] = build_signal(cfg["type"], cfg.get("params", {}), algorithm, sec.symbol)
+                # 장중 선별이면 가격계열 신호는 잠정평가(현재가 포함) 모드로 생성.
+                evals[label] = build_signal(cfg["type"], cfg.get("params", {}), algorithm,
+                                            sec.symbol, intraday=self.select_intraday)
             self._evals[sec.symbol] = evals
         for sec in changes.removed_securities:
             self._evals.pop(sec.symbol, None)
 
     def update(self, algorithm, data):
-        # 분봉 모드: 하루 첫 평가만 선별을 내고, 이후 분봉에선 빈 리스트(기존 인사이트는 유지).
-        # 장중의 '언제 살지/팔지'는 IntradayExecutionModel이 담당한다.
-        if self.intraday:
-            today = algorithm.time.date()
-            if today == self._decided_day:
-                return []
-            self._decided_day = today
+        today = algorithm.time.date()
+        if self.minute_res:
+            if self.select_intraday:
+                if today != self._day:        # 새 거래일: 쿨다운 초기화
+                    self._day = today
+                    self._exited_today.clear()
+            else:
+                # 전날 종가 1회 선별: 하루 첫 분봉만 평가(이후 분봉은 기존 인사이트 유지).
+                if today == self._decided_day:
+                    return []
+                self._decided_day = today
         ups, exits, reason = [], [], {}
         for symbol, evals in self._evals.items():
             directions = {label: ev.direction() for label, ev in evals.items()}
             result = eval_rule(self.ast, directions)
             if result == UP:
+                if self.select_intraday and self._exited_today.get(symbol) == today:
+                    continue  # 당일 청산 종목은 재진입 금지(휩쏘 방지)
                 ups.append(symbol)
                 reason[symbol] = "+".join(l for l, d in directions.items() if d == UP)
             elif result == DOWN and algorithm.portfolio[symbol].invested:  # 보유 중일 때만 청산 신호
                 exits.append(Insight.price(symbol, self.hold, InsightDirection.DOWN))
+                if self.select_intraday:
+                    self._exited_today[symbol] = today
                 self._log_hit(algorithm, symbol, "SELL",
                               "+".join(l for l, d in directions.items() if d == DOWN))
         # 매수 신호가 상한보다 많으면 유동성(당일 거래대금=가격×거래량) 상위만 보유.
@@ -126,4 +138,5 @@ class RuleStrategy(KrxFrameworkAlgorithm):
         self.add_alpha(RuleAlpha(spec["signals"], spec["rule"],
                                  int(spec.get("period_days", 5)),
                                  int(spec.get("max_positions", 0)),
-                                 intraday=intraday))
+                                 minute_res=intraday,
+                                 select_eval=ex_spec.get("select_eval", "close")))

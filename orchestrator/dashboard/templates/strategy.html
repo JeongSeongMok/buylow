@@ -102,12 +102,20 @@
       <p class="meta" id="daily-note" hidden>일봉은 선별한 다음 거래일 <b>시초가에 전량 즉시 체결</b>됩니다 — 아래 장중 타이밍 옵션은 분봉에서만 적용됩니다.</p>
       <p class="notice" id="minute-note" hidden>⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요. 분봉이 없는 종목/날짜는 시가 기준으로 처리됩니다.</p>
       <div id="intraday-opts">
+        <label>선별 주기
+          <select name="select_eval">
+            <option value="close" {{ 'selected' if (ex.get('select_eval') or 'close') != 'intraday' }}>전날 종가 1회</option>
+            <option value="intraday" {{ 'selected' if (ex.get('select_eval') or 'close') == 'intraday' }}>장중 매분 (진행 중 일봉 포함)</option>
+          </select>
+          <small>매수/청산 대상을 언제 판단할지. '장중 매분'은 가격계열 신호(EMA·MACD·RSI·MOM·BB)를 매 분봉
+            현재가로 재평가(수급·가치는 전날값). 휩쏘 방지로 당일 청산 종목은 당일 재진입하지 않습니다.</small></label>
         <label>장중 방식
           <select name="exec_style">
             {% for key, name in execution_styles %}
             <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
             {% endfor %}
-          </select></label>
+          </select>
+          <small>'장중 매분' 선별과 함께 쓰면 <b>눌림목</b>은 선별과 역할이 겹칩니다 — 보통 '시가 즉시' 또는 'VWAP/TWAP' 권장.</small></label>
         <label>눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
           <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
         <label>반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">

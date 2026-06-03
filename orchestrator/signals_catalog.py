@@ -161,7 +161,8 @@ EXECUTION_STYLES = [
 ]
 _STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
 DEFAULT_EXECUTION = {"style": "pullback", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
-                     "slices": 6, "force_by_close": True, "risk_eval": "bar"}
+                     "slices": 6, "force_by_close": True, "risk_eval": "bar",
+                     "select_eval": "close"}
 
 
 def execution_from_form(form) -> tuple[str, dict]:
@@ -187,6 +188,8 @@ def execution_from_form(form) -> tuple[str, dict]:
         "force_by_close": bool(form.get("exec_force_by_close")),
         # 리스크 평가 주기(분봉일 때만 의미): 'bar'(매분) | 'daily'(종가 1회).
         "risk_eval": "daily" if form.get("risk_eval") == "daily" else "bar",
+        # 선별 주기(분봉일 때만 의미): 'close'(전날 종가 1회) | 'intraday'(장중 매분).
+        "select_eval": "intraday" if form.get("select_eval") == "intraday" else "close",
     }
     return resolution, execution
 

@@ -85,7 +85,8 @@ def test_execution_from_form_minute_and_params():
     })
     assert res == "minute"
     assert ex == {"style": "twap", "entry_drop_pct": 1.5, "exit_rebound_pct": 2.0,
-                  "slices": 8, "force_by_close": True, "risk_eval": "bar"}
+                  "slices": 8, "force_by_close": True, "risk_eval": "bar",
+                  "select_eval": "close"}
 
 
 def test_execution_from_form_risk_eval():
@@ -93,6 +94,13 @@ def test_execution_from_form_risk_eval():
     assert ex["risk_eval"] == "daily"
     _, ex = sc.execution_from_form({})  # 기본 매분
     assert ex["risk_eval"] == "bar"
+
+
+def test_execution_from_form_select_eval():
+    _, ex = sc.execution_from_form({"select_eval": "intraday"})
+    assert ex["select_eval"] == "intraday"
+    _, ex = sc.execution_from_form({})  # 기본 전날 종가
+    assert ex["select_eval"] == "close"
 
 
 def test_execution_from_form_rejects_bad_style_and_slices():
