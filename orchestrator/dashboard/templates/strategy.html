@@ -83,7 +83,8 @@
           <option value="bar" {{ 'selected' if rev != 'daily' }}>매분 (장중 실시간)</option>
           <option value="daily" {{ 'selected' if rev == 'daily' }}>일별 (종가 1회)</option>
         </select>
-        <small>분봉일 때만 적용 — 장중 손절/익절을 매 분 볼지, 하루 1회(종가)만 볼지. 일봉은 항상 일별.</small></label>
+        <small>분봉일 때만 적용 — 장중 손절/익절을 매 분 볼지, 하루 1회(종가)만 볼지. 일봉은 항상 일별.
+          '매분' 평가에는 <a href="/data">데이터</a> 탭에서 적재한 분봉이 필요합니다.</small></label>
     </section>
 
     {% set ex = strategy.get('execution') or {} %}
@@ -99,6 +100,7 @@
           <option value="minute" {{ 'selected' if res == 'minute' }}>분봉 (장중 타이밍)</option>
         </select></label>
       <p class="meta" id="daily-note" hidden>일봉은 선별한 다음 거래일 <b>시초가에 전량 즉시 체결</b>됩니다 — 아래 장중 타이밍 옵션은 분봉에서만 적용됩니다.</p>
+      <p class="notice" id="minute-note" hidden>⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요. 분봉이 없는 종목/날짜는 시가 기준으로 처리됩니다.</p>
       <div id="intraday-opts">
         <label>장중 방식
           <select name="exec_style">
@@ -150,6 +152,7 @@
     const minute = document.getElementById('resolution-sel').value === 'minute';
     document.getElementById('intraday-opts').hidden = !minute;
     document.getElementById('daily-note').hidden = minute;
+    document.getElementById('minute-note').hidden = !minute;  // 분봉 데이터 적재 필요 안내
     // 리스크 평가 주기는 분봉일 때만 의미(일봉은 항상 일별).
     document.getElementById('risk-eval-row').hidden = !minute;
   }
