@@ -62,7 +62,7 @@ main.wide { max-width: 85vw; }
 .card h2 { margin-top: 0; font-size: 1.1rem; }
 
 form label { display: block; margin-bottom: 0.8rem; color: var(--muted); font-size: 0.85rem; }
-form select, form input[type=text] {
+form select, form input[type=text], form input[type=password] {
   display: block;
   width: 100%;
   margin-top: 0.25rem;
@@ -72,6 +72,13 @@ form select, form input[type=text] {
   border: 1px solid var(--border);
   border-radius: 5px;
 }
+/* 설정 폼: 라벨/상태 한 줄, 입력은 그 아래. 액션(저장+테스트)은 한 줄에. */
+.field-head { display: flex; align-items: baseline; gap: 0.4rem; }
+.field-head .grow { margin-left: auto; }
+.form-actions { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
+.form-actions .test-result { font-size: 0.85rem; }
+button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+button.secondary:hover { background: var(--card); filter: none; }
 button {
   background: var(--accent);
   color: #fff;

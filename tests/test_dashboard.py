@@ -157,6 +157,24 @@ def test_settings_save_broker_and_kis_secret(client, isolated_config):
     assert isolated_config.get_kis_credentials()["app_key"] == "MYKEY"
 
 
+def test_settings_page_two_columns_and_no_storage_wording(client):
+    t = client.get("/settings").text
+    assert "한국거래소" in t and "증권사" in t          # 2개 컬럼
+    assert "연동 테스트" in t                            # 테스트 버튼
+    assert "저장소에는 올라가지 않습니다" not in t        # 삭제된 워딩
+
+
+def test_settings_test_krx_requires_creds(client):
+    # 자격증명 없으면 네트워크 호출 없이 ok:false 즉시 반환
+    d = client.post("/settings/test/krx").json()
+    assert d["ok"] is False
+
+
+def test_settings_test_kis_requires_creds(client):
+    d = client.post("/settings/test/kis").json()
+    assert d["ok"] is False
+
+
 def test_strategy_save_requires_a_condition(client):
     # 아무 조건도 체크 안 하면(그룹 비어있음) 저장 거부
     r = client.post("/strategy", data={"period_days": "5"}, follow_redirects=False)

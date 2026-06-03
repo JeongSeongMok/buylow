@@ -484,3 +484,32 @@ def register_dashboard(
             config.set_broker(broker)
         config.save_secrets({k: str(v) for k, v in form.items()})
         return RedirectResponse(url="/settings?saved=1", status_code=303)
+
+    @app.post("/settings/test/krx")
+    def settings_test_krx():
+        # KRX 자격증명으로 펀더멘털 한 건을 실제 조회해 연동을 확인(무거우면 몇 초).
+        if not config.apply_krx_credentials():
+            return {"ok": False, "message": "KRX 아이디/비밀번호를 먼저 저장하세요"}
+        try:
+            from pykrx import stock
+            day = stock.get_nearest_business_day_in_a_week()
+            df = stock.get_market_fundamental_by_ticker(day, market="KOSPI")
+            n = 0 if df is None else len(df)
+            if n:
+                return {"ok": True, "message": f"정상 — {day} 기준 {n}종목 지표 조회됨"}
+            return {"ok": False, "message": "조회 결과가 비었습니다(로그인/권한 확인)"}
+        except Exception as e:
+            return {"ok": False, "message": f"실패: {type(e).__name__} {e}"}
+
+    @app.post("/settings/test/kis")
+    def settings_test_kis():
+        # KIS App Key/Secret로 토큰을 실제 발급해 인증을 확인.
+        cred = config.get_kis_credentials()
+        if not (cred["app_key"] and cred["app_secret"]):
+            return {"ok": False, "message": "KIS App Key/Secret을 먼저 저장하세요"}
+        try:
+            from brokers.kis import KisClient
+            KisClient(cred["app_key"], cred["app_secret"], env="real").access_token()
+            return {"ok": True, "message": "정상 — 접근토큰 발급 성공"}
+        except Exception as e:
+            return {"ok": False, "message": f"실패: {type(e).__name__} {e}"}
