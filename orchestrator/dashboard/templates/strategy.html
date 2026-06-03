@@ -60,26 +60,29 @@
       </section>
     </div>
 
-    <!-- 오른쪽: 신호 보유 기간 → 리스크 관리 → 체결 타이밍 -->
+    <!-- 오른쪽: 신호 보유 기간 / 리스크 관리 / 체결 타이밍 — 각각 별도 카드 -->
+    <div>
     <section class="card">
-      <h2>운용 설정</h2>
-
-      <h3>신호 보유 기간</h3>
+      <h2>신호 보유 기간</h2>
       <p class="meta">매수 신호가 마지막으로 뜬 날로부터 며칠 더 보유할지(기본 3일). 보유 중 매도 신호가 나오면
         기간과 무관하게 즉시 청산, 신호가 사라지면 이 기간 후 청산. 짧을수록 반응 빠름·잡음에 잘 털림.</p>
       <label>보유 기간(일) <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6"></label>
+    </section>
 
-      <h3 class="spaced">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
+    <section class="card">
+      <h2>리스크 관리 <small>(전역 · 비우면 미적용)</small></h2>
       <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
         <small>매수가 대비 이만큼 떨어지면 매도</small></label>
       <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">
         <small>평가이익이 이만큼 나면 매도</small></label>
       <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
         <small>매수 후 고점 대비 이만큼 떨어지면 매도(고점 자동 추적 → 이익 보호)</small></label>
+    </section>
 
-      {% set ex = strategy.get('execution') or {} %}
-      {% set res = strategy.get('resolution') or 'daily' %}
-      <h3 class="spaced">체결 타이밍 <small>(장중 진입/청산 시점)</small></h3>
+    {% set ex = strategy.get('execution') or {} %}
+    {% set res = strategy.get('resolution') or 'daily' %}
+    <section class="card">
+      <h2>체결 타이밍 <small>(장중 진입/청산 시점)</small></h2>
       <p class="meta">일봉으로 <b>매수/청산 대상</b>을 선별한 뒤, 그 대상을 그날 <b>언제 체결</b>할지를 정한다.
         '일봉'은 다음 거래일 시초가에 즉시 전량. '분봉'은 장중 분봉으로 타이밍을 잡는다(분봉 데이터 필요 ·
         KIS 적재). </p>
@@ -103,6 +106,7 @@
       <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
         장 마감 전 미체결 잔량 강제 체결</label>
     </section>
+    </div>
   </div>
 </form>
 
