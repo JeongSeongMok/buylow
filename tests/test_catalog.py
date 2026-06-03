@@ -32,6 +32,19 @@ def test_lists_and_summary(tmp_path):
     assert summary["flow"]["recent"][0]["foreign"] == -33675372900
 
 
+def test_minute_listing_and_count(tmp_path):
+    from etl.lean_format import write_equity_minute
+    from etl.sources import MinuteBar
+    assert catalog.list_minute_tickers(tmp_path) == []
+    assert catalog.minute_day_count(tmp_path, "005930") == 0
+    bar = [MinuteBar(9 * 3600 * 1000, 100, 100, 100, 100, 1)]
+    write_equity_minute(tmp_path, "krx", "005930", date(2026, 6, 1), bar)
+    write_equity_minute(tmp_path, "krx", "005930", date(2026, 6, 2), bar)
+    assert catalog.list_minute_tickers(tmp_path) == ["005930"]
+    assert catalog.minute_day_count(tmp_path, "005930") == 2
+    assert "005930" in catalog.all_tickers(tmp_path)  # 분봉만 있어도 목록에 포함
+
+
 def test_empty_ticker(tmp_path):
     s = catalog.ticker_summary(tmp_path, "000000")
     assert s["price"]["count"] == 0 and s["flow"]["count"] == 0

@@ -136,6 +136,7 @@ def test_data_page_shows_minute_ingest(client):
     assert "누적 분봉 적재" in t and "KOSPI200" in t
     # 백테스트와 동일한 칩 기반 종목 추가 UX (검색 + 인덱스 일괄 + 칩)
     assert "m-ticker-search" in t and "mAddIndex" in t and "m-universe-hidden" in t
+    assert "<th>분봉</th>" in t  # 적재 현황에 분봉 컬럼
 
 
 def test_minute_ingest_submits_job(client):

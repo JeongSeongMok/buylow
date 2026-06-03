@@ -27,8 +27,23 @@ def list_flow_tickers(data_dir: str | Path) -> list[str]:
     return sorted(p.stem for p in d.glob("*.csv")) if d.is_dir() else []
 
 
+def list_minute_tickers(data_dir: str | Path) -> list[str]:
+    """분봉이 하루라도 적재된 종목코드 목록 (equity/<market>/minute/<ticker>/)."""
+    d = Path(data_dir) / "equity" / KRX_MARKET / "minute"
+    if not d.is_dir():
+        return []
+    return sorted(p.name for p in d.iterdir() if p.is_dir() and any(p.glob("*_trade.zip")))
+
+
+def minute_day_count(data_dir: str | Path, ticker: str) -> int:
+    """해당 종목의 분봉 적재 일수(저장된 일별 zip 개수)."""
+    d = Path(data_dir) / "equity" / KRX_MARKET / "minute" / ticker.lower()
+    return len(list(d.glob("*_trade.zip"))) if d.is_dir() else 0
+
+
 def all_tickers(data_dir: str | Path) -> list[str]:
-    return sorted(set(list_price_tickers(data_dir)) | set(list_flow_tickers(data_dir)))
+    return sorted(set(list_price_tickers(data_dir)) | set(list_flow_tickers(data_dir))
+                  | set(list_minute_tickers(data_dir)))
 
 
 def _last_csv_date(path: Path) -> str | None:

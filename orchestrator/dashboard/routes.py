@@ -417,8 +417,10 @@ def register_dashboard(
         names = load_names(data_dir)
         price = set(catalog.list_price_tickers(data_dir))
         flow = set(catalog.list_flow_tickers(data_dir))
-        tickers = [{"ticker": t, "name": names.get(t, ""), "price": t in price, "flow": t in flow}
-                   for t in sorted(price | flow)]
+        minute = set(catalog.list_minute_tickers(data_dir))
+        tickers = [{"ticker": t, "name": names.get(t, ""), "price": t in price, "flow": t in flow,
+                    "minute": (catalog.minute_day_count(data_dir, t) if t in minute else 0)}
+                   for t in sorted(price | flow | minute)]
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
