@@ -150,6 +150,38 @@ def test_minute_ingest_requires_tickers(client):
     assert r.status_code == 303 and "error" in r.headers["location"]
 
 
+def _form(pairs):
+    from starlette.datastructures import FormData
+    return FormData(pairs)
+
+
+def test_resolve_minute_tickers_index_ok(monkeypatch):
+    from orchestrator.dashboard import routes
+    from etl import universe
+    monkeypatch.setattr(universe, "list_universe", lambda key, on=None: ["005930", "000660"])
+    out, errors = routes._resolve_minute_tickers(_form([("index", "KOSPI200")]))
+    assert out == ["005930", "000660"] and errors == []
+
+
+def test_resolve_minute_tickers_index_failure_surfaced(monkeypatch):
+    from orchestrator.dashboard import routes
+    from etl import universe
+    def boom(key, on=None):
+        raise RuntimeError("login required")
+    monkeypatch.setattr(universe, "list_universe", boom)
+    out, errors = routes._resolve_minute_tickers(_form([("index", "KOSPI200")]))
+    assert out == [] and errors and "KOSPI200" in errors[0]
+
+
+def test_resolve_minute_tickers_manual_plus_index_dedupes(monkeypatch):
+    from orchestrator.dashboard import routes
+    from etl import universe
+    monkeypatch.setattr(universe, "list_universe", lambda key, on=None: ["005930", "035720"])
+    out, _ = routes._resolve_minute_tickers(
+        _form([("universe", "005930, 000660"), ("index", "KOSDAQ150")]))
+    assert out == ["005930", "000660", "035720"]  # 직접입력 먼저 + 중복(005930) 제거
+
+
 def test_settings_save_broker_and_kis_secret(client, isolated_config):
     r = client.post("/settings", data={"broker": "kis", "kis_app_key": "MYKEY"})
     assert r.status_code == 200

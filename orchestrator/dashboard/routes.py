@@ -47,27 +47,47 @@ def _resolve_universe(form, data_folder: str) -> list[str]:
     return [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
 
 
-def _resolve_minute_tickers(form) -> list[str]:
+def _resolve_minute_tickers(form) -> tuple[list[str], list[str]]:
     """분봉 적재 대상 = 직접 입력(universe csv) + 인덱스(KOSPI200/KOSDAQ150) 구성종목. 중복 제거.
 
     적재가 목적이라 '이미 로드된 것'과 교집합하지 않는다(새 분봉을 받는 것이므로).
+    반환: (티커목록, 에러메시지목록). 인덱스 조회 실패/공집합은 에러로 모아 라우트가 사용자에게 알린다.
     """
     from etl.universe import INDEX_CODES, list_universe
     out: list[str] = []
     seen: set[str] = set()
+    errors: list[str] = []
+
     for t in (form.get("universe") or "").split(","):
         t = t.strip()
         if t and t not in seen:
             seen.add(t); out.append(t)
-    for key in (form.getlist("index") if hasattr(form, "getlist") else [form.get("index")]):
-        if key and key.upper() in INDEX_CODES:
+
+    indices = form.getlist("index") if hasattr(form, "getlist") else [form.get("index")]
+    if any(k and k.upper() in INDEX_CODES for k in indices):
+        # 휴장일이면 지수 구성종목(deposit file)이 비므로 가장 가까운 영업일로 조회.
+        on = None
+        try:
+            from pykrx import stock
+            from datetime import datetime
+            on = datetime.strptime(stock.get_nearest_business_day_in_a_week(), "%Y%m%d").date()
+        except Exception:
+            pass
+        for key in indices:
+            if not key or key.upper() not in INDEX_CODES:
+                continue
             try:
-                for t in list_universe(key.upper()):
-                    if t not in seen:
-                        seen.add(t); out.append(t)
-            except Exception:
-                pass  # 인덱스 조회 실패(KRX 로그인 필요 등) — 직접 입력분만 사용
-    return out
+                members = list_universe(key.upper(), on)
+            except Exception as e:
+                errors.append(f"{key} 구성종목 조회 실패({type(e).__name__}) — 설정 탭에서 KRX 로그인이 필요할 수 있습니다")
+                continue
+            if not members:
+                errors.append(f"{key} 구성종목이 비어 있습니다(날짜/권한 확인)")
+                continue
+            for t in members:
+                if t not in seen:
+                    seen.add(t); out.append(t)
+    return out, errors
 
 
 def _loaded_count() -> int:
@@ -432,9 +452,10 @@ def register_dashboard(
         # 백테스트 장중 타이밍용 데이터. KIS 보관 한계로 최대 약 1년.
         from ..data_tasks import run_minute_update
         form = await request.form()
-        tickers = _resolve_minute_tickers(form)
+        tickers, errors = _resolve_minute_tickers(form)
         if not tickers:
-            return RedirectResponse(url="/data?error=분봉 적재할 종목/인덱스를 선택하세요", status_code=303)
+            msg = errors[0] if errors else "분봉 적재할 종목/인덱스를 선택하세요"
+            return RedirectResponse(url=f"/data?error={msg}", status_code=303)
         days = int(form.get("days") or 365)
         data_dir = config.get_data_folder()
         jobs.submit(f"분봉 적재 ({len(tickers)}종목)",
