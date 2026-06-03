@@ -87,24 +87,27 @@
         '일봉'은 다음 거래일 시초가에 즉시 전량. '분봉'은 장중 분봉으로 타이밍을 잡는다(분봉 데이터 필요 ·
         KIS 적재). </p>
       <label>해상도
-        <select name="resolution">
+        <select name="resolution" id="resolution-sel" onchange="toggleIntraday()">
           <option value="daily" {{ 'selected' if res != 'minute' }}>일봉 (다음 시가 즉시)</option>
           <option value="minute" {{ 'selected' if res == 'minute' }}>분봉 (장중 타이밍)</option>
         </select></label>
-      <label>장중 방식
-        <select name="exec_style">
-          {% for key, name in execution_styles %}
-          <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
-          {% endfor %}
-        </select></label>
-      <label>눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
-        <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
-      <label>반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
-        <small>청산: 시초가 대비 이만큼 반등하면 매도(눌림목 방식)</small></label>
-      <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
-        <small>VWAP/TWAP 방식에서 정규장을 몇 등분해 나눠 체결할지</small></label>
-      <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
-        장 마감 전 미체결 잔량 강제 체결</label>
+      <p class="meta" id="daily-note" hidden>일봉은 선별한 다음 거래일 <b>시초가에 전량 즉시 체결</b>됩니다 — 아래 장중 타이밍 옵션은 분봉에서만 적용됩니다.</p>
+      <div id="intraday-opts">
+        <label>장중 방식
+          <select name="exec_style">
+            {% for key, name in execution_styles %}
+            <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
+            {% endfor %}
+          </select></label>
+        <label>눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
+          <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
+        <label>반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
+          <small>청산: 시초가 대비 이만큼 반등하면 매도(눌림목 방식)</small></label>
+        <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
+          <small>VWAP/TWAP 방식에서 정규장을 몇 등분해 나눠 체결할지</small></label>
+        <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
+          장 마감 전 미체결 잔량 강제 체결</label>
+      </div>
     </section>
     </div>
   </div>
@@ -135,8 +138,15 @@
     document.getElementById('groups').appendChild(node);
     checkDirty();
   }
+  // 해상도=일봉이면 장중 타이밍 옵션은 의미 없으므로 숨기고 안내만 표시.
+  function toggleIntraday() {
+    const minute = document.getElementById('resolution-sel').value === 'minute';
+    document.getElementById('intraday-opts').hidden = !minute;
+    document.getElementById('daily-note').hidden = minute;
+  }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
+  toggleIntraday();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();
 </script>
