@@ -47,6 +47,42 @@ def test_update_all_market_backfills_missing_fundamental(tmp_path, monkeypatch):
     assert flow_calls["n"] == 0                              # 수급은 신규 거래일 없어 생략(per-ticker 미호출)
 
 
+def test_index_members_steps_back_when_today_empty():
+    # 오늘자(deposit file)가 빈 응답 → 가장 가까운 발행 영업일로 되짚어 구성종목을 얻는다.
+    from etl.universe import index_members
+
+    class FakeStock:
+        def get_index_portfolio_deposit_file(self, code, date):
+            # 6/3(수)·6/2(화)는 빈 응답, 6/1(월)에 구성종목 발행됨
+            return ["005930", "000660"] if date == "20260601" else []
+
+    out = index_members("1028", on=date(2026, 6, 3), stock=FakeStock())
+    assert out == ["005930", "000660"]
+
+
+def test_index_members_handles_dataframe_and_filters():
+    # pykrx가 DataFrame(행 인덱스=종목코드)을 줘도, 비6자리/지수명은 걸러 코드만.
+    import pandas as pd
+    from etl.universe import index_members
+
+    class FakeStock:
+        def get_index_portfolio_deposit_file(self, code, date):
+            return pd.DataFrame(index=["005930", "035720", "KOSPI200", "12345"])
+
+    out = index_members("1028", on=date(2026, 6, 3), stock=FakeStock())
+    assert out == ["005930", "035720"]  # 6자리만
+
+
+def test_index_members_empty_when_all_blank():
+    from etl.universe import index_members
+
+    class FakeStock:
+        def get_index_portfolio_deposit_file(self, code, date):
+            return []
+
+    assert index_members("1028", on=date(2026, 6, 3), stock=FakeStock()) == []
+
+
 @pytest.mark.integration
 def test_ingest_kospi200_small(tmp_path):
     from orchestrator.config import apply_krx_credentials

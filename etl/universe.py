@@ -13,7 +13,7 @@ import argparse
 import contextlib
 import io
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,16 +30,48 @@ INDEX_CODES = {"KOSPI200": "1028", "KOSDAQ150": "2203"}
 KOSPI200_INDEX = INDEX_CODES["KOSPI200"]  # 하위호환
 
 
+def _as_codes(res) -> list[str]:
+    """pykrx 반환(list 또는 DataFrame/Index)을 6자리 종목코드 리스트로 정규화."""
+    if res is None:
+        return []
+    if hasattr(res, "index") and not isinstance(res, (list, tuple)):
+        res = list(res.index)  # DataFrame → 행 인덱스(=종목코드)
+    return [str(c) for c in res if str(c).isdigit() and len(str(c)) == 6]
+
+
+def index_members(code: str, on: date | None = None, stock=None) -> list[str]:
+    """지수 구성종목(deposit file). 오늘자가 미발행/휴장이면 최근 영업일로 며칠 되짚는다.
+
+    pykrx가 오늘 날짜엔 빈 응답을 주는 일이 잦아(발행 지연·휴장·미래일자) 한 번만 조회하면
+    빈 목록이 된다. stock 주입 가능(테스트).
+    """
+    if stock is None:
+        from pykrx import stock as _stock
+        stock = _stock
+    base = on or date.today()
+    for back in range(0, 12):  # 최대 ~2주 되짚기
+        d = base - timedelta(days=back)
+        if d.weekday() >= 5:  # 주말 스킵
+            continue
+        try:
+            members = _as_codes(stock.get_index_portfolio_deposit_file(code, date=d.strftime("%Y%m%d")))
+        except Exception:
+            members = []
+        if members:
+            return members
+    return []
+
+
 def list_universe(market: str = "KOSPI200", on: date | None = None) -> list[str]:
     """유니버스 종목코드 목록. market: KOSPI200 | KOSDAQ150 | KOSPI | KOSDAQ | ALL."""
     from pykrx import stock
     from orchestrator.config import apply_krx_credentials
     apply_krx_credentials()  # 지수 구성종목 조회 등은 KRX 로그인 필요
-    on_str = (on or date.today()).strftime("%Y%m%d")
     code = INDEX_CODES.get(market.upper())
-    if code:  # KOSPI200/KOSDAQ150 등 지수 → 구성종목(deposit file). 날짜 명시(오늘 기준 실패 방지)
-        return list(stock.get_index_portfolio_deposit_file(code, date=on_str))
-    return list(stock.get_market_ticker_list(on_str, market=market.upper()))
+    if code:  # KOSPI200/KOSDAQ150 등 지수 → 구성종목(최근 영업일로 되짚어 빈 목록 방지)
+        return index_members(code, on, stock)
+    on_str = (on or date.today()).strftime("%Y%m%d")
+    return _as_codes(stock.get_market_ticker_list(on_str, market=market.upper()))
 
 
 def ingest_universe(
