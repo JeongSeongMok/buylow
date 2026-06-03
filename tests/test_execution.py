@@ -1,9 +1,20 @@
 """장중 타이밍 순수 로직 단위테스트 (LEAN 비의존)."""
 
+from datetime import date
+
 from orchestrator.execution import (
     TimingConfig, IMMEDIATE, PULLBACK, TWAP,
     minutes_since_open, is_last_bar, slice_index, decide_submit,
+    should_daily_gate_eval,
 )
+
+
+def test_should_daily_gate_eval():
+    d1, d2 = date(2026, 6, 1), date(2026, 6, 2)
+    assert not should_daily_gate_eval(10, 0, d1, None)     # 장중 → 평가 안 함
+    assert should_daily_gate_eval(15, 29, d1, None)        # 마감 분봉 → 평가
+    assert not should_daily_gate_eval(15, 30, d1, d1)      # 같은 날 이미 평가 → 중복 방지
+    assert should_daily_gate_eval(15, 29, d2, d1)          # 다음 날 마감 → 평가
 
 
 # ── 시간 헬퍼 ──────────────────────────────────────────────────────────────

@@ -85,7 +85,14 @@ def test_execution_from_form_minute_and_params():
     })
     assert res == "minute"
     assert ex == {"style": "twap", "entry_drop_pct": 1.5, "exit_rebound_pct": 2.0,
-                  "slices": 8, "force_by_close": True}
+                  "slices": 8, "force_by_close": True, "risk_eval": "bar"}
+
+
+def test_execution_from_form_risk_eval():
+    _, ex = sc.execution_from_form({"risk_eval": "daily"})
+    assert ex["risk_eval"] == "daily"
+    _, ex = sc.execution_from_form({})  # 기본 매분
+    assert ex["risk_eval"] == "bar"
 
 
 def test_execution_from_form_rejects_bad_style_and_slices():

@@ -66,6 +66,15 @@ def is_last_bar(hh: int, mm: int) -> bool:
     return hh * 60 + mm >= KRX_CLOSE_MIN - 1
 
 
+def should_daily_gate_eval(hh: int, mm: int, current_day, last_eval_day) -> bool:
+    """분봉 구독에서 리스크를 '일별'로 평가할 때의 게이트: 장 마감 분봉에 하루 1회만 True.
+
+    분봉이면 리스크 모델이 매 분봉 호출되는데, 이걸 통과시키면 일봉처럼 종가(마감) 기준
+    하루 1회만 평가하게 된다(장중 흔들림에 손절이 휘둘리지 않게).
+    """
+    return is_last_bar(hh, mm) and current_day != last_eval_day
+
+
 def slice_index(elapsed_min: int, slices: int) -> int:
     """경과 분 → 0-기반 분할 인덱스(0..slices-1). TWAP 누적 스케줄 계산용."""
     slices = max(1, int(slices))

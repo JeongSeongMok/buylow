@@ -96,7 +96,11 @@ class RuleStrategy(KrxFrameworkAlgorithm):
         # 해상도: 'minute'면 일봉 선별 + 장중(분봉) 타이밍 실행, 그 외(기본)는 일봉/다음시가 체결.
         # 신호 지표는 Resolution.DAILY로 생성되므로, 분봉 구독에서도 선별은 일봉 기준 유지된다.
         intraday = str(spec.get("resolution", "daily")).lower() == "minute"
-        self.setup_krx_framework(Resolution.MINUTE if intraday else Resolution.DAILY)
+        # 분봉인데 리스크는 '일별(종가)'로 평가 선택 시 게이트 적용(일봉은 어차피 일별).
+        ex_spec = spec.get("execution", {}) or {}
+        risk_eval_daily = intraday and ex_spec.get("risk_eval", "bar") == "daily"
+        self.setup_krx_framework(Resolution.MINUTE if intraday else Resolution.DAILY,
+                                 risk_eval_daily=risk_eval_daily)
 
         symbols = self.krx_symbols(spec["universe"])
         self.set_universe_selection(ManualUniverseSelectionModel(symbols))

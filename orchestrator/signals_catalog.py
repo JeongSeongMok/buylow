@@ -161,7 +161,7 @@ EXECUTION_STYLES = [
 ]
 _STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
 DEFAULT_EXECUTION = {"style": "pullback", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
-                     "slices": 6, "force_by_close": True}
+                     "slices": 6, "force_by_close": True, "risk_eval": "bar"}
 
 
 def execution_from_form(form) -> tuple[str, dict]:
@@ -185,6 +185,8 @@ def execution_from_form(form) -> tuple[str, dict]:
         "slices": max(1, num("exec_slices", 6, int)),
         # 체크박스: 폼에 키 있으면 True. 템플릿은 기본 체크로 렌더한다.
         "force_by_close": bool(form.get("exec_force_by_close")),
+        # 리스크 평가 주기(분봉일 때만 의미): 'bar'(매분) | 'daily'(종가 1회).
+        "risk_eval": "daily" if form.get("risk_eval") == "daily" else "bar",
     }
     return resolution, execution
 

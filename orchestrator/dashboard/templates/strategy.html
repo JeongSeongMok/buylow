@@ -77,6 +77,13 @@
         <small>평가이익이 이만큼 나면 매도</small></label>
       <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
         <small>매수 후 고점 대비 이만큼 떨어지면 매도(고점 자동 추적 → 이익 보호)</small></label>
+      {% set rev = (strategy.get('execution') or {}).get('risk_eval', 'bar') %}
+      <label id="risk-eval-row" hidden>평가 주기
+        <select name="risk_eval">
+          <option value="bar" {{ 'selected' if rev != 'daily' }}>매분 (장중 실시간)</option>
+          <option value="daily" {{ 'selected' if rev == 'daily' }}>일별 (종가 1회)</option>
+        </select>
+        <small>분봉일 때만 적용 — 장중 손절/익절을 매 분 볼지, 하루 1회(종가)만 볼지. 일봉은 항상 일별.</small></label>
     </section>
 
     {% set ex = strategy.get('execution') or {} %}
@@ -143,6 +150,8 @@
     const minute = document.getElementById('resolution-sel').value === 'minute';
     document.getElementById('intraday-opts').hidden = !minute;
     document.getElementById('daily-note').hidden = minute;
+    // 리스크 평가 주기는 분봉일 때만 의미(일봉은 항상 일별).
+    document.getElementById('risk-eval-row').hidden = !minute;
   }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
