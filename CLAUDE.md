@@ -43,7 +43,9 @@ Every Claude session working in this repo follows these:
 | LEAN lifetime | "one process = one job"; orchestrator spawns/monitors/kills |
 | Orchestrator | Python (FastAPI + APScheduler) |
 | Strategy language | Python (pythonnet) |
-| C# artifacts | **Two**: a thin net10 launcher (vendored LEAN `Program.cs`) + `MyTrading.Toss.dll` adapter |
+| Brokerage model | User picks broker in dashboard (KIS=한국투자증권 now; Toss when API opens). Broker drives "today/live" data + (live) orders; historical daily stays keyless pykrx |
+| Two-layer strategy | ① daily selection (alpha, once/day) + ② intraday timing (LEAN `ExecutionModel` on minute bars). Same code in backtest & live. Timing logic is pure (`orchestrator/execution.py`) + thin adapter (`strategies/intraday_execution.py`) — mirrors `rules.py`/`RuleAlpha` |
+| C# artifacts | **Two**: a thin net10 launcher (vendored LEAN `Program.cs`) + a broker adapter DLL (`MyTrading.Toss.dll` / `MyTrading.Kis.dll`) — **live only, not built yet** |
 | LEAN NuGet version | `2.5.17757` lineage (net10); **never** `10730.x` (net462) — see DEVELOPMENT.md |
 | Orchestrator ↔ LEAN | Filesystem (config in / results out) + process control |
 | Persistence | SQLite (orchestrator-owned, WAL) for state + disk files (`runs/<id>/`) for blobs; no DB server |
@@ -69,10 +71,14 @@ Every Claude session working in this repo follows these:
 - **Signals (7)** — EMA, MACD, RSI, momentum, Bollinger (mean-reversion + breakout switch), value (저PER/저PBR + derived ROE), flow (수급: foreign/inst/individual selectable, N-day cumulative)
 - Universe — scan all loaded + index bulk-add (KOSPI200/KOSDAQ150) + name/code search; portfolio is **long-only** + concurrent-holding cap (top by liquidity)
 - **Risk management** (global per-security stop-loss/take-profit/trailing); config & secrets (env → config.local.yaml → dashboard)
+- **Broker selection** (`config.get_broker`, dashboard) — KIS now; per-broker secrets separate from always-needed pykrx login
+- **KIS data layer** — `brokers/kis.py` `KisClient` (OAuth + disk-cached token), daily (수정주가) + `fetch_today` + minute (`fetch_minute`); selectable ETL source (`etl.sources.KisSource`); minute ETL → LEAN minute format (`etl/kis_minute.py`, `lean_format.write_equity_minute`)
+- **Intraday timing layer (②) for backtest** — `Resolution.MINUTE` runs daily selection (signals stay `Resolution.DAILY`, decide once/day) + intraday execution; styles: pullback (default), TWAP slicing, immediate; pure logic unit-tested
 
 **Not done / gated:**
-- ⛔ **Toss live trading** (`TossBrokerage`/`TossDataQueueHandler`, `MyTrading.Toss.dll`) — gated on Toss API (not open). Only piece needing the broker API; live execution engine depends on it.
-- Minute-bar ETL (intraday/변동성 돌파), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
+- ⛔ **Live trading (real orders)** — KIS/Toss `IBrokerage`+`IDataQueueHandler` C# adapter DLL. **Design only** (per decision): backtest path complete; live execution intentionally not built — no real-order code ships without explicit user arming + a real account. Toss also gated on its API (not open).
+- ⚠️ **KIS minute history is bounded** (~1y kept, 120 bars/call) → minute backtest is universe-scoped + recent, not whole-market 5y.
+- Volatility-breakout (intraday signals), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
 - (No AI/NL strategy generation — intentionally out of scope.)
 
 > See `README.md` 로드맵 for the up-to-date checklist.

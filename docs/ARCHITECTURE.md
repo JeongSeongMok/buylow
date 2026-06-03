@@ -140,6 +140,42 @@ expression combines them, e.g. `(EMA AND MACD) OR (RSI AND MOM)`.
   runs it. Same `RuleAlpha` will drive live (when Toss opens); intraday/30s eval awaits a live feed.
 - Signals are evaluated as **states** (e.g. fast EMA > slow EMA) so AND/OR is meaningful each day.
 
+### Two-layer execution: daily selection + intraday timing
+
+A strategy runs in two layers, the same code in backtest and live:
+
+- **① Selection (daily).** `RuleAlpha` decides *what / which direction* — once per trading day, from
+  daily-bar signals (indicators are created at `Resolution.DAILY` regardless of subscription resolution,
+  so even a minute subscription keeps selection on prior-close data). At minute resolution it emits the
+  day's decision on the first bar and stays quiet the rest of the day.
+- **② Timing (intraday).** A LEAN `ExecutionModel` decides *when / how much* to fill the selected
+  targets over the day's minute bars. Logic is pure and unit-tested (`orchestrator/execution.py`):
+  - `pullback` (default) — buy when price dips N% below the day's open; sell on N% rebound.
+  - `twap` — slice the session into N buckets (volume-weighting is a future hook).
+  - `immediate` — fill at the open (the old behavior; baseline).
+  - `force_by_close` dumps any unfilled remainder on the last bar.
+  The thin LEAN adapter is `strategies/intraday_execution.py` (mirrors the pure-logic + adapter split of
+  `rules.py`/`RuleAlpha`). `RuleStrategy` wires `resolution: minute` → minute universe + this model.
+
+This is why daily-resolution backtests fill at the **next open** (no look-ahead): decide on close,
+execute next session. Minute resolution makes ② realistic; it needs minute data (see below).
+
+### Broker abstraction & the live seam (design only)
+
+Users pick a broker in the dashboard (`config.get_broker`; **KIS** now, **Toss** when its API opens).
+Concern split so onboarding stays keyless where possible:
+
+- **Historical daily** — keyless `pykrx` (whole-market backfill). Broker-agnostic.
+- **Today / minute / live** — the chosen broker. `brokers/kis.py` `KisClient` (OAuth + disk-cached
+  token) is implemented for **data**: daily (수정주가), `fetch_today` (the not-yet-loaded current bar),
+  and `fetch_minute`. Minute ETL → LEAN minute files via `etl/kis_minute.py` + `lean_format.write_equity_minute`.
+  ⚠️ KIS keeps only ~1y of minute history (120 bars/call) → minute backtest is universe-scoped + recent.
+- **Live execution (NOT built — design only).** Live needs a C# `IBrokerage` + `IDataQueueHandler`
+  adapter DLL (`MyTrading.Kis.dll` / `MyTrading.Toss.dll`) so the *same* ① + ② code runs live. Per the
+  current decision the backtest path is finished but **no real-order code ships** — live execution stays
+  gated behind explicit user arming + a real account. The Python `KisClient` token/data layer is the
+  reusable foundation it will sit on.
+
 ### Risk management (global)
 
 Entry is the strategy's job; **exit by P&L** (손절/익절/트레일링) is the **Risk stage** —

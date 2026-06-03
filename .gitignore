@@ -40,6 +40,8 @@ strategies/SamsungBuyHold.py
 config.local.yaml
 config/*.local.*
 .env
+# KIS 접근토큰 캐시 (24h 토큰, 사용자별)
+.kis_token.json
 
 # === 실행 결과 blob (per-run) ===
 runs/

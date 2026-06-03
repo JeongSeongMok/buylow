@@ -7,6 +7,14 @@
   {% if saved %}<p class="ok">저장되었습니다.</p>{% endif %}
   <p class="meta">키는 로컬 <code>config.local.yaml</code>(gitignore)에만 저장되며 저장소에는 올라가지 않습니다.</p>
   <form method="post" action="/settings">
+    <label>
+      증권사 <small>(분봉·당일 데이터 및 추후 실주문)</small>
+      <select name="broker">
+        {% for b in brokers %}
+        <option value="{{ b }}" {{ 'selected' if broker == b }}>{{ '한국투자증권 (KIS)' if b == 'kis' else '토스증권 (API 대기)' }}</option>
+        {% endfor %}
+      </select>
+    </label>
     {% for s in secrets %}
     <label>
       {{ s.label }} <small>({{ s.purpose }})</small> —
@@ -15,6 +23,17 @@
              placeholder="{% if s.set %}변경하려면 새 값 입력{% else %}입력{% endif %}" autocomplete="off">
     </label>
     {% endfor %}
+    {% if broker_secrets %}
+    <h3 class="spaced">{{ '한국투자증권 (KIS)' if broker == 'kis' else broker }} 키</h3>
+    {% for s in broker_secrets %}
+    <label>
+      {{ s.label }} <small>({{ s.purpose }})</small> —
+      {% if s.set %}<span class="ok">설정됨 ✓</span>{% else %}<span class="fail">미설정</span>{% endif %}
+      <input type="password" name="{{ s.key }}"
+             placeholder="{% if s.set %}변경하려면 새 값 입력{% else %}입력{% endif %}" autocomplete="off">
+    </label>
+    {% endfor %}
+    {% endif %}
     <button type="submit">저장</button>
   </form>
   <p class="meta spaced">데이터 적재·최신화는 <a href="/data">데이터</a> 탭에서.</p>

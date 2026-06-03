@@ -23,6 +23,18 @@ class Bar:
     volume: int
 
 
+@dataclass(frozen=True)
+class MinuteBar:
+    """분봉 1개. ms=자정(거래소 현지시각) 기준 밀리초, 가격은 원화 실제값."""
+
+    ms: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
 class PriceSource(Protocol):
     name: str
     def fetch_daily(self, ticker: str, start: date, end: date) -> list[Bar]: ...
@@ -63,7 +75,33 @@ class FdrSource:
         return [b for b in bars if b.close > 0]
 
 
-SOURCES = {"pykrx": PykrxSource, "fdr": FdrSource}
+class KisSource:
+    """한국투자증권(KIS) OpenAPI. 수정주가 일봉 제공(인증 필요 — BYO 키).
+
+    주 용도는 "오늘(pykrx 미적재)" 데이터를 메우는 하이브리드 엣지지만, 임의 기간 일봉도
+    조회 가능하다(100건/호출을 윈도로 분할). 가격은 원 단위 정수로 들어온다.
+    """
+
+    name = "kis"
+
+    def __init__(self, client=None):
+        # 클라이언트 주입 가능(테스트). 없으면 config의 KIS 자격증명으로 생성.
+        self._client = client
+
+    def _get_client(self):
+        if self._client is None:
+            from brokers.kis import from_config
+            self._client = from_config()
+        return self._client
+
+    def fetch_daily(self, ticker: str, start: date, end: date) -> list[Bar]:
+        rows = self._get_client().fetch_daily(ticker, start, end, adjusted=True)
+        bars = [Bar(r["day"], float(r["open"]), float(r["high"]), float(r["low"]),
+                    float(r["close"]), int(r["volume"])) for r in rows]
+        return [b for b in bars if b.close > 0]
+
+
+SOURCES = {"pykrx": PykrxSource, "fdr": FdrSource, "kis": KisSource}
 
 
 def get_source(name: str = "pykrx") -> PriceSource:

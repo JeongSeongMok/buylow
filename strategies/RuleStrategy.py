@@ -13,13 +13,15 @@ import json
 from AlgorithmImports import *
 
 from orchestrator.rules import parse_rule, eval_rule, signal_labels, UP, DOWN
+from orchestrator.execution import TimingConfig
 from krx_framework import KrxFrameworkAlgorithm
 from signals import build_signal
+from intraday_execution import IntradayExecutionModel
 
 
 class RuleAlpha(AlphaModel):
     def __init__(self, signals_config: dict, rule: str, period_days: int = 5,
-                 max_positions: int = 0):
+                 max_positions: int = 0, intraday: bool = False):
         self.signals_config = signals_config          # 라벨 -> {type, params}
         self.ast = parse_rule(rule)
         self.used = signal_labels(self.ast)            # 식에 실제 쓰인 라벨만 평가
@@ -27,6 +29,10 @@ class RuleAlpha(AlphaModel):
         # 동시 보유 상한. 매수 신호가 자본 대비 너무 많으면 균등분할 시 종목당 배분이 1주 미만이
         # 되어 매매가 안 된다. 전체 종목 스캔은 유지하되, 매수 신호가 이보다 많으면 유동성 상위만 낸다.
         self.max_positions = max_positions
+        # 분봉 실행 모드: update()가 매 분봉 호출되므로, 선별은 '거래일 1회'로 제한한다.
+        # (지표는 Resolution.DAILY라 전날 종가까지만 반영 → 장중 실행은 ExecutionModel 몫.)
+        self.intraday = intraday
+        self._decided_day = None
         self._evals = {}                               # symbol -> {라벨: 평가기}
 
     def on_securities_changed(self, algorithm, changes):
@@ -42,6 +48,13 @@ class RuleAlpha(AlphaModel):
             self._evals.pop(sec.symbol, None)
 
     def update(self, algorithm, data):
+        # 분봉 모드: 하루 첫 평가만 선별을 내고, 이후 분봉에선 빈 리스트(기존 인사이트는 유지).
+        # 장중의 '언제 살지/팔지'는 IntradayExecutionModel이 담당한다.
+        if self.intraday:
+            today = algorithm.time.date()
+            if today == self._decided_day:
+                return []
+            self._decided_day = today
         ups, exits, reason = [], [], {}
         for symbol, evals in self._evals.items():
             directions = {label: ev.direction() for label, ev in evals.items()}
@@ -80,13 +93,29 @@ class RuleStrategy(KrxFrameworkAlgorithm):
         self.set_end_date(int(e[0]), int(e[1]), int(e[2]))
         self.set_cash(int(spec.get("cash", 10_000_000)))
 
-        self.setup_krx_framework()
+        # 해상도: 'minute'면 일봉 선별 + 장중(분봉) 타이밍 실행, 그 외(기본)는 일봉/다음시가 체결.
+        # 신호 지표는 Resolution.DAILY로 생성되므로, 분봉 구독에서도 선별은 일봉 기준 유지된다.
+        intraday = str(spec.get("resolution", "daily")).lower() == "minute"
+        self.setup_krx_framework(Resolution.MINUTE if intraday else Resolution.DAILY)
 
         symbols = self.krx_symbols(spec["universe"])
         self.set_universe_selection(ManualUniverseSelectionModel(symbols))
         if symbols:
             self.set_benchmark(symbols[0])
 
+        if intraday:
+            # 장중 타이밍 실행모델로 교체(기본 ImmediateExecutionModel 대신). 파라미터는 스펙의 execution.
+            ex = spec.get("execution", {}) or {}
+            cfg = TimingConfig(
+                style=ex.get("style", "pullback"),
+                entry_drop_pct=float(ex.get("entry_drop_pct", 1.0)),
+                exit_rebound_pct=float(ex.get("exit_rebound_pct", 1.0)),
+                slices=int(ex.get("slices", 6)),
+                force_by_close=bool(ex.get("force_by_close", True)),
+            )
+            self.set_execution(IntradayExecutionModel(cfg))
+
         self.add_alpha(RuleAlpha(spec["signals"], spec["rule"],
                                  int(spec.get("period_days", 5)),
-                                 int(spec.get("max_positions", 0))))
+                                 int(spec.get("max_positions", 0)),
+                                 intraday=intraday))

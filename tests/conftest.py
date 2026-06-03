@@ -12,7 +12,8 @@ import pytest
 def _isolate_config(tmp_path_factory, monkeypatch):
     from orchestrator import config
     monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path_factory.mktemp("cfg") / "config.local.yaml")
-    for spec in config.SECRET_SPECS:
+    for spec in config._all_specs():  # pykrx + 모든 브로커 시크릿
         monkeypatch.delenv(spec.env, raising=False)
     monkeypatch.delenv("LEAN_DATA_DIR", raising=False)
     monkeypatch.delenv("BUYLOW_DASHBOARD_PORT", raising=False)
+    monkeypatch.delenv("BUYLOW_BROKER", raising=False)

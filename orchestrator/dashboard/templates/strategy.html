@@ -65,6 +65,32 @@
         기간과 무관하게 즉시 청산, 신호가 사라지면 이 기간 후 청산. 짧을수록 반응 빠름·잡음에 잘 털림.</p>
       <label>보유 기간(일) <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6"></label>
 
+      {% set ex = strategy.get('execution') or {} %}
+      {% set res = strategy.get('resolution') or 'daily' %}
+      <h3 class="spaced">체결 타이밍 <small>(장중 진입/청산 시점)</small></h3>
+      <p class="meta">일봉으로 <b>매수/청산 대상</b>을 선별한 뒤, 그 대상을 그날 <b>언제 체결</b>할지를 정한다.
+        '일봉'은 다음 거래일 시초가에 즉시 전량. '분봉'은 장중 분봉으로 타이밍을 잡는다(분봉 데이터 필요 ·
+        KIS 적재). </p>
+      <label>해상도
+        <select name="resolution">
+          <option value="daily" {{ 'selected' if res != 'minute' }}>일봉 (다음 시가 즉시)</option>
+          <option value="minute" {{ 'selected' if res == 'minute' }}>분봉 (장중 타이밍)</option>
+        </select></label>
+      <label>장중 방식
+        <select name="exec_style">
+          {% for key, name in execution_styles %}
+          <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
+          {% endfor %}
+        </select></label>
+      <label>눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
+        <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
+      <label>반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
+        <small>청산: 시초가 대비 이만큼 반등하면 매도(눌림목 방식)</small></label>
+      <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
+        <small>VWAP/TWAP 방식에서 정규장을 몇 등분해 나눠 체결할지</small></label>
+      <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
+        장 마감 전 미체결 잔량 강제 체결</label>
+
       <h3 class="spaced">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
       <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
         <small>매수가 대비 이만큼 떨어지면 매도</small></label>

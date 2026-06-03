@@ -324,6 +324,7 @@ def register_dashboard(
             "catalog": signals_catalog.CATALOG,
             "strategy": strategy,
             "groups": groups,
+            "execution_styles": signals_catalog.EXECUTION_STYLES,
             "param_value": signals_catalog.param_value,
             "risk": config.risk_form_values(),
             "data_loaded": _loaded_count(),
@@ -346,11 +347,15 @@ def register_dashboard(
             parse_rule(rule)  # 생성식 방어적 검증
         except Exception as e:
             return RedirectResponse(url=f"/strategy?error=규칙식 오류: {e}", status_code=303)
+        resolution, execution = signals_catalog.execution_from_form(form)
         spec = {
             "signals": signals_catalog.signals_from_form(form),
             "rule": rule,
             "groups": groups,
             "period_days": int(form.get("period_days") or signals_catalog.DEFAULT_PERIOD_DAYS),
+            # ②층: 해상도(일봉/분봉) + 장중 체결 타이밍. 백테스트 스펙으로 그대로 전달된다.
+            "resolution": resolution,
+            "execution": execution,
         }
         config.save_strategy(spec)
         # 리스크 설정도 같은 화면에서 저장
@@ -418,8 +423,12 @@ def register_dashboard(
     def settings_page(request: Request):
         from etl.catalog import latest_loaded_date
         data_dir = config.get_data_folder()
+        broker = config.get_broker()
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
+            "broker": broker,
+            "brokers": config.BROKERS,
+            "broker_secrets": config.broker_secret_status(broker),
             "data_dir": data_dir,
             "data_loaded": _loaded_count(),
             "latest_date": latest_loaded_date(data_dir),
@@ -429,7 +438,10 @@ def register_dashboard(
 
     @app.post("/settings")
     async def settings_save(request: Request):
-        # 폼은 시크릿 키별 입력(동적). save_secrets가 유효 키/빈값을 필터.
+        # 폼은 시크릿 키별 입력(동적) + 브로커 선택. save_secrets가 유효 키/빈값을 필터.
         form = await request.form()
+        broker = form.get("broker")
+        if broker in config.BROKERS:
+            config.set_broker(broker)
         config.save_secrets({k: str(v) for k, v in form.items()})
         return RedirectResponse(url="/settings?saved=1", status_code=303)

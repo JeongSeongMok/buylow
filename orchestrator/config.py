@@ -31,11 +31,32 @@ class SecretSpec:
     purpose: str   # 용도 설명
 
 
-# 현재 필요한 시크릿. 라이브 단계에서 toss_* 추가 예정.
+# pykrx 펀더멘털 조회에 항상 필요한 시크릿(브로커와 무관 — 무인증 시세와 별개로 PER/PBR은 KRX 로그인).
 SECRET_SPECS: list[SecretSpec] = [
     SecretSpec("krx_id", "KRX_ID", "KRX 아이디", "pykrx 펀더멘털(PER/PBR) 조회 로그인"),
     SecretSpec("krx_pw", "KRX_PW", "KRX 비밀번호", "pykrx 펀더멘털 조회 로그인"),
 ]
+
+# 지원 브로커. 사용자가 대시보드에서 자신의 증권사를 고른다.
+# - 일봉 과거 데이터는 무인증 pykrx로 충분하므로 브로커 선택과 무관하게 적재된다.
+# - 브로커는 "오늘(아직 미적재) 데이터"와 (라이브 단계의) 주문/실시간에만 관여한다.
+BROKERS = ("kis", "toss")
+DEFAULT_BROKER = "kis"
+
+# 브로커별 시크릿. SECRET_SPECS(pykrx, 항상 필요)와 분리 — 선택한 브로커 것만 요구/표시한다.
+# env 변수명은 네이티브 표준이 없으므로 BUYLOW_ 접두로 통일한다.
+BROKER_SECRET_SPECS: dict[str, list[SecretSpec]] = {
+    "kis": [
+        SecretSpec("kis_app_key", "BUYLOW_KIS_APP_KEY", "KIS App Key",
+                   "한국투자증권 OpenAPI appkey"),
+        SecretSpec("kis_app_secret", "BUYLOW_KIS_APP_SECRET", "KIS App Secret",
+                   "한국투자증권 OpenAPI appsecret"),
+        SecretSpec("kis_account_no", "BUYLOW_KIS_ACCOUNT_NO", "KIS 계좌번호",
+                   "주문/잔고용 종합계좌번호 (예: 12345678-01). 라이브 단계에서 사용"),
+    ],
+    # Toss API 개방 시 동일 패턴으로 추가.
+    "toss": [],
+}
 
 
 def _load_local() -> dict:
@@ -134,9 +155,50 @@ def get_scheduler_config() -> dict:
     }
 
 
+def get_broker() -> str:
+    """선택된 브로커. env BUYLOW_BROKER → config → 기본(kis). 미지원 값이면 기본으로."""
+    b = (os.environ.get("BUYLOW_BROKER") or _load_local().get("broker") or DEFAULT_BROKER)
+    return b if b in BROKERS else DEFAULT_BROKER
+
+
+def set_broker(broker: str) -> None:
+    if broker not in BROKERS:
+        raise ValueError(f"알 수 없는 브로커: {broker} (가능: {list(BROKERS)})")
+    data = _load_local()
+    data["broker"] = broker
+    _write_local(data)
+
+
+def _all_specs() -> list[SecretSpec]:
+    """pykrx 시크릿 + 모든 브로커 시크릿 (저장/조회용 전체 화이트리스트)."""
+    out = list(SECRET_SPECS)
+    for specs in BROKER_SECRET_SPECS.values():
+        out.extend(specs)
+    return out
+
+
 def get_secret(spec: SecretSpec) -> str | None:
     """env 우선, 없으면 config.local.yaml 의 secrets.<key>."""
     return os.environ.get(spec.env) or (_load_local().get("secrets") or {}).get(spec.key)
+
+
+def get_kis_credentials() -> dict[str, str | None]:
+    """KIS 자격증명 묶음 (없는 값은 None). app_key/app_secret/account_no."""
+    by_key = {s.key: get_secret(s) for s in BROKER_SECRET_SPECS["kis"]}
+    return {
+        "app_key": by_key.get("kis_app_key"),
+        "app_secret": by_key.get("kis_app_secret"),
+        "account_no": by_key.get("kis_account_no"),
+    }
+
+
+def broker_secret_status(broker: str | None = None) -> list[dict]:
+    """선택(또는 지정) 브로커의 시크릿 설정여부 — 대시보드 표시용(값 비노출)."""
+    broker = broker or get_broker()
+    return [
+        {"key": s.key, "label": s.label, "purpose": s.purpose, "set": bool(get_secret(s))}
+        for s in BROKER_SECRET_SPECS.get(broker, [])
+    ]
 
 
 def secret_status() -> list[dict]:
@@ -155,7 +217,7 @@ def save_secrets(values: dict[str, str]) -> None:
     """대시보드에서 받은 시크릿을 config.local.yaml 에 저장. 빈 값/미정의 키는 무시."""
     data = _load_local()
     secrets = data.setdefault("secrets", {})
-    valid = {s.key for s in SECRET_SPECS}
+    valid = {s.key for s in _all_specs()}
     for k, v in values.items():
         if k in valid and v:
             secrets[k] = v

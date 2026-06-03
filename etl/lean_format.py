@@ -9,12 +9,12 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
-from .sources import Bar
+from .sources import Bar, MinuteBar
 
-PRICE_SCALE = 10_000  # LEAN equity 일봉 저장 스케일
+PRICE_SCALE = 10_000  # LEAN equity 가격 저장 스케일(일봉/분봉 공통)
 
 
 def equity_daily_zip_path(data_dir: str | Path, market: str, ticker: str) -> Path:
@@ -68,6 +68,57 @@ def write_equity_daily(data_dir: str | Path, market: str, ticker: str,
         zf.writestr(f"{ticker}.csv", buf.getvalue())
 
     # map/factor files 디렉토리(빈 폴더라도 있어야 LocalDisk*Provider가 에러 안 냄)
+    for sub in ("map_files", "factor_files"):
+        (Path(data_dir) / "equity" / market / sub).mkdir(parents=True, exist_ok=True)
+    return out
+
+
+# ── 분봉(minute) ─────────────────────────────────────────────────────────────
+# LEAN equity 분봉 규칙: `equity/<market>/minute/<ticker>/<yyyymmdd>_trade.zip` 안에
+# `<yyyymmdd>_<ticker>_minute_trade.csv`, 라인 `<자정기준 ms>,O,H,L,C,V` (가격 ×10000).
+# ticker는 소문자 관례(LeanData) — KRX 코드는 숫자라 영향 없지만 일관성 위해 소문자.
+
+def equity_minute_zip_path(data_dir: str | Path, market: str, ticker: str, day: date) -> Path:
+    t = ticker.lower()
+    return (Path(data_dir) / "equity" / market / "minute" / t / f"{day:%Y%m%d}_trade.zip")
+
+
+def read_equity_minute(data_dir: str | Path, market: str, ticker: str,
+                       day: date) -> list[MinuteBar]:
+    """저장된 LEAN 분봉(하루치)을 MinuteBar 리스트로 되읽기(가격 역스케일)."""
+    zp = equity_minute_zip_path(data_dir, market, ticker, day)
+    if not zp.exists():
+        return []
+    entry = f"{day:%Y%m%d}_{ticker.lower()}_minute_trade.csv"
+    with zipfile.ZipFile(zp) as zf:
+        text = zf.read(entry).decode("utf-8")
+    bars = []
+    for line in text.strip().splitlines():
+        ms, o, h, l, c, v = line.split(",")
+        bars.append(MinuteBar(int(ms), int(o) / PRICE_SCALE, int(h) / PRICE_SCALE,
+                              int(l) / PRICE_SCALE, int(c) / PRICE_SCALE, int(v)))
+    return bars
+
+
+def write_equity_minute(data_dir: str | Path, market: str, ticker: str,
+                        day: date, bars: list[MinuteBar]) -> Path:
+    """하루치 분봉을 LEAN 포맷 zip으로 기록(시간 오름차순, 가격 ×10000). 경로 반환."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    for b in sorted(bars, key=lambda x: x.ms):
+        writer.writerow([
+            int(b.ms),
+            int(round(b.open * PRICE_SCALE)),
+            int(round(b.high * PRICE_SCALE)),
+            int(round(b.low * PRICE_SCALE)),
+            int(round(b.close * PRICE_SCALE)),
+            b.volume,
+        ])
+    out = equity_minute_zip_path(data_dir, market, ticker, day)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    entry = f"{day:%Y%m%d}_{ticker.lower()}_minute_trade.csv"
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(entry, buf.getvalue())
     for sub in ("map_files", "factor_files"):
         (Path(data_dir) / "equity" / market / sub).mkdir(parents=True, exist_ok=True)
     return out

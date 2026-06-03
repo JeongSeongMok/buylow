@@ -152,6 +152,43 @@ def groups_from_form(form) -> list[list[str]]:
     return groups
 
 
+# ── 장중 체결 타이밍(②층) — 해상도 + 실행모델 파라미터 ───────────────────────
+# '일봉'은 다음 시가 즉시 체결(현행). '분봉'은 일봉으로 선별하고 장중 분봉으로 타이밍을 잡는다.
+EXECUTION_STYLES = [
+    ("pullback", "눌림목 진입 / 반등 청산"),
+    ("twap", "VWAP/TWAP 분할"),
+    ("immediate", "시초가 즉시"),
+]
+_STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
+DEFAULT_EXECUTION = {"style": "pullback", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
+                     "slices": 6, "force_by_close": True}
+
+
+def execution_from_form(form) -> tuple[str, dict]:
+    """폼에서 해상도('daily'|'minute')와 장중 타이밍 파라미터를 추출.
+
+    분봉이 아니면 execution은 무의미하지만(다음 시가 즉시 체결) 값은 보존한다.
+    """
+    resolution = "minute" if form.get("resolution") == "minute" else "daily"
+
+    def num(key, default, cast):
+        try:
+            return cast(form.get(key, ""))
+        except (TypeError, ValueError):
+            return default
+
+    style = form.get("exec_style") or DEFAULT_EXECUTION["style"]
+    execution = {
+        "style": style if style in _STYLE_KEYS else "pullback",
+        "entry_drop_pct": num("exec_entry_drop_pct", 1.0, float),
+        "exit_rebound_pct": num("exec_exit_rebound_pct", 1.0, float),
+        "slices": max(1, num("exec_slices", 6, int)),
+        # 체크박스: 폼에 키 있으면 True. 템플릿은 기본 체크로 렌더한다.
+        "force_by_close": bool(form.get("exec_force_by_close")),
+    }
+    return resolution, execution
+
+
 def default_strategy() -> dict:
     """기본 전략 스펙 — 저장된 게 없을 때 폼 초기값으로 사용."""
     signals = {
@@ -159,7 +196,8 @@ def default_strategy() -> dict:
         for s in CATALOG
     }
     return {"signals": signals, "rule": rule_from_groups(DEFAULT_GROUPS),
-            "groups": DEFAULT_GROUPS, "period_days": DEFAULT_PERIOD_DAYS}
+            "groups": DEFAULT_GROUPS, "period_days": DEFAULT_PERIOD_DAYS,
+            "resolution": "daily", "execution": dict(DEFAULT_EXECUTION)}
 
 
 def param_value(strategy: dict, label: str, key: str):

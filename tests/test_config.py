@@ -91,6 +91,46 @@ def test_strategy_save_and_get(tmp_config):
     assert config.get_strategy()["rule"] == "MACD"
 
 
+def test_broker_default_and_set(tmp_config, monkeypatch):
+    assert config.get_broker() == config.DEFAULT_BROKER  # 기본 kis
+    config.set_broker("toss")
+    assert config.get_broker() == "toss"
+    monkeypatch.setenv("BUYLOW_BROKER", "kis")
+    assert config.get_broker() == "kis"  # env 우선
+    monkeypatch.delenv("BUYLOW_BROKER")
+    # 잘못된 값은 거부 / 기본으로 폴백
+    with pytest.raises(ValueError):
+        config.set_broker("nh")
+    (tmp_config / "config.local.yaml").write_text("broker: garbage\n")
+    assert config.get_broker() == config.DEFAULT_BROKER
+
+
+def test_kis_secrets_and_credentials(tmp_config, monkeypatch):
+    # 기본 미설정
+    cred = config.get_kis_credentials()
+    assert cred == {"app_key": None, "app_secret": None, "account_no": None}
+    # 브로커 시크릿도 save_secrets 화이트리스트에 포함
+    config.save_secrets({"kis_app_key": "AK", "kis_app_secret": "SK",
+                         "kis_account_no": "12345678-01"})
+    cred = config.get_kis_credentials()
+    assert cred["app_key"] == "AK" and cred["app_secret"] == "SK"
+    assert cred["account_no"] == "12345678-01"
+    # env 우선
+    monkeypatch.setenv("BUYLOW_KIS_APP_KEY", "env_key")
+    assert config.get_kis_credentials()["app_key"] == "env_key"
+    # pykrx 시크릿 게이트(missing_secrets)는 브로커 시크릿과 무관 — 여전히 krx만 본다
+    assert {s.key for s in config.missing_secrets()} == {"krx_id", "krx_pw"}
+
+
+def test_broker_secret_status(tmp_config):
+    st = config.broker_secret_status("kis")
+    assert {s["key"] for s in st} == {"kis_app_key", "kis_app_secret", "kis_account_no"}
+    assert all(not s["set"] for s in st)
+    config.save_secrets({"kis_app_key": "AK"})
+    st = {s["key"]: s["set"] for s in config.broker_secret_status("kis")}
+    assert st["kis_app_key"] and not st["kis_app_secret"]
+
+
 def test_apply_krx_credentials(tmp_config, monkeypatch):
     assert config.apply_krx_credentials() is False
     config.save_secrets({"krx_id": "the_id", "krx_pw": "the_pw"})

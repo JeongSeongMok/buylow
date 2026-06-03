@@ -107,6 +107,37 @@ def test_strategy_save_persists_strategy_and_risk(client, isolated_config):
     assert isolated_config.get_risk_config()["stop_loss"] == 7.0  # 같은 화면에서 리스크도 저장
 
 
+def test_strategy_save_persists_intraday_execution(client, isolated_config):
+    from orchestrator import signals_catalog
+    data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
+    data.update({"g0_EMA": "1", "period_days": "5",
+                 "resolution": "minute", "exec_style": "pullback",
+                 "exec_entry_drop_pct": "1.5", "exec_slices": "4",
+                 "exec_force_by_close": "on"})
+    assert client.post("/strategy", data=data).status_code == 200
+    strat = isolated_config.get_strategy()
+    assert strat["resolution"] == "minute"
+    assert strat["execution"]["style"] == "pullback"
+    assert strat["execution"]["entry_drop_pct"] == 1.5
+    assert strat["execution"]["slices"] == 4 and strat["execution"]["force_by_close"] is True
+
+
+def test_strategy_page_shows_timing_controls(client):
+    assert "체결 타이밍" in client.get("/strategy").text
+
+
+def test_settings_page_shows_broker_and_kis_keys(client):
+    t = client.get("/settings").text
+    assert "증권사" in t and "한국투자증권" in t and "KIS App Key" in t
+
+
+def test_settings_save_broker_and_kis_secret(client, isolated_config):
+    r = client.post("/settings", data={"broker": "kis", "kis_app_key": "MYKEY"})
+    assert r.status_code == 200
+    assert isolated_config.get_broker() == "kis"
+    assert isolated_config.get_kis_credentials()["app_key"] == "MYKEY"
+
+
 def test_strategy_save_requires_a_condition(client):
     # 아무 조건도 체크 안 하면(그룹 비어있음) 저장 거부
     r = client.post("/strategy", data={"period_days": "5"}, follow_redirects=False)

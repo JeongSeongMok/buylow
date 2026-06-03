@@ -9,6 +9,10 @@ data_folder: ./data
 # 대시보드 포트 (기본: 8420)
 dashboard_port: 8420
 
+# 증권사 선택 (kis|toss, 기본 kis). 일봉 과거는 무인증 pykrx로 적재되고, 증권사는
+# '오늘/실시간' 데이터와 (추후) 실주문에 쓰인다. 대시보드 설정 탭에서도 고를 수 있다.
+broker: kis
+
 # 일일 데이터 최신화 스케줄 (평일 장마감 후 KST). 켜면 대시보드 '데이터 최신화'와 동일하게
 # 전체 시장(OHLCV+수급)을 매일 자동 증분 적재.
 scheduler:
@@ -25,4 +29,7 @@ secrets:
   # KRX 로그인 (pykrx 펀더멘털 PER/PBR 등 조회용). https://data.krx.co.kr 무료 회원가입.
   krx_id: ""
   krx_pw: ""
-  # (라이브 단계에서 추가) 토스/AI 키
+  # 한국투자증권(KIS) OpenAPI — 분봉·당일 데이터 및 (추후) 실주문용. https://apiportal.koreainvestment.com
+  kis_app_key: ""
+  kis_app_secret: ""
+  kis_account_no: ""   # 종합계좌번호 (예: 12345678-01). 라이브 단계에서 사용
