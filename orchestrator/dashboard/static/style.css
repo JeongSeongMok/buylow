@@ -43,13 +43,6 @@ main.wide { max-width: 85vw; }
 .cols2.fit .stats td small.meta { white-space: normal; }    /* 설명 문구는 컬럼 안에서 줄바꿈 허용 */
 @media (max-width: 860px) { .cols2.fit { grid-template-columns: 1fr; } }
 
-/* 실행/적재 페이지(백테스트·데이터): 넓은 폭에서 입력 컬럼은 적당히, 우측 목록은 넓게.
-   입력 폼이 폭 전체로 늘어지지 않게 좌측을 고정폭대로 두고 카드 여백을 넉넉히 준다. */
-.cols-run { display: grid; grid-template-columns: minmax(400px, 500px) 1fr; gap: 1.6rem; align-items: start; }
-.cols-run > div, .cols-run > section { min-width: 0; }      /* 그리드 칸이 내용에 밀려 넘치지 않게 */
-.cols-run .card { padding: 1.4rem 1.6rem; }
-@media (max-width: 860px) { .cols-run { grid-template-columns: 1fr; } }
-
 /* 인라인 로딩 스피너(인덱스 일괄추가 등 비동기 작업 표시) */
 .spinner { display: inline-block; width: 0.8em; height: 0.8em; border: 2px solid var(--border);
            border-top-color: var(--muted); border-radius: 50%; animation: spin 0.6s linear infinite;
