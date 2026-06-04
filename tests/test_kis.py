@@ -1,10 +1,12 @@
 """KIS 클라이언트/소스 단위 테스트 — 가짜 HTTP 세션 주입(실제 네트워크·키 미사용)."""
 
 import json
+import threading
+import time
 
 import pytest
 
-from brokers.kis import KisClient, KisError
+from brokers.kis import KisClient, KisError, _TokenBucket
 from etl.sources import KisSource, Bar
 from datetime import date
 
@@ -233,6 +235,97 @@ def test_minute_etl_clamps_to_one_year(tmp_path):
                          client=c, today=date(2026, 6, 2))
     assert info["clamped"] is True
     assert c.days and min(c.days) >= date(2025, 6, 2)  # today-365 이후만
+
+
+class _FakeClock:
+    """주입형 가상 시계 — sleep이 시간을 전진시켜 토큰버킷을 결정론적으로 검증한다."""
+    def __init__(self):
+        self.t = 0.0
+    def now(self):
+        return self.t
+    def sleep(self, s):
+        self.t += s
+
+
+def test_token_bucket_enforces_rate_deterministically():
+    clk = _FakeClock()
+    tb = _TokenBucket(rate=10.0, burst=2.0, clock=clk.now, sleep=clk.sleep)
+    # 버스트 2개는 즉시 통과(시간 0 그대로)
+    tb.acquire(); tb.acquire()
+    assert clk.t == 0.0
+    # 이후엔 초당 10건 = 0.1초 간격으로만 통과
+    tb.acquire()
+    assert abs(clk.t - 0.1) < 1e-9
+    tb.acquire()
+    assert abs(clk.t - 0.2) < 1e-9
+
+
+def test_token_bucket_zero_rate_is_unlimited():
+    clk = _FakeClock()
+    tb = _TokenBucket(rate=0.0, clock=clk.now, sleep=clk.sleep)
+    for _ in range(100):
+        tb.acquire()
+    assert clk.t == 0.0  # 대기 없음
+
+
+def test_token_bucket_caps_aggregate_across_threads():
+    # 여러 스레드가 공유해도 '합산' 호출 수가 용량+경과×rate를 넘지 않아야 한다(실시간, 느슨한 상한).
+    tb = _TokenBucket(rate=200.0, burst=5.0)
+    counter = {"n": 0}
+    clock_lock = threading.Lock()
+    start = time.monotonic()
+
+    def worker():
+        for _ in range(20):
+            tb.acquire()
+            with clock_lock:
+                counter["n"] += 1
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    elapsed = time.monotonic() - start
+    # 이론 상한: 버스트 + 경과×rate. 타이밍 여유(2배)를 둬 CI 흔들림에도 견고하게.
+    assert counter["n"] == 160
+    assert counter["n"] <= 5 + elapsed * 200.0 * 2 + 5
+
+
+def test_minute_etl_parallel_uses_multiple_threads(tmp_path):
+    # max_workers>1이면 거래일들을 여러 스레드에서 동시에 받는다(병렬 증명).
+    from etl.kis_minute import ingest_minute
+
+    class ThreadRecordingClient:
+        def __init__(self):
+            self.threads = set()
+            self.lock = threading.Lock()
+        def fetch_minute(self, ticker, day, **kw):
+            with self.lock:
+                self.threads.add(threading.get_ident())
+            time.sleep(0.02)  # 다른 스레드와 겹치도록 잠깐 잡아둔다
+            return [{"ms": 9 * 3600 * 1000, "time": "090000", "open": 1, "high": 1,
+                     "low": 1, "close": 1, "volume": 1}]
+
+    c = ThreadRecordingClient()
+    info = ingest_minute("005930", date(2026, 1, 1), date(2026, 1, 31), data_dir=tmp_path,
+                         client=c, today=date(2026, 2, 1), max_workers=4)
+    assert info["days"] > 1
+    assert len(c.threads) > 1  # 실제로 여러 스레드가 fetch를 수행
+
+
+def test_minute_etl_parallel_first_last_sorted(tmp_path):
+    # 완료 순서가 섞여도 first/last가 날짜순으로 올바른지(병렬 정렬 보장).
+    from etl.kis_minute import ingest_minute
+
+    class C:
+        def fetch_minute(self, ticker, day, **kw):
+            return [{"ms": 0, "time": "090000", "open": 1, "high": 1, "low": 1,
+                     "close": 1, "volume": 1}]
+
+    info = ingest_minute("005930", date(2026, 1, 1), date(2026, 1, 31), data_dir=tmp_path,
+                         client=C(), today=date(2026, 2, 1), max_workers=4)
+    assert info["first"] == "2026-01-01"   # 1/1은 목요일(거래일)
+    assert info["last"] == "2026-01-30"    # 1/30은 금요일
+    assert info["first"] < info["last"]
 
 
 def test_list_minute_days_empty(tmp_path):

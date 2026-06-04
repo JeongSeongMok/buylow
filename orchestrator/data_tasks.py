@@ -26,9 +26,12 @@ def run_minute_update(job, data_dir: str, tickers: list[str], days: int = 365) -
     today = date.today()
     start = today - timedelta(days=min(days, MAX_LOOKBACK_DAYS))
     ok = total = skipped = 0
-    # 클라이언트 1개를 재사용 — 레이트리밋 스로틀이 종목 경계에서도 연속 적용되고 토큰도 1회만 발급.
+    # 클라이언트 1개를 재사용 — 공유 토큰버킷이 종목 경계에서도 합산 호출률을 한도 내로 유지하고
+    # 토큰도 1회만 발급. 분봉은 호출이 많아 병렬화: rate_per_sec(초당 상한)·max_workers(동시 요청)로
+    # KIS 한도(실전 ~20/s) 아래에서 네트워크 지연을 가려 적재를 단축한다.
     from brokers.kis import from_config
-    client = from_config()
+    MINUTE_RATE_PER_SEC, MINUTE_WORKERS = 12.0, 8
+    client = from_config(rate_per_sec=MINUTE_RATE_PER_SEC, max_workers=MINUTE_WORKERS)
     with open(log_path, "a", encoding="utf-8", buffering=1) as f:
         def log(msg):
             f.write(f"{datetime.now():%H:%M:%S} {msg}\n")
@@ -38,7 +41,8 @@ def run_minute_update(job, data_dir: str, tickers: list[str], days: int = 365) -
             log(f"[{i}/{len(tickers)}] {t} 시작…")
             try:
                 info = ingest_minute(t, start, today, data_dir, client=client, today=today,
-                                     on_progress=lambda m: log("  " + m))
+                                     on_progress=lambda m: log("  " + m),
+                                     max_workers=MINUTE_WORKERS)
                 ok += 1
                 total += info["bars"]
                 skipped += info.get("skipped", 0)

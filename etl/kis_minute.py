@@ -13,6 +13,8 @@
 from __future__ import annotations
 
 import argparse
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -44,6 +46,7 @@ def ingest_minute(
     skip_existing: bool = True,
     today: date | None = None,
     on_progress=None,
+    max_workers: int = 8,
 ) -> dict[str, Any]:
     """[start, end] 각 거래일의 분봉을 받아 하루 1개 zip으로 적재. 주말은 건너뛴다.
 
@@ -51,6 +54,8 @@ def ingest_minute(
     - start는 KIS 보관 한계(약 1년)로 클램프된다 — 그보다 과거는 어차피 빈 결과.
     - on_progress(msg): 주기적 진행 보고(분봉 한 종목 적재가 수 분 걸리므로 하트비트용).
     - client 주입 가능(테스트). 없으면 config의 KIS 자격증명으로 생성.
+    - max_workers: 거래일들을 병렬로 받는다(날짜끼리 독립이라 안전). 호출률은 client의 공유
+      토큰버킷이 한도 내로 제한하므로 동시성은 네트워크 왕복 지연을 가리는 용도다.
     """
     if client is None:
         from brokers.kis import from_config
@@ -65,22 +70,50 @@ def ingest_minute(
     weekdays = [start + timedelta(days=i) for i in range((end - start).days + 1)
                 if (start + timedelta(days=i)).weekday() < 5]
     total = len(weekdays)
-    days_written, days_skipped, total_bars = [], 0, 0
-    for i, d in enumerate(weekdays, 1):
-        if skip_existing and equity_minute_zip_path(data_dir, KRX_MARKET, ticker, d).exists():
-            days_skipped += 1
-        else:
-            rows = client.fetch_minute(ticker, d)
-            bars = _to_minute_bars(rows)
-            if bars:
-                write_equity_minute(data_dir, KRX_MARKET, ticker, d, bars)
-                days_written.append(d.isoformat())
-                total_bars += len(bars)
-        # 진행 하트비트: ~20거래일마다(또는 마지막) — 분봉은 종목당 수백 호출이라 오래 걸린다.
-        if on_progress and (i % 20 == 0 or i == total):
-            on_progress(f"{ticker}: {i}/{total}거래일 처리 (적재 {len(days_written)}일 "
+    # 이미 있는 날은 디스크 stat(싼 비용)으로 먼저 거르고, 실제 받을 날만 병렬 처리한다.
+    to_fetch = [d for d in weekdays
+                if not (skip_existing
+                        and equity_minute_zip_path(data_dir, KRX_MARKET, ticker, d).exists())]
+    days_skipped = total - len(to_fetch)
+
+    days_written: list[str] = []
+    total_bars = 0
+    lock = threading.Lock()  # 집계(쓴 날·봉 수·진행 카운터) 보호 — 파일 쓰기는 날짜별로 독립
+    processed = days_skipped  # 건너뛴 날은 이미 처리된 셈
+
+    def report() -> None:
+        if on_progress:
+            on_progress(f"{ticker}: {processed}/{total}거래일 처리 (적재 {len(days_written)}일 "
                         f"{total_bars}개 · 기존 {days_skipped}일)")
+
+    def fetch_day(d: date) -> int:
+        rows = client.fetch_minute(ticker, d)
+        bars = _to_minute_bars(rows)
+        if not bars:
+            return 0
+        write_equity_minute(data_dir, KRX_MARKET, ticker, d, bars)
+        with lock:
+            days_written.append(d.isoformat())
+        return len(bars)
+
+    if to_fetch:
+        workers = max(1, min(max_workers, len(to_fetch)))
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(fetch_day, d): d for d in to_fetch}
+            n = 0
+            for fut in as_completed(futures):
+                n_bars = fut.result()  # fetch_day 예외는 여기서 전파(전체 적재 실패로 보고)
+                with lock:
+                    total_bars += n_bars
+                    processed += 1
+                    n += 1
+                    # 진행 하트비트: ~20거래일마다 — 분봉은 종목당 수백 호출이라 오래 걸린다.
+                    beat = (n % 20 == 0)
+                if beat:
+                    report()
+    report()  # 마지막 한 번(또는 to_fetch가 없을 때도)
     inject_krx_market(data_dir)
+    days_written.sort()  # 병렬이라 완료 순서가 섞임 → first/last 위해 정렬
     return {"ticker": ticker, "days": len(days_written), "bars": total_bars,
             "skipped": days_skipped, "clamped": clamped,
             "first": days_written[0] if days_written else None,
