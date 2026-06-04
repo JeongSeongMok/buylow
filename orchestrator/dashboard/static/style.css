@@ -81,6 +81,10 @@ details.help summary { cursor: pointer; font-size: 0.85rem; }
 form label { display: block; margin-bottom: 0.8rem; color: var(--muted); font-size: 0.85rem; }
 /* hidden 속성이 'form label { display:block }'에 덮이지 않게 — 체결 방식별 파라미터 숨김에 필요 */
 form label[hidden] { display: none; }
+/* 설명(small)은 입력값과 같은 줄에 붙이지 말고 자기 줄로 내려 가독성 확보(한 줄에 다 안 넣기) */
+form label small { display: block; margin-top: 0.3rem; line-height: 1.55; font-weight: normal; }
+/* 조건 체크박스 칩(인라인)은 예외 — 같은 줄 유지 */
+label.cond small { display: inline; }
 form select, form input[type=text], form input[type=password] {
   display: block;
   width: 100%;
