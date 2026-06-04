@@ -104,14 +104,12 @@
       <div id="minute-opts">
         <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요.<br>분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
         <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> · 체결 <b>TWAP</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
-        <p class="meta">체결은 <b>TWAP(시간 분할)</b>로 고정됩니다 — 장중 매분 선별과 가격 반응 역할이 겹치지 않는 방식이라서요(눌림목은 선별과 중복되어 제외).</p>
         <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
           <small>정규장(390분)을 몇 등분해 수량을 나눠 체결할지.<br>6분할이면 65분마다 1/6씩 — 클수록 더 잘게(매끄럽게) 분산, 작을수록 큰 덩어리로 듬성듬성.</small></label>
         <details class="help">
           <summary class="meta">TWAP 란?</summary>
           <ul class="help-list">
             <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가) — 하루 목표 수량을 정규장을 <b>분할 수</b>만큼 등분한 시간 구간마다 1/N씩 나눠 체결.<br>한 번에 몰아 체결할 때의 체결가 쏠림·시장충격을 줄입니다.</li>
-            <li>참고: 거래량가중(<b>VWAP</b>)은 <b>구현하지 않았습니다</b>. 개인 백테스트 규모에선 TWAP로 충분하고, 제대로 된 VWAP는 거래량 분포 예측이 따로 필요해 효용 대비 복잡도가 큽니다.</li>
           </ul>
         </details>
         <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
