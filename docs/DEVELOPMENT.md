@@ -170,6 +170,28 @@ The KRX market definition is injected automatically. Files land in
 `data/equity/krx/daily/<ticker>.zip` and `data/krx/flow/<ticker>.csv` (gitignored). 수급 is
 non-standard data, consumed in strategies via a custom data type (PythonData) — coming next.
 
+## Minute seed bundle (maintainer)
+
+Bulk minute history is slow to fetch from KIS (many calls per ticker × day), so we ship a
+**seed bundle as a GitHub Release asset** instead of committing it — `data/` stays gitignored,
+clones stay light, and there's no unbounded git-history growth. Minute zips are write-once, so
+re-packaging and replacing the asset is safe.
+
+```bash
+# Maintainer: package the local data/equity/krx/minute and (create or --clobber) the release.
+# Requires `gh` logged in. Run when you've filled more/recent minute data and want to publish it.
+bash scripts/make_minute_seed.sh
+#   env overrides: BUYLOW_REPO (default JeongSeongMok/buylow), BUYLOW_SEED_TAG (default minute-seed)
+
+# User: pull the seed (no gh/token — curls the public release asset) and extract into data/.
+bash scripts/fetch_minute_seed.sh
+```
+
+Workflow: fill minute data locally (dashboard 분봉 최신화, or `python -m etl.kis_minute`) →
+`make_minute_seed.sh` to publish → users `fetch_minute_seed.sh` and top up gaps incrementally
+(the 분봉 최신화 button skips days already on disk). The fixed `minute-seed` tag keeps the
+download URL stable across re-uploads.
+
 ## Tests
 
 ```bash
