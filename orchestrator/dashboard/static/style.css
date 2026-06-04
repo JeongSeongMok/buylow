@@ -76,6 +76,8 @@ details.help summary { cursor: pointer; font-size: 0.85rem; }
 .card h2 { margin-top: 0; font-size: 1.1rem; }
 
 form label { display: block; margin-bottom: 0.8rem; color: var(--muted); font-size: 0.85rem; }
+/* hidden 속성이 'form label { display:block }'에 덮이지 않게 — 체결 방식별 파라미터 숨김에 필요 */
+form label[hidden] { display: none; }
 form select, form input[type=text], form input[type=password] {
   display: block;
   width: 100%;
