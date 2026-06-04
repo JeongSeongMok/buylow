@@ -108,10 +108,10 @@
         <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
           <small>정규장(390분)을 몇 등분해 수량을 나눠 체결할지.<br>6분할이면 65분마다 1/6씩 — 클수록 더 잘게(매끄럽게) 분산, 작을수록 큰 덩어리로 듬성듬성.</small></label>
         <details class="help">
-          <summary class="meta">TWAP / VWAP 란?</summary>
+          <summary class="meta">TWAP 란?</summary>
           <ul class="help-list">
-            <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가) — 하루 목표 수량을 정규장을 <b>분할 수</b>만큼 등분한 시간 구간마다 1/N씩 나눠 체결.<br>한 번에 몰아 체결할 때의 체결가 쏠림·시장충격을 줄입니다. <b>현재 구현 방식</b>.</li>
-            <li><b>VWAP</b> (Volume-Weighted Average Price, 거래량가중평균가) — 거래량이 많은 시간대에 더 많이 체결. 향후 확장 예정.</li>
+            <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가) — 하루 목표 수량을 정규장을 <b>분할 수</b>만큼 등분한 시간 구간마다 1/N씩 나눠 체결.<br>한 번에 몰아 체결할 때의 체결가 쏠림·시장충격을 줄입니다.</li>
+            <li>참고: 거래량가중(<b>VWAP</b>)은 <b>구현하지 않았습니다</b>. 개인 백테스트 규모에선 TWAP로 충분하고, 제대로 된 VWAP는 거래량 분포 예측이 따로 필요해 효용 대비 복잡도가 큽니다.</li>
           </ul>
         </details>
         <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>

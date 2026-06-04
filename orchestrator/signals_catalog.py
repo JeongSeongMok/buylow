@@ -165,7 +165,7 @@ def groups_from_form(form) -> list[list[str]]:
 # '일봉'은 다음 시가 즉시 체결(현행). '분봉'은 일봉으로 선별하고 장중 분봉으로 타이밍을 잡는다.
 EXECUTION_STYLES = [
     ("pullback", "눌림목 진입 / 반등 청산"),
-    ("twap", "VWAP/TWAP 분할"),
+    ("twap", "TWAP 시간 분할"),
     ("immediate", "시초가 즉시"),
 ]
 _STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}

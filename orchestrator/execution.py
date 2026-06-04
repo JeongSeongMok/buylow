@@ -19,7 +19,7 @@ from dataclasses import dataclass
 # 체결 스타일
 IMMEDIATE = "immediate"  # 즉시 전량 (시초가 우르르 — 비교 기준선)
 PULLBACK = "pullback"    # 눌림목 대기 진입 / 반등 청산 (기본)
-TWAP = "twap"            # 시간 분할 (VWAP/TWAP 분할; 현재 시간가중, 거래량가중은 향후 훅)
+TWAP = "twap"            # 시간 분할(시간가중평균가). 거래량가중(VWAP)은 미구현 — 현 규모에선 TWAP로 충분
 
 STYLES = (IMMEDIATE, PULLBACK, TWAP)
 
