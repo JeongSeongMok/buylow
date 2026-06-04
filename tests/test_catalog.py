@@ -42,6 +42,8 @@ def test_minute_listing_and_count(tmp_path):
     write_equity_minute(tmp_path, "krx", "005930", date(2026, 6, 2), bar)
     assert catalog.list_minute_tickers(tmp_path) == ["005930"]
     assert catalog.minute_day_count(tmp_path, "005930") == 2
+    assert catalog.minute_latest_date(tmp_path, "005930") == "2026-06-02"  # 최신 적재일
+    assert catalog.minute_latest_date(tmp_path, "000660") is None          # 분봉 없음
     assert "005930" in catalog.all_tickers(tmp_path)  # 분봉만 있어도 목록에 포함
 
 

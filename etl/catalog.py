@@ -41,6 +41,19 @@ def minute_day_count(data_dir: str | Path, ticker: str) -> int:
     return len(list(d.glob("*_trade.zip"))) if d.is_dir() else 0
 
 
+def minute_latest_date(data_dir: str | Path, ticker: str) -> str | None:
+    """해당 종목의 분봉 최신 적재일(ISO). 파일명(<yyyymmdd>_trade.zip)에서 최댓값을 뽑는다(zip 미개봉)."""
+    d = Path(data_dir) / "equity" / KRX_MARKET / "minute" / ticker.lower()
+    if not d.is_dir():
+        return None
+    days = [p.name[:8] for p in d.glob("*_trade.zip")
+            if len(p.name) >= 8 and p.name[:8].isdigit()]
+    if not days:
+        return None
+    s = max(days)
+    return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
+
+
 def all_tickers(data_dir: str | Path) -> list[str]:
     return sorted(set(list_price_tickers(data_dir)) | set(list_flow_tickers(data_dir))
                   | set(list_minute_tickers(data_dir)))

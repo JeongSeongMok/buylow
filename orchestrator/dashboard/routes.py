@@ -419,7 +419,8 @@ def register_dashboard(
         flow = set(catalog.list_flow_tickers(data_dir))
         minute = set(catalog.list_minute_tickers(data_dir))
         tickers = [{"ticker": t, "name": names.get(t, ""), "price": t in price, "flow": t in flow,
-                    "minute": (catalog.minute_day_count(data_dir, t) if t in minute else 0)}
+                    "minute": (catalog.minute_day_count(data_dir, t) if t in minute else 0),
+                    "minute_latest": (catalog.minute_latest_date(data_dir, t) if t in minute else None)}
                    for t in sorted(price | flow | minute)]
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,

@@ -120,7 +120,7 @@
           <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
           <td>{% if t.price %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
           <td>{% if t.flow %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
-          <td>{% if t.minute %}<span class="ok">{{ t.minute }}일</span>{% else %}—{% endif %}</td>
+          <td>{% if t.minute %}<span class="ok">{{ t.minute_latest }}</span> <small class="meta">{{ t.minute }}일</small>{% else %}—{% endif %}</td>
           <td><a href="/data/{{ t.ticker }}">보기</a></td>
         </tr>
         {% else %}
