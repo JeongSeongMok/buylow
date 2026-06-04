@@ -146,6 +146,12 @@ cd buylow
 uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 ```
 
+(선택) 분봉 백테스트를 빠르게 시작하려면 분봉 시드 데이터를 받습니다. 생략해도 되며, 분봉은 나중에 대시보드 데이터 탭에서 직접 적재할 수 있습니다(부족분은 증분으로만 받습니다).
+
+```bash
+bash scripts/fetch_minute_seed.sh   # gh/토큰 불필요 — 공개 릴리스에서 curl로 받음
+```
+
 대시보드를 실행한 뒤 브라우저에서 `http://127.0.0.1:8420`에 접속합니다.
 
 ```bash
@@ -170,6 +176,12 @@ git clone https://github.com/JeongSeongMok/buylow.git
 cd buylow
 uv venv .venv
 uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
+```
+
+(선택) 분봉 백테스트를 빠르게 시작하려면 분봉 시드 데이터를 받습니다. 생략 가능하며, 분봉은 나중에 대시보드 데이터 탭에서 직접 적재할 수 있습니다. 시드 스크립트는 bash이므로 Git Bash에서 실행합니다.
+
+```bash
+bash scripts/fetch_minute_seed.sh   # Git Bash에서 실행 — 공개 릴리스에서 curl로 받음
 ```
 
 대시보드를 실행한 뒤 브라우저에서 `http://127.0.0.1:8420`에 접속합니다.
