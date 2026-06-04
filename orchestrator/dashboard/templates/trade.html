@@ -54,18 +54,15 @@
     {% endif %}
   </div>
 
-  {# 무장/환경/한도 — 실주문 안전장치 #}
+  {# 무장/한도 — 실주문 안전장치 (실전/모의 환경은 '설정' 탭의 증권사 선택이 결정) #}
   <details class="help" {{ 'open' if live.env == 'real' and not live.armed else '' }}>
-    <summary class="meta">안전 설정(무장 · 환경 · 주문한도) — 실전 매매는 무장이 필요합니다</summary>
+    <summary class="meta">안전 설정(무장 · 주문한도) — 실전 매매는 무장이 필요합니다</summary>
     <form method="post" action="/trade/arm" style="margin-top:0.6rem">
-      <label>환경
-        <select name="env">
-          <option value="demo" {{ 'selected' if live.env != 'real' }}>모의투자(demo) — 가짜 돈, 안전</option>
-          <option value="real" {{ 'selected' if live.env == 'real' }}>실전(real) — 실제 계좌·실제 돈</option>
-        </select></label>
+      <p class="meta">현재 환경: <b>{{ '실전(real)' if live.env == 'real' else '모의투자(demo)' }}</b>
+        — 실전/모의는 <a href="/settings">설정</a> 탭의 <b>증권사 선택</b>(KIS 실전 / KIS 모의투자)으로 바꿉니다.</p>
       <label><input type="checkbox" name="armed" value="1" {{ 'checked' if live.armed }}>
         무장(arming) — 켜야 실제 주문이 전송됩니다
-        <small>실전(real)에서 자동매매를 켜려면 무장이 필수입니다. 모의는 무장 없이도 동작.</small></label>
+        <small>실전에서 자동매매를 켜려면 무장이 필수입니다. 모의투자는 무장 없이도 동작합니다.</small></label>
       <label>1회 주문금액 한도(원) <input type="text" name="max_order_amount" value="{{ live.max_order_amount }}" size="12">
         <small>주문 1건 금액이 이 값을 넘으면 차단(0 = 무제한 — 실전은 한도 설정 권장).</small></label>
       <label>HTS 아이디 <input type="text" name="hts_id" value="{{ live.hts_id }}" size="16">

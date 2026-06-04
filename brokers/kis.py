@@ -460,11 +460,15 @@ class KisClient:
         return False
 
 
-def from_config(**overrides):
-    """config.local.yaml/env의 KIS 자격증명으로 클라이언트 생성. 라이브 목표는 실전(real).
+def from_config(broker: str | None = None, **overrides):
+    """config의 KIS 자격증명으로 **데이터(시세·분봉)용** 클라이언트 생성.
+
+    ★ 데이터는 계좌가 필요 없어 **항상 실전 도메인(env=real)**에서 받는다 — 모의투자(kis_demo)를
+    골라도 분봉/시세는 실전 서버에서 받는다(모의 서버는 분봉 등 일부 시세 API가 제한될 수 있으므로).
+    단 사용하는 **앱키는 선택한 증권사 것**을 쓴다(모의 증권사면 모의 앱키 → 실전 도메인 시세 조회).
 
     overrides로 rate_per_sec·max_workers 등을 넘겨 병렬 적재용 클라이언트를 만들 수 있다.
     """
     from orchestrator import config
-    cred = config.get_kis_credentials()
+    cred = config.get_kis_credentials(broker)
     return KisClient(cred["app_key"], cred["app_secret"], env="real", **overrides)

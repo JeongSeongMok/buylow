@@ -11,10 +11,27 @@ from orchestrator.lean.runner import RunRequest, build_live_config
 # ── 라이브 설정 ─────────────────────────────────────────────────────────────
 def test_live_config_defaults_are_safe():
     lc = config.get_live_config()
-    assert lc["enabled"] is False      # 기본 꺼짐
+    assert lc["enabled"] is False      # 기본 꺼짐 → 거래 안 됨(가장 중요한 안전)
     assert lc["armed"] is False        # 기본 미무장
-    assert lc["env"] == "demo"         # 기본 모의
+    assert lc["env"] == "real"         # env는 기본 증권사(kis=실전)에서 도출
     assert lc["max_order_amount"] == 0
+
+
+def test_env_is_derived_from_broker():
+    # env는 더 이상 저장값이 아니라 '선택한 증권사'가 결정한다.
+    config.set_broker("kis_demo")
+    assert config.get_live_config()["env"] == "demo"
+    assert config.broker_env() == "demo"
+    config.set_broker("kis")
+    assert config.get_live_config()["env"] == "real"
+
+
+def test_kis_demo_credentials_are_separate(monkeypatch):
+    # 실전(kis)과 모의(kis_demo)는 키를 분리해 저장/조회한다.
+    config.save_secrets({"kis_app_key": "REALKEY", "kis_app_secret": "RS",
+                         "kis_demo_app_key": "DEMOKEY", "kis_demo_app_secret": "DS"})
+    assert config.get_kis_credentials("kis")["app_key"] == "REALKEY"
+    assert config.get_kis_credentials("kis_demo")["app_key"] == "DEMOKEY"
 
 
 def test_save_and_get_live_config():
@@ -25,11 +42,6 @@ def test_save_and_get_live_config():
     assert lc["env"] == "real"
     assert lc["max_order_amount"] == 500000
     assert lc["hts_id"] == "myhts"
-
-
-def test_save_live_config_invalid_env_falls_back_demo():
-    config.save_live_config({"env": "bogus"})
-    assert config.get_live_config()["env"] == "demo"
 
 
 def test_set_live_enabled_and_armed_toggles():
@@ -59,7 +71,8 @@ def test_arming_guard_real_requires_armed():
 
 
 def test_arming_guard_demo_allowed_without_arming():
-    config.save_live_config({"enabled": True, "armed": False, "env": "demo"})
+    config.set_broker("kis_demo")  # 모의투자 증권사 → env demo
+    config.save_live_config({"enabled": True, "armed": False})
     ok, _ = config.live_arming_ok()
     assert ok is True  # 모의는 무장 없이도 시작 허용
 

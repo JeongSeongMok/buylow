@@ -85,8 +85,11 @@ later) and enforced in **both** Python and C#:
 
 Defaults are **disabled, unarmed, demo** — the system never trades by accident.
 
-`live:` config fields (`orchestrator/config.py`): `enabled`, `armed`, `env` (`demo`|`real`),
-`max_order_amount` (원), `hts_id` (체결통보 WS 구독용 HTS 아이디; 없으면 실시간 체결확인 생략).
+`live:` config fields (`orchestrator/config.py`): `enabled`, `armed`, `max_order_amount` (원),
+`hts_id` (체결통보 WS 구독용 HTS 아이디; 없으면 실시간 체결확인 생략). **`env`(demo|real)는 저장하지
+않고 선택한 증권사로 도출**(`config.broker_env`: `kis`→real, `kis_demo`→demo). 실전/모의 전환은 설정 탭의
+**증권사 선택**(KIS 실전 / KIS 모의투자)으로 하고, 키·계좌도 증권사별로 분리 저장된다
+(`BROKER_SECRET_SPECS["kis"|"kis_demo"]`). 데이터(시세·분봉)는 env와 무관하게 항상 실전 도메인이다.
 
 ## Build & run
 
@@ -105,15 +108,20 @@ DOTNET_ROOT=$HOME/.dotnet dotnet test adapter/MyTrading.Kis.Tests
 
 자동 e2e는 실계좌가 필요해 CI에서 돌리지 않는다. KIS **모의투자** 계좌로 수동 점검:
 
-1. 설정에 KIS App Key/Secret + 모의 계좌번호를 넣는다(설정 탭/`config.local.yaml`).
+1. 설정 탭에서 **증권사 = KIS 모의투자(`kis_demo`)** 를 고르고, 모의 App Key/Secret + 모의 계좌번호를
+   넣는다(env는 증권사 선택으로 자동 demo).
 2. `config.local.yaml`:
    ```yaml
+   broker: kis_demo       # 증권사 선택이 곧 env=demo (모의 서버)
    live:
      enabled: true
      armed: true          # 모의는 안전하지만 게이트 동작 확인용으로 켜본다
-     env: demo
      max_order_amount: 1000000
      hts_id: "<모의 HTS ID>"   # 체결통보 받으려면 필요
+   secrets:
+     kis_demo_app_key: "..."
+     kis_demo_app_secret: "..."
+     kis_demo_account_no: "50012345-01"
    ```
 3. `scripts/build-adapter.sh`로 DLL 배치.
 4. 분봉 데이터가 있는 소수 종목으로 전략(`resolution: minute`)을 저장하고, 라이브를 기동

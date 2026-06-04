@@ -33,17 +33,20 @@
   <!-- 2. 증권사 -->
   <section class="card">
     <h2>증권사</h2>
-    <p class="meta">분봉·당일 데이터와 (추후) 실주문에 사용합니다.</p>
+    <p class="meta">매매(잔고·주문)와 당일/실시간 데이터에 사용합니다. KIS 실전과 모의투자는 키·계좌가
+      분리돼 있어 따로 관리합니다 — 쓰실 증권사를 고르고 그 키를 입력하세요.<br>
+      (참고: 시세·분봉 적재는 모의투자를 골라도 항상 실전 서버에서 받습니다.)</p>
     <form method="post" action="/settings">
       <div class="field">
         <label for="broker">증권사 선택</label>
         <select id="broker" name="broker">
           {% for b in brokers %}
           <option value="{{ b }}" {{ 'selected' if broker == b }} {{ 'disabled' if b == 'toss' }}>
-            {{ '한국투자증권 (KIS) — 모의투자 가능' if b == 'kis' else '토스증권 (미구현)' }}
+            {{ broker_labels.get(b, b) }}{{ ' (미구현)' if b == 'toss' }}
           </option>
           {% endfor %}
         </select>
+        <small class="meta">증권사를 바꾸면 [저장]을 눌러 적용하세요. 선택에 따라 아래 입력칸이 바뀝니다.</small>
       </div>
       {% for s in broker_secrets %}{{ secret_field(s) }}{% endfor %}
       {% if not broker_secrets %}
@@ -51,7 +54,7 @@
       {% endif %}
       <div class="form-actions">
         <button type="submit">저장</button>
-        {% if broker == 'kis' %}
+        {% if broker in ('kis', 'kis_demo') %}
         <button type="button" class="secondary" onclick="testConn('kis')">연동 테스트</button>
         <span class="test-result meta" id="kis-test-result"></span>
         {% endif %}

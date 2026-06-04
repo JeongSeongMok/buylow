@@ -439,7 +439,7 @@ def register_dashboard(
             "latest_date": catalog.latest_loaded_date(data_dir),
             # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
             "broker": broker,
-            "broker_label": "한국투자증권 (KIS)" if broker == "kis" else "토스증권" if broker == "toss" else broker,
+            "broker_label": config.BROKER_LABELS.get(broker, broker),
             "error": request.query_params.get("error"),
         })
 
@@ -580,11 +580,10 @@ def register_dashboard(
 
     @app.post("/trade/arm")
     async def trade_arm(request: Request):
-        # 무장/환경/주문한도/HTS ID 저장. 실전 전환 시 안전장치를 한 화면에서 설정.
+        # 무장/주문한도/HTS ID 저장. (실전/모의 환경은 증권사 선택이 결정 — 여기선 안 받음.)
         form = await request.form()
         config.save_live_config({
             "armed": str(form.get("armed", "")).lower() in ("1", "true", "on", "yes"),
-            "env": form.get("env") or "demo",
             "max_order_amount": form.get("max_order_amount") or 0,
             "hts_id": form.get("hts_id") or "",
         })
@@ -599,6 +598,7 @@ def register_dashboard(
             "secrets": config.secret_status(),
             "broker": broker,
             "brokers": config.BROKERS,
+            "broker_labels": config.BROKER_LABELS,
             "broker_secrets": config.broker_secret_status(broker),
             "data_dir": data_dir,
             "data_loaded": _loaded_count(),
@@ -635,13 +635,16 @@ def register_dashboard(
 
     @app.post("/settings/test/kis")
     def settings_test_kis():
-        # KIS App Key/Secret로 토큰을 실제 발급해 인증을 확인.
-        cred = config.get_kis_credentials()
+        # 선택한 증권사(실전/모의) 키로 그 환경 도메인에 토큰을 실제 발급해 인증을 확인.
+        broker = config.get_broker()
+        cred = config.get_kis_credentials(broker)
         if not (cred["app_key"] and cred["app_secret"]):
             return {"ok": False, "message": "KIS App Key/Secret을 먼저 저장하세요"}
+        env = config.broker_env(broker)
         try:
             from brokers.kis import KisClient
-            KisClient(cred["app_key"], cred["app_secret"], env="real").access_token()
-            return {"ok": True, "message": "정상 — 접근토큰 발급 성공"}
+            KisClient(cred["app_key"], cred["app_secret"], env=env).access_token()
+            envlabel = "모의투자" if env == "demo" else "실전"
+            return {"ok": True, "message": f"정상 — {envlabel} 접근토큰 발급 성공"}
         except Exception as e:
             return {"ok": False, "message": f"실패: {type(e).__name__} {e}"}

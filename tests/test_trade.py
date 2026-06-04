@@ -179,7 +179,7 @@ def test_toggle_blocks_real_when_unarmed(client, isolated_config):
 
 
 def test_toggle_demo_allowed(client, isolated_config):
-    isolated_config.save_live_config({"env": "demo"})
+    isolated_config.set_broker("kis_demo")  # 모의투자 증권사 → 무장 없이 켜기 허용
     client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
     assert isolated_config.get_live_config()["enabled"] is True
 

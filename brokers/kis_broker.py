@@ -22,11 +22,11 @@ _CLOSE = time(15, 30)
 
 
 class KisBroker:
-    name = "kis"
-    label = "한국투자증권 (KIS)"
-
     def __init__(self, app_key: str, app_secret: str, account_no: str, env: str = "demo",
-                 client: KisClient | None = None, now_fn=None):
+                 client: KisClient | None = None, now_fn=None,
+                 name: str = "kis", label: str = "한국투자증권 (KIS)"):
+        self.name = name
+        self.label = label
         self._account_no = account_no or ""
         parts = self._account_no.split("-")
         self._cano = parts[0].strip() if parts and parts[0] else ""
@@ -90,15 +90,21 @@ class KisBroker:
 
 
 def get_trading_broker():
-    """현재 설정으로 매매 조회 브로커를 만든다. 자격증명/계좌 미설정이면 (None, 사유)."""
+    """현재 설정 증권사로 매매 조회 브로커를 만든다. 자격증명/계좌 미설정이면 (None, 사유).
+
+    kis(실전)/kis_demo(모의) 모두 같은 KisBroker 로직을 쓰고, 매매 도메인 env만 증권사로 달라진다
+    (kis_demo→demo). 데이터(시세·분봉)는 별개로 항상 실전 도메인(brokers.kis.from_config).
+    """
     from orchestrator import config
     broker = config.get_broker()
-    if broker != "kis":
-        return None, f"'{broker}' 매매 조회는 아직 미지원입니다(KIS만 가능)."
-    cred = config.get_kis_credentials()
+    label = config.BROKER_LABELS.get(broker, broker)
+    if broker not in ("kis", "kis_demo"):
+        return None, f"'{label}' 매매 조회는 아직 미지원입니다(KIS 실전/모의만 가능)."
+    cred = config.get_kis_credentials(broker)
     if not (cred["app_key"] and cred["app_secret"]):
-        return None, "KIS App Key/Secret을 설정 탭에서 먼저 입력하세요."
+        return None, f"{label} App Key/Secret을 설정 탭에서 먼저 입력하세요."
     if not cred["account_no"]:
-        return None, "KIS 계좌번호를 설정 탭에서 먼저 입력하세요."
-    env = config.get_live_config()["env"]
-    return KisBroker(cred["app_key"], cred["app_secret"], cred["account_no"], env=env), None
+        return None, f"{label} 계좌번호를 설정 탭에서 먼저 입력하세요."
+    env = config.broker_env(broker)  # kis_demo → demo, kis → real
+    return KisBroker(cred["app_key"], cred["app_secret"], cred["account_no"], env=env,
+                     name=broker, label=label), None
