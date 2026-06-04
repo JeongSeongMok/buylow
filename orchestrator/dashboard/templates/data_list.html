@@ -1,27 +1,38 @@
 {% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
 {% block content %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
-<div class="cols2">
+<div class="cols-run">
 <div>  {# 왼쪽: 적재 액션 (데이터 최신화 + 누적 분봉 적재) #}
 <section class="card">
-  <h2>데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
+  <div class="actionbar">
+    <h2>데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
+    <span class="grow"></span>
+    <button type="submit" form="update-form">데이터 최신화</button>
+  </div>
   <p class="meta"><b>데이터 최신화</b>를 누르면 한국시장 전 종목의 가격(OHLCV)·수급·펀더멘털(PER/PBR)을
     종류별로 마지막 적재일 다음날부터 오늘까지 부족한 구간만 채웁니다(비어있는 종류는 최근 5년 백필).
     수급·펀더멘털은 KRX 로그인(설정)이 있을 때만 받습니다.</p>
+  <p class="meta">가격은 무인증(pykrx), 수급·펀더멘털은 KRX 로그인으로 받으므로 <b>증권사 선택과 무관</b>합니다.</p>
   {% if count == 0 %}
   <p class="notice">아직 적재된 데이터가 없습니다. <b>데이터 최신화</b>를 한 번 눌러 최초 적재하세요.</p>
   {% endif %}
-  <form method="post" action="/data/update"><button type="submit">데이터 최신화</button></form>
+  <form method="post" action="/data/update" id="update-form"></form>
 </section>
 
 <section class="card">
-  <h2>누적 분봉 적재 <small>(장중 타이밍 백테스트용 · 증권사 API)</small></h2>
+  <div class="actionbar">
+    <h2>누적 분봉 적재 <small>(장중 타이밍 백테스트용)</small></h2>
+    <span class="grow"></span>
+    <button type="submit" form="minute-form">분봉 적재</button>
+  </div>
   <p class="meta">선택한 종목의 분봉을 최근 구간만큼 받아 디스크에 저장합니다(이미 받은 날짜는 건너뜀).
     분봉이 있는 날은 백테스트가 장중 타점 전략을 쓰고, 없는 날은 시가 기준으로 진행합니다.
-    증권사(KIS)는 과거 분봉을 <b>최대 약 1년</b>만 보관하므로 그 이전은 받을 수 없습니다. (설정 탭에서 증권사 키 필요)</p>
-  <form method="post" action="/data/minute">
-    <div class="actionbar"><span class="grow"></span><button type="submit">분봉 적재</button></div>
+    과거 분봉은 <b>최대 약 1년</b>만 보관되어 그 이전은 받을 수 없습니다.</p>
+  <p class="meta">분봉은 증권사 API로 받습니다 — 현재 <b>{{ broker_label }}</b>.
+    <a href="/settings">설정</a> 탭에서 증권사를 바꾸거나 키를 입력하세요.</p>
+  <form method="post" action="/data/minute" id="minute-form">
     <label>기간
       <select name="days">
         <option value="30">최근 1달</option>
@@ -35,8 +46,9 @@
       <label>종목 추가</label>
       <div class="add-row">
         <span class="meta">인덱스 일괄추가</span>
-        <button type="button" class="ghost" onclick="mAddIndex('KOSPI200')">KOSPI200</button>
-        <button type="button" class="ghost" onclick="mAddIndex('KOSDAQ150')">KOSDAQ150</button>
+        <button type="button" class="ghost" onclick="mAddIndex('KOSPI200', this)">KOSPI200</button>
+        <button type="button" class="ghost" onclick="mAddIndex('KOSDAQ150', this)">KOSDAQ150</button>
+        <span class="meta" id="m-index-status"></span>
       </div>
       <div class="add-row search-wrap">
         <input type="text" id="m-ticker-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
@@ -95,13 +107,21 @@
     mIn.value = ''; mRes.hidden = true;
   }
   function mClear() { mTickers = []; mSync(); }
-  async function mAddIndex(name) {
+  async function mAddIndex(name, btn) {
+    // 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
+    const status = document.getElementById('m-index-status');
+    const btns = btn.parentElement.querySelectorAll('button');
+    btns.forEach(b => b.disabled = true);
+    status.innerHTML = '<span class="spinner"></span>' + name + ' 구성종목 불러오는 중…';
     try {
       const r = await fetch('/universe/index/' + name); const d = await r.json();
-      if (d.error) { alert(d.error); return; }
-      d.tickers.forEach(t => { if (!mTickers.includes(t)) mTickers.push(t); });
+      if (d.error) { alert(d.error); status.textContent = ''; return; }
+      let added = 0;
+      d.tickers.forEach(t => { if (!mTickers.includes(t)) { mTickers.push(t); added++; } });
       mSync();
-    } catch (e) { alert('인덱스 구성종목 조회 실패'); }
+      status.textContent = `${name} ${d.tickers.length}종목 추가 (신규 ${added})`;
+    } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
+    finally { btns.forEach(b => b.disabled = false); }
   }
   document.addEventListener('click', (e) => { if (!mRes.contains(e.target) && e.target !== mIn) mRes.hidden = true; });
   mSync();

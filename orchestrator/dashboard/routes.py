@@ -422,10 +422,14 @@ def register_dashboard(
                     "minute": (catalog.minute_day_count(data_dir, t) if t in minute else 0),
                     "minute_latest": (catalog.minute_latest_date(data_dir, t) if t in minute else None)}
                    for t in sorted(price | flow | minute)]
+        broker = config.get_broker()
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
             "latest_date": catalog.latest_loaded_date(data_dir),
+            # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
+            "broker": broker,
+            "broker_label": "한국투자증권 (KIS)" if broker == "kis" else "토스증권" if broker == "toss" else broker,
             "error": request.query_params.get("error"),
         })
 
