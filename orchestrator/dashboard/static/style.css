@@ -155,15 +155,23 @@ label.spaced { margin-top: 1rem; }
 
 button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: 0.8rem; padding: 0.35rem 0.8rem; }
 button.ghost:disabled { cursor: not-allowed; }
+/* 빠른추가 행(전체종목/KOSPI200/KOSDAQ150·추가)의 버튼은 더 '버튼답게' — 채워진 배경+라운드+또렷한 글자 */
+.add-row button.ghost {
+  background: #222c38; color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.45rem 1rem; font-size: 0.85rem; font-weight: 500;
+}
+.add-row button.ghost:hover:not(:disabled) { background: #2c3744; border-color: var(--accent); color: var(--fg); }
 /* 토글된 빠른추가 버튼(전체종목 ON) — 켜진 상태를 강조 */
 button.ghost.active { border-color: var(--accent); color: var(--accent); }
-/* '전체비우기'는 '추가된 종목' 줄 안에서 살짝 띄워 배치 */
+.add-row button.ghost.active { background: rgba(76, 175, 80, 0.15); border-color: var(--accent); color: var(--accent); }
+/* '전체비우기'는 '추가된 종목' 줄 안에서 살짝 띄워 배치(보조 동작이라 가볍게 유지) */
 button.ghost.clear-btn { margin-left: 0.5rem; padding: 0.15rem 0.6rem; }
 button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 
 /* 종목명/코드 검색 드롭다운 */
-.search-wrap { position: relative; display: inline-block; }
-.search-wrap input { width: 32rem; max-width: 100%; display: inline-block; margin: 0; }
+/* 검색 행: 입력창이 남는 폭을 모두 채우고 [추가] 버튼은 그 오른쪽에 한 줄로 붙는다. */
+.search-wrap { position: relative; display: flex; gap: 0.4rem; align-items: center; }
+.search-wrap input { flex: 1; min-width: 0; width: auto; margin: 0; }
 .search-results { position: absolute; z-index: 20; left: 0; right: 0; background: var(--card);
   border: 1px solid var(--border); border-radius: 6px; max-height: 240px; overflow: auto; margin-top: 2px; }
 .search-results div { padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.85rem; white-space: nowrap; }
