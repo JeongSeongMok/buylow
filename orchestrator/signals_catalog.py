@@ -169,9 +169,7 @@ EXECUTION_STYLES = [
     ("immediate", "시초가 즉시"),
 ]
 _STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
-# 사용자가 분봉에서 고를 수 있는 장중 방식(immediate는 폴백 전용 — 분봉 없는 종목/일 자동 대체).
-MINUTE_STYLE_KEYS = ("pullback", "twap")
-DEFAULT_EXECUTION = {"style": "pullback", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
+DEFAULT_EXECUTION = {"style": "twap", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
                      "slices": 6, "force_by_close": True, "risk_eval": "daily",
                      "select_eval": "close", "daily_fill": "open"}
 
@@ -194,13 +192,11 @@ def execution_from_form(form) -> tuple[str, dict]:
             return default
 
     if resolution == "minute":
-        select_eval, risk_eval = "intraday", "bar"
-        style = form.get("exec_style") or "pullback"
-        if style not in MINUTE_STYLE_KEYS:  # 분봉은 눌림목/TWAP만
-            style = "pullback"
+        # 분봉 매수 체결은 TWAP 고정 — 장중 매분 선별과 가격 반응이 겹치지 않는 방식(눌림목 제외).
+        select_eval, risk_eval, style = "intraday", "bar", "twap"
     else:
         select_eval, risk_eval = "close", "daily"
-        style = "pullback"  # 일봉은 장중 방식 무의미(체결은 daily_fill로)
+        style = "twap"  # 일봉은 장중 방식 무의미(체결은 daily_fill로)
 
     execution = {
         "style": style,

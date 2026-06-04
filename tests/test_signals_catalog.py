@@ -80,25 +80,22 @@ def test_execution_from_form_daily_couples_close_and_open_fill():
     assert ex["daily_fill"] == "close"          # 다음날 종가(MarketOnClose)
 
 
-def test_execution_from_form_minute_forces_intraday_and_bar():
-    # 분봉 → 선별=장중매분(intraday)·평가=매분(bar) 자동 결정. daily_fill은 일봉용이라 무의미.
+def test_execution_from_form_minute_forces_intraday_bar_twap():
+    # 분봉 → 선별=장중매분(intraday)·평가=매분(bar)·체결=TWAP 자동 결정. 분할 수만 사용자 지정.
     res, ex = sc.execution_from_form({
-        "resolution": "minute", "exec_style": "twap",
-        "exec_entry_drop_pct": "1.5", "exec_exit_rebound_pct": "2",
-        "exec_slices": "8", "exec_force_by_close": "on",
+        "resolution": "minute", "exec_slices": "8", "exec_force_by_close": "on",
     })
     assert res == "minute"
-    assert ex == {"style": "twap", "entry_drop_pct": 1.5, "exit_rebound_pct": 2.0,
-                  "slices": 8, "force_by_close": True, "risk_eval": "bar",
-                  "select_eval": "intraday", "daily_fill": "open"}
+    assert ex["style"] == "twap" and ex["select_eval"] == "intraday" and ex["risk_eval"] == "bar"
+    assert ex["slices"] == 8 and ex["force_by_close"] is True
 
 
-def test_execution_from_form_minute_rejects_immediate_style():
-    # 분봉 사용자 선택은 눌림목/TWAP만 — immediate(폴백 전용)나 미지원 값은 pullback으로.
-    _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "immediate"})
-    assert ex["style"] == "pullback"
-    _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "bogus", "exec_slices": "0"})
-    assert ex["style"] == "pullback" and ex["slices"] == 1
+def test_execution_from_form_minute_style_always_twap():
+    # 폼에 어떤 exec_style이 와도(과거 저장/조작) 분봉은 TWAP 고정. 분할 수는 최소 1.
+    _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "pullback"})
+    assert ex["style"] == "twap"
+    _, ex = sc.execution_from_form({"resolution": "minute", "exec_slices": "0"})
+    assert ex["style"] == "twap" and ex["slices"] == 1
 
 
 def test_descriptions_hide_internal_tokens():

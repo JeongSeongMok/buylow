@@ -111,19 +111,20 @@ def test_strategy_save_persists_intraday_execution(client, isolated_config):
     from orchestrator import signals_catalog
     data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
     data.update({"g0_EMA": "1", "period_days": "5",
-                 "resolution": "minute", "exec_style": "pullback",
-                 "exec_entry_drop_pct": "1.5", "exec_slices": "4",
+                 "resolution": "minute", "exec_slices": "4",
                  "exec_force_by_close": "on"})
     assert client.post("/strategy", data=data).status_code == 200
     strat = isolated_config.get_strategy()
     assert strat["resolution"] == "minute"
-    assert strat["execution"]["style"] == "pullback"
-    assert strat["execution"]["entry_drop_pct"] == 1.5
+    # 분봉은 TWAP·장중매분·매분 고정, 사용자는 분할 수만 지정.
+    assert strat["execution"]["style"] == "twap"
+    assert strat["execution"]["select_eval"] == "intraday" and strat["execution"]["risk_eval"] == "bar"
     assert strat["execution"]["slices"] == 4 and strat["execution"]["force_by_close"] is True
 
 
 def test_strategy_page_shows_timing_controls(client):
-    assert "체결 타이밍" in client.get("/strategy").text
+    t = client.get("/strategy").text
+    assert "리스크 · 체결" in t and 'name="resolution"' in t and 'name="daily_fill"' in t
 
 
 def test_settings_page_shows_broker_and_kis_keys(client):

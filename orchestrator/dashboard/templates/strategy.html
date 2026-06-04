@@ -60,7 +60,7 @@
       </section>
     </div>
 
-    <!-- 오른쪽: 신호 보유 기간 / 리스크 관리 / 체결 타이밍 — 각각 별도 카드 -->
+    <!-- 오른쪽: 신호 보유 기간 + 리스크·체결(해상도 기반) 카드 -->
     <div>
     <section class="card">
       <h2>신호 보유 기간</h2>
@@ -103,33 +103,20 @@
       {# ── 해상도=분봉 전용 ── #}
       <div id="minute-opts">
         <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요.<br>분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
-        <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
-        <label class="subhead-label">체결 방식
-          <select name="exec_style" onchange="toggleExecStyle()">
-            {% for key, name in execution_styles if key != 'immediate' %}
-            <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
-            {% endfor %}
-          </select></label>
+        <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> · 체결 <b>TWAP</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
+        <p class="meta">체결은 <b>TWAP(시간 분할)</b>로 고정됩니다 — 장중 매분 선별과 가격 반응 역할이 겹치지 않는 방식이라서요(눌림목은 선별과 중복되어 제외).</p>
+        <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
+          <small>정규장(390분)을 몇 등분해 수량을 나눠 체결할지.<br>6분할이면 65분마다 1/6씩 — 클수록 더 잘게(매끄럽게) 분산, 작을수록 큰 덩어리로 듬성듬성.</small></label>
         <details class="help">
-          <summary class="meta">체결 방식 설명 보기</summary>
+          <summary class="meta">TWAP / VWAP 란?</summary>
           <ul class="help-list">
-            <li><b>눌림목 진입 / 반등 청산</b> — 매수는 당일 시초가 대비 <b>눌림 진입(%)</b>만큼 하락하면 진입, 청산은 시초가 대비 <b>반등 청산(%)</b>만큼 오르면 매도. 더 유리한 단가를 노리지만 조건이 안 차면 미체결될 수 있어 '마감 전 강제 체결'로 보완합니다.</li>
-            <li><b>VWAP/TWAP 분할</b> — 하루치 목표 수량을 정규장을 <b>분할 수</b>만큼 등분해 시간에 걸쳐 나눠 체결합니다. 한 번에 몰아서 체결할 때 생기는 체결가 쏠림·시장충격을 줄이는 방식입니다.
-              <ul>
-                <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가): 시간을 균등 분할해 일정 간격으로 나눠 체결 — <b>현재 구현 방식</b>.</li>
-                <li><b>VWAP</b> (Volume-Weighted Average Price, 거래량가중평균가): 거래량이 많은 시간대에 더 많이 체결 — 향후 확장 예정.</li>
-              </ul>
-            </li>
+            <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가) — 하루 목표 수량을 정규장을 <b>분할 수</b>만큼 등분한 시간 구간마다 1/N씩 나눠 체결.<br>한 번에 몰아 체결할 때의 체결가 쏠림·시장충격을 줄입니다. <b>현재 구현 방식</b>.</li>
+            <li><b>VWAP</b> (Volume-Weighted Average Price, 거래량가중평균가) — 거래량이 많은 시간대에 더 많이 체결. 향후 확장 예정.</li>
           </ul>
         </details>
-        <label class="exec-param" data-styles="pullback">눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
-          <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
-        <label class="exec-param" data-styles="pullback">반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
-          <small>청산: 시초가 대비 이만큼 반등하면 매도(눌림목 방식)</small></label>
-        <label class="exec-param" data-styles="twap">분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
-          <small>VWAP/TWAP 방식에서 정규장을 몇 등분해 나눠 체결할지</small></label>
-        <label class="exec-param" data-styles="pullback twap"><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
-          장 마감 전 미체결 잔량 강제 체결</label>
+        <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
+          장 마감 전 미체결 잔량 강제 체결
+          <small>마지막 분봉(≈종가)까지 못 채운 잔량을 시장가로 전량 마무리(미체결 방지).</small></label>
       </div>
     </section>
     </div>
@@ -166,19 +153,10 @@
     const minute = document.getElementById('resolution-sel').value === 'minute';
     document.getElementById('minute-opts').hidden = !minute;
     document.getElementById('daily-opts').hidden = minute;
-    if (minute) toggleExecStyle();
-  }
-  // 분봉 체결 방식별로 필요한 파라미터만 표시.
-  function toggleExecStyle() {
-    const style = document.querySelector('select[name=exec_style]').value;
-    document.querySelectorAll('#minute-opts .exec-param').forEach(el => {
-      el.hidden = !(el.dataset.styles || '').split(' ').includes(style);
-    });
   }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
   toggleResolution();
-  toggleExecStyle();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();
 </script>
