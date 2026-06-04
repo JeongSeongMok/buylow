@@ -110,7 +110,7 @@
           <small>매수/청산 대상을 언제 판단할지. '장중 매분'은 가격계열 신호(EMA·MACD·RSI·MOM·BB)를 매 분봉
             현재가로 재평가(수급·가치는 전날값). 휩쏘 방지로 당일 청산 종목은 당일 재진입하지 않습니다.</small></label>
         <label>장중 방식
-          <select name="exec_style">
+          <select name="exec_style" onchange="toggleExecStyle()">
             {% for key, name in execution_styles %}
             <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
             {% endfor %}
@@ -129,13 +129,13 @@
             </li>
           </ul>
         </details>
-        <label>눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
+        <label class="exec-param" data-styles="pullback">눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
           <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
-        <label>반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
+        <label class="exec-param" data-styles="pullback">반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
           <small>청산: 시초가 대비 이만큼 반등하면 매도(눌림목 방식)</small></label>
-        <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
+        <label class="exec-param" data-styles="twap">분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
           <small>VWAP/TWAP 방식에서 정규장을 몇 등분해 나눠 체결할지</small></label>
-        <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
+        <label class="exec-param" data-styles="pullback twap"><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
           장 마감 전 미체결 잔량 강제 체결</label>
       </div>
     </section>
@@ -177,9 +177,17 @@
     // 리스크 평가 주기는 분봉일 때만 의미(일봉은 항상 일별).
     document.getElementById('risk-eval-row').hidden = !minute;
   }
+  // 장중 방식별로 필요한 파라미터만 표시(시초가 즉시는 추가 파라미터 없음).
+  function toggleExecStyle() {
+    const style = document.querySelector('select[name=exec_style]').value;
+    document.querySelectorAll('#intraday-opts .exec-param').forEach(el => {
+      el.hidden = !(el.dataset.styles || '').split(' ').includes(style);
+    });
+  }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
   toggleIntraday();
+  toggleExecStyle();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();
 </script>
