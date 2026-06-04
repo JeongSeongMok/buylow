@@ -26,6 +26,15 @@ def test_env_is_derived_from_broker():
     assert config.get_live_config()["env"] == "real"
 
 
+def test_clear_broker_secrets_removes_only_that_broker():
+    config.save_secrets({"kis_app_key": "RK", "kis_app_secret": "RS", "kis_account_no": "RA",
+                         "kis_demo_app_key": "DK", "kis_demo_app_secret": "DS"})
+    removed = config.clear_broker_secrets("kis")
+    assert set(removed) == {"kis_app_key", "kis_app_secret", "kis_account_no"}
+    assert config.get_kis_credentials("kis")["app_key"] is None        # 실전 삭제됨
+    assert config.get_kis_credentials("kis_demo")["app_key"] == "DK"   # 모의는 보존
+
+
 def test_kis_demo_credentials_are_separate(monkeypatch):
     # 실전(kis)과 모의(kis_demo)는 키를 분리해 저장/조회한다.
     config.save_secrets({"kis_app_key": "REALKEY", "kis_app_secret": "RS",

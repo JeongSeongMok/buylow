@@ -593,15 +593,12 @@ def register_dashboard(
     def settings_page(request: Request):
         from etl.catalog import latest_loaded_date
         data_dir = config.get_data_folder()
-        saved_broker = config.get_broker()
-        # 드롭다운을 바꾸면 ?broker=로 그 증권사 입력칸을 '미리보기'한다(저장 전). 저장값과 다르면
-        # 화면에 '미저장' 표시. 이렇게 해야 "실전 선택했는데 모의 키가 설정됨처럼" 보이는 혼란이 없다.
-        view = request.query_params.get("broker")
-        broker = view if view in config.BROKERS else saved_broker
+        # 모든 동작(데이터·매매·연동테스트)은 '활성 증권사' 하나로 판단한다. 드롭다운 선택은 즉시
+        # 활성 증권사를 바꾼다(/settings/broker) — 미리보기/미저장 같은 중간 상태가 없다.
+        broker = config.get_broker()
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
             "broker": broker,
-            "saved_broker": saved_broker,
             "brokers": config.BROKERS,
             "broker_labels": config.BROKER_LABELS,
             "broker_secrets": config.broker_secret_status(broker),
@@ -622,6 +619,21 @@ def register_dashboard(
         config.save_secrets({k: str(v) for k, v in form.items()})
         return RedirectResponse(url="/settings?saved=1", status_code=303)
 
+    @app.post("/settings/broker")
+    async def settings_set_broker(request: Request):
+        # 드롭다운 선택 = 활성 증권사 즉시 전환. 이후 데이터·매매·연동테스트가 이 증권사 기준으로 동작.
+        form = await request.form()
+        b = form.get("broker")
+        if b in config.BROKERS:
+            config.set_broker(b)
+        return RedirectResponse(url="/settings", status_code=303)
+
+    @app.post("/settings/clear")
+    def settings_clear():
+        # 활성 증권사의 저장된 키를 삭제(실수 입력 정리·증권사 전환 시).
+        config.clear_broker_secrets(config.get_broker())
+        return RedirectResponse(url="/settings", status_code=303)
+
     @app.post("/settings/test/krx")
     def settings_test_krx():
         # KRX 자격증명으로 펀더멘털 한 건을 실제 조회해 연동을 확인(무거우면 몇 초).
@@ -640,16 +652,19 @@ def register_dashboard(
 
     @app.post("/settings/test/kis")
     def settings_test_kis():
-        # 선택한 증권사(실전/모의) 키로 그 환경 도메인에 토큰을 실제 발급해 인증을 확인.
+        # 활성 증권사(실전/모의) 키로 그 환경 도메인에 토큰을 실제 발급해 인증을 확인한다.
         broker = config.get_broker()
+        if broker not in ("kis", "kis_demo"):
+            broker = "kis"
+        label = config.BROKER_LABELS.get(broker, broker)
         cred = config.get_kis_credentials(broker)
         if not (cred["app_key"] and cred["app_secret"]):
-            return {"ok": False, "message": "KIS App Key/Secret을 먼저 저장하세요"}
+            return {"ok": False, "message": f"{label} App Key/Secret을 먼저 저장하세요"}
         env = config.broker_env(broker)
         try:
             from brokers.kis import KisClient
             KisClient(cred["app_key"], cred["app_secret"], env=env).access_token()
             envlabel = "모의투자" if env == "demo" else "실전"
-            return {"ok": True, "message": f"정상 — {envlabel} 접근토큰 발급 성공"}
+            return {"ok": True, "message": f"정상 — {label}({envlabel}) 접근토큰 발급 성공"}
         except Exception as e:
-            return {"ok": False, "message": f"실패: {type(e).__name__} {e}"}
+            return {"ok": False, "message": f"실패({label}): {type(e).__name__} {e}"}

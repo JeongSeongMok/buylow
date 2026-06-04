@@ -30,30 +30,31 @@
     </form>
   </section>
 
-  <!-- 2. 증권사 -->
+  <!-- 2. 증권사 (활성 증권사 하나로 모든 동작을 판단) -->
   <section class="card">
     <h2>증권사</h2>
-    <p class="meta">매매(잔고·주문)와 당일/실시간 데이터에 사용합니다. KIS 실전과 모의투자는 키·계좌가
-      분리돼 있어 따로 관리합니다 — 쓰실 증권사를 고르고 그 키를 입력하세요.<br>
-      (참고: 시세·분봉 적재는 모의투자를 골라도 항상 실전 서버에서 받습니다.)</p>
-    <form method="post" action="/settings">
+    <p class="meta">매매(잔고·주문)·당일/실시간 데이터·연동 테스트가 모두 <b>활성 증권사</b> 기준으로 동작합니다.
+      KIS 실전과 모의투자는 키·계좌가 분리돼 있어 따로 관리합니다.<br>
+      (단, 시세·분봉 적재는 모의투자를 골라도 항상 실전 서버에서 받습니다 — 계좌가 필요 없는 조회라 더 안정적.)</p>
+
+    <!-- 활성 증권사 선택: 고르는 즉시 적용 -->
+    <form method="post" action="/settings/broker" id="broker-form">
       <div class="field">
-        <label for="broker">증권사 선택</label>
+        <label for="broker">활성 증권사</label>
         <select id="broker" name="broker"
-                onchange="location.href='/settings?broker=' + encodeURIComponent(this.value)">
+                onchange="document.getElementById('broker-form').submit()">
           {% for b in brokers %}
           <option value="{{ b }}" {{ 'selected' if broker == b }} {{ 'disabled' if b == 'toss' }}>
             {{ broker_labels.get(b, b) }}{{ ' (미구현)' if b == 'toss' }}
           </option>
           {% endfor %}
         </select>
-        {% if broker != saved_broker %}
-        <small class="status fail">미저장 — 이 증권사로 쓰려면 키 확인 후 [저장]을 누르세요
-          (현재 적용: {{ broker_labels.get(saved_broker, saved_broker) }}).</small>
-        {% else %}
-        <small class="meta">현재 적용 중인 증권사입니다. 바꾸려면 위에서 선택하세요(즉시 입력칸이 바뀜).</small>
-        {% endif %}
+        <small class="meta">고르면 즉시 적용됩니다. 아래는 <b>적용 중인 증권사</b>의 키입니다.</small>
       </div>
+    </form>
+
+    <!-- 활성 증권사의 키 입력/저장 -->
+    <form method="post" action="/settings">
       {% for s in broker_secrets %}{{ secret_field(s) }}{% endfor %}
       {% if not broker_secrets %}
       <p class="meta">선택한 증권사는 아직 연동 키 입력이 지원되지 않습니다.</p>
@@ -62,8 +63,13 @@
         <button type="submit">저장</button>
         {% if broker in ('kis', 'kis_demo') %}
         <button type="button" class="secondary" onclick="testConn('kis')">연동 테스트</button>
-        <span class="test-result meta" id="kis-test-result"></span>
         {% endif %}
+        {% if broker_secrets and broker_secrets|selectattr('set')|list %}
+        <button type="submit" class="secondary" formaction="/settings/clear" formmethod="post"
+                onclick="return confirm('{{ broker_labels.get(broker, broker) }}의 저장된 키를 모두 삭제할까요?')">
+          이 증권사 키 삭제</button>
+        {% endif %}
+        <span class="test-result meta" id="kis-test-result"></span>
       </div>
     </form>
   </section>
@@ -81,6 +87,7 @@
     el.className = 'test-result meta';
     el.textContent = '테스트 중…';
     try {
+      // 활성 증권사 기준으로 테스트한다(별도 broker 전송 없음).
       const r = await fetch('/settings/test/' + kind, {method: 'POST'});
       const d = await r.json();
       el.className = 'test-result ' + (d.ok ? 'ok' : 'fail');

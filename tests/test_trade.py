@@ -199,12 +199,36 @@ def test_toggle_demo_allowed(client, isolated_config):
     assert isolated_config.get_live_config()["enabled"] is True
 
 
-def test_settings_broker_preview(client, isolated_config):
-    # 드롭다운 변경 = ?broker= 미리보기. 저장된 증권사(기본 kis)와 다르면 해당 슬롯 + '미저장' 표시.
-    r = client.get("/settings?broker=kis_demo")
-    assert "KIS 모의 App Key" in r.text and "미저장" in r.text
-    # 미리보기 파라미터 없으면 저장된 증권사(kis) 그대로 → '미저장' 없음
-    assert "미저장" not in client.get("/settings").text
+def test_settings_shows_active_broker_slots(client, isolated_config):
+    # 설정 탭은 '활성 증권사'의 키 슬롯만 보여준다(미리보기 없음).
+    isolated_config.set_broker("kis_demo")
+    assert "KIS 모의 App Key" in client.get("/settings").text
+    isolated_config.set_broker("kis")
+    h = client.get("/settings").text
+    assert "KIS App Key" in h and "KIS 모의 App Key" not in h
+
+
+def test_set_broker_switches_active(client, isolated_config):
+    # 드롭다운 선택 = 활성 증권사 즉시 전환.
+    client.post("/settings/broker", data={"broker": "kis_demo"}, follow_redirects=False)
+    assert isolated_config.get_broker() == "kis_demo"
+    client.post("/settings/broker", data={"broker": "kis"}, follow_redirects=False)
+    assert isolated_config.get_broker() == "kis"
+
+
+def test_kis_conn_test_follows_active_broker(client, isolated_config):
+    # 연동 테스트는 활성 증권사 기준으로 동작한다(키 미설정이라 '먼저 저장' 메시지, 라벨로 증권사 확인).
+    isolated_config.set_broker("kis")
+    assert "실전" in client.post("/settings/test/kis").json()["message"]
+    isolated_config.set_broker("kis_demo")
+    assert "모의투자" in client.post("/settings/test/kis").json()["message"]
+
+
+def test_settings_clear_removes_active_broker_keys(client, isolated_config):
+    isolated_config.set_broker("kis")
+    isolated_config.save_secrets({"kis_app_key": "X", "kis_app_secret": "Y", "kis_account_no": "Z"})
+    client.post("/settings/clear", follow_redirects=False)
+    assert isolated_config.get_kis_credentials("kis")["app_key"] is None
 
 
 def test_arm_saves_safety_settings(client, isolated_config):

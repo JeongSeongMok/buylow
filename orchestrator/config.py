@@ -341,6 +341,24 @@ def save_secrets(values: dict[str, str]) -> None:
     _write_local(data)
 
 
+def clear_broker_secrets(broker: str) -> list[str]:
+    """지정 증권사의 시크릿(앱키/시크릿/계좌)을 config.local.yaml 에서 삭제. 삭제한 key 목록 반환.
+
+    실수로 잘못 넣은 키를 비우거나 증권사 전환 시 정리용. (env 변수로 설정된 값은 못 지운다 — 그쪽은
+    셸에서 unset 해야 한다.)
+    """
+    data = _load_local()
+    sec = data.get("secrets") or {}
+    removed = []
+    for s in BROKER_SECRET_SPECS.get(broker, []):
+        if s.key in sec:
+            sec.pop(s.key, None)
+            removed.append(s.key)
+    data["secrets"] = sec
+    _write_local(data)
+    return removed
+
+
 def apply_krx_credentials() -> bool:
     """pykrx가 읽도록 KRX_ID/KRX_PW를 환경변수에 주입. 둘 다 있으면 True(=로그인 가능)."""
     kid = get_secret(SECRET_SPECS[0])
