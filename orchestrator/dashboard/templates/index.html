@@ -38,7 +38,8 @@
       <div id="universe-box">
         <label>종목 추가</label>
         <div class="add-row">
-          <span class="meta">인덱스 일괄추가</span>
+          <button type="button" class="ghost" id="all-btn" onclick="toggleAll()"
+                  title="적재된 전 종목 대상 · 보유 최대 {{ max_positions }}">전체종목</button>
           <button type="button" class="ghost" onclick="addIndex('KOSPI200', this)">KOSPI200</button>
           <button type="button" class="ghost" onclick="addIndex('KOSDAQ150', this)">KOSDAQ150</button>
           <span class="meta" id="index-status"></span>
@@ -47,13 +48,12 @@
           <input type="text" id="ticker-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
                  onkeydown="if(event.key==='Enter'){event.preventDefault();addTyped();}">
           <button type="button" class="ghost" onclick="addTyped()">추가</button>
-          <button type="button" class="ghost" onclick="clearTickers()">비우기</button>
           <div id="search-results" class="search-results" hidden></div>
         </div>
-        <label class="cond"><input type="checkbox" name="universe_all" value="1" id="universe-all"
-               onchange="toggleAll()"> 전체 종목 대상 <small>(적재 전 종목 스캔 · 보유 최대 {{ max_positions }})</small></label>
-        <p class="meta spaced">추가된 종목 <span id="chip-count"></span></p>
+        <p class="meta spaced">추가된 종목 <span id="chip-count"></span>
+          <button type="button" class="ghost clear-btn" onclick="clearTickers()">전체비우기</button></p>
         <div id="chips"></div>
+        <input type="hidden" name="universe_all" id="universe-all" value="">
         <input type="hidden" name="universe" id="universe-hidden" value="005930">
       </div>
     </form>
@@ -157,12 +157,17 @@
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
     finally { btns.forEach(b => b.disabled = false); }
   }
+  // 전체종목: 체크박스 대신 토글 버튼. ON이면 hidden universe_all=1(서버가 적재 전 종목 스캔),
+  // 개별 추가/인덱스/검색은 비활성(전체종목 버튼 자신은 다시 끌 수 있게 유지).
+  let allOn = false;
   function toggleAll() {
-    const on = document.getElementById('universe-all').checked;
+    allOn = !allOn;
+    document.getElementById('universe-all').value = allOn ? '1' : '';
+    document.getElementById('all-btn').classList.toggle('active', allOn);
     const box = document.getElementById('universe-box');
-    box.classList.toggle('disabled', on);
-    sIn.disabled = on;
-    box.querySelectorAll('button').forEach(b => b.disabled = on);
+    box.classList.toggle('disabled', allOn);
+    sIn.disabled = allOn;
+    box.querySelectorAll('button').forEach(b => { if (b.id !== 'all-btn') b.disabled = allOn; });
   }
   syncTickers();
 </script>

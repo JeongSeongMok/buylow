@@ -45,7 +45,8 @@
     <div id="m-universe-box">
       <label>종목 추가</label>
       <div class="add-row">
-        <span class="meta">인덱스 일괄추가</span>
+        <button type="button" class="ghost" onclick="mAddAll(this)"
+                title="적재된 전 종목을 칩으로 추가">전체종목</button>
         <button type="button" class="ghost" onclick="mAddIndex('KOSPI200', this)">KOSPI200</button>
         <button type="button" class="ghost" onclick="mAddIndex('KOSDAQ150', this)">KOSDAQ150</button>
         <span class="meta" id="m-index-status"></span>
@@ -54,10 +55,10 @@
         <input type="text" id="m-ticker-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
                onkeydown="if(event.key==='Enter'){event.preventDefault();mAddTyped();}">
         <button type="button" class="ghost" onclick="mAddTyped()">추가</button>
-        <button type="button" class="ghost" onclick="mClear()">비우기</button>
         <div id="m-search-results" class="search-results" hidden></div>
       </div>
-      <p class="meta spaced">추가된 종목 <span id="m-chip-count"></span></p>
+      <p class="meta spaced">추가된 종목 <span id="m-chip-count"></span>
+        <button type="button" class="ghost clear-btn" onclick="mClear()">전체비우기</button></p>
       <div id="m-chips"></div>
       <input type="hidden" name="universe" id="m-universe-hidden" value="">
     </div>
@@ -65,6 +66,7 @@
 </section>
 <script>
   const M_NAMES = {{ names|tojson }};
+  const M_LOADED = {{ loaded_codes|tojson }};   // 적재된 전 종목(전체종목 일괄 추가용)
   let mTickers = [];
   const M_LIMIT = 60;
   function mLabel(c) { return M_NAMES[c] ? (M_NAMES[c] + ' ' + c) : c; }
@@ -107,6 +109,14 @@
     mIn.value = ''; mRes.hidden = true;
   }
   function mClear() { mTickers = []; mSync(); }
+  function mAddAll(btn) {
+    // 적재된 전 종목을 칩으로 추가(분봉 일괄 적재용). 수천 종목일 수 있어 건수를 표시한다.
+    let added = 0;
+    M_LOADED.forEach(t => { if (!mTickers.includes(t)) { mTickers.push(t); added++; } });
+    mSync();
+    document.getElementById('m-index-status').textContent =
+      `전체종목 ${M_LOADED.length}종목 추가 (신규 ${added})`;
+  }
   async function mAddIndex(name, btn) {
     // 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
     const status = document.getElementById('m-index-status');

@@ -427,6 +427,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
+            "loaded_codes": [t["ticker"] for t in tickers],  # [전체종목] 일괄 칩 추가용(적재된 전 종목)
             "latest_date": catalog.latest_loaded_date(data_dir),
             # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
             "broker": broker,
