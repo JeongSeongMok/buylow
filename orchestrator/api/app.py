@@ -18,7 +18,7 @@ from ..config import get_data_folder
 from ..dashboard import register_dashboard
 from ..jobs import JobManager
 from ..lean import LeanRunner, RunRequest, RunResult
-from ..persistence import RunStore
+from ..persistence import RunStore, TradeStore
 
 
 class RunCreate(BaseModel):
@@ -55,11 +55,13 @@ def run_and_store(runner: LeanRunner, store: RunStore, req: RunRequest, on_start
 
 
 def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
-               jobs: JobManager | None = None) -> FastAPI:
+               jobs: JobManager | None = None, trade_store: TradeStore | None = None,
+               get_broker=None) -> FastAPI:
     app = FastAPI(title="buylow", version="0.0.1")
     # runner는 lazy: 주입되지 않았으면 첫 실행 때 생성(런처 빌드 비용을 startup에서 회피)
     state: dict[str, Any] = {"runner": runner, "store": store or RunStore(),
-                             "jobs": jobs or JobManager()}
+                             "jobs": jobs or JobManager(),
+                             "trade_store": trade_store or TradeStore()}
 
     def get_runner() -> LeanRunner:
         if state["runner"] is None:
@@ -103,6 +105,8 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
         store=state["store"],
         run_and_store=run_and_store,
         jobs=state["jobs"],
+        trade_store=state["trade_store"],
+        get_broker=get_broker,  # 테스트는 가짜 브로커 주입; 없으면 기본 KIS 브로커
     )
 
     return app

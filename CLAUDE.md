@@ -84,9 +84,22 @@ Every Claude session working in this repo follows these:
 - **KIS live adapter** (`adapter/MyTrading.Kis`, `MyTrading.Kis.dll`) — C# `KisBrokerage` (+`IDataQueueHandler`): `KisRestClient` (token cache, order-cash `TTTC0012U`/`0011U`, order-rvsecncl, inquire-balance, inquire-psbl-order, chk-holiday; real/demo TR 분기), `KisWebSocketClient` (실시간 체결가 `H0STCNT0` → feed, 체결통보 `H0STCNI0`/`9` AES-CBC → OrderEvent), `KisSymbolMapper`, `KisBrokerageModel` (`Market.Add("krx",50)`, `KoreanFeeModel` matching `market/krx.py`), `KisBrokerageFactory`. Builds to net10 against LEAN NuGet `2.5.17757`; `scripts/build-adapter.sh` copies the DLL next to the launcher so Composer loads `KisBrokerage` by name.
 - **Live wiring** — `runner.build_live_config` emits the `live-kis` LEAN environment (live handlers + `BrokerageSetupHandler` + brokerage data); `runner.run_live` spawns it. `config.get_live_config`/`live_arming_ok` + the brokerage's own `PlaceOrder` gate enforce **arming**: real orders never transmit unless armed, with a per-order 원 cap; defaults disabled/unarmed/demo. Tests: `tests/test_live.py` (pure config/builder), `adapter/MyTrading.Kis.Tests` (xUnit frame parsing/constants). See **[docs/LIVE_KIS.md](./docs/LIVE_KIS.md)**.
 
+**매매(라이브) 대시보드 탭 — built (control + monitoring surface):**
+- **매매 탭** (`/trade`, `trade.html`; nav '● 매매' 강조 버튼) — 레이아웃은 전략설정처럼 `wide` 2-col:
+  최상단 **A** 증권사/계좌(마스킹·실전/모의 배지), 그 아래 **D** 자동매매 on/off 큰 토글 + 무장/환경/한도 +
+  **E** 장상태 배지(장중/장시작전/장마감/휴장, KST), 1열 **B** 예수금·매수가능·보유종목(매수가/현재가/평가/손익),
+  2열 **C** 매매내역(날짜 picker + ◀▶ 인접 거래일 + 일별 실현손익).
+- **브로커 무관 읽기 계층** — `brokers/base.py` `TradingBroker`(KIS∩Toss 교집합: account_info/balance/market_status)
+  + `brokers/kis_broker.py` `KisBroker`(KisClient 래핑, Asia/Seoul 시각으로 장중 판정). KIS 읽기 메서드
+  `KisClient.fetch_balance`(보유+예수금)·`check_market_open`(chk_holiday) 추가(real/demo TR 분기).
+- **C는 자체 거래로그** — `orchestrator/persistence/trade_store.py` `TradeStore`(SQLite trades 테이블):
+  record/list_trades(date)/trade_dates/adjacent_date/daily_pnl. **Toss가 종료주문 조회 미지원**이라
+  브로커 API 대신 buylow가 낸 주문·체결을 SoR로 보존(브로커 무관). 라이브 엔진 체결이 여기 적재될 예정.
+- **D 제어 표면** — `/trade/toggle`(켤 때 실전은 무장 가드 통과 필수), `/trade/arm`(무장/환경/한도/HTS ID
+  저장). 섹션별 try/except로 브로커 실패가 페이지를 깨지 않음. 테스트: `tests/test_trade.py`(11), `test_live.py`.
+
 **Not done / gated:**
-- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의투자(demo)** first (procedure in LIVE_KIS.md). Real(real) must stay unarmed until validated. Remaining: live-process supervision/kill-switch (JobManager 확장), open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존.
-- ⛔ **매매(라이브) 대시보드 탭** — 계좌/잔고/장상태/자동매매 on·off 제어 표면(KIS∩Toss 교집합)은 이 엔진 위 후속 단계.
+- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의투자(demo)** first (procedure in LIVE_KIS.md). Real(real) must stay unarmed until validated. Remaining: live-process supervision/kill-switch (JobManager 확장) — **D 토글은 현재 의도·무장 상태를 저장하고 장상태로 실행여부를 표시**하며, 토글에서 라이브 LEAN 프로세스를 직접 spawn/kill + 라이브 유니버스 선택은 후속. open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존.
 - ⛔ **Toss live** — same `IBrokerage` shape; gated on Toss API (not open).
 - ⚠️ **KIS minute history is bounded** (~1y kept, 120 bars/call) → minute backtest is universe-scoped + recent, not whole-market 5y.
 - Volatility-breakout (intraday signals), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+{% if saved %}<p class="notice"><span class="ok">저장되었습니다 ✓</span></p>{% endif %}
+{% if error %}<p class="notice"><span class="error">{{ error }}</span></p>{% endif %}
+{% if not broker_ok %}
+<p class="notice">⚠️ {{ errors.account }} — <a href="/settings">설정</a> 탭에서 증권사·키·계좌번호를 입력하세요.</p>
+{% endif %}
+
+{# ── A. 증권사/계좌 (컬럼 구분 없이 최상단) ── #}
+<section class="card">
+  <h2>증권사 · 계좌</h2>
+  {% if account %}
+  <div class="bigtoggle">
+    <span class="state">{{ account.broker_label }}</span>
+    <span>계좌 <b>{{ account.account_no }}</b> · {{ account.account_type }}</span>
+    <span class="badge {{ 'real' if account.env == 'real' else 'demo' }}">
+      {{ '실전(real)' if account.env == 'real' else '모의투자(demo)' }}</span>
+  </div>
+  {% else %}
+  <p class="meta">{{ errors.account or '계좌 정보를 불러올 수 없습니다.' }}</p>
+  {% endif %}
+</section>
+
+{# ── D. 자동매매 on/off + E. 장 상태 (컬럼 구분 없이) ── #}
+<section class="card">
+  <h2>자동매매</h2>
+  <div class="bigtoggle">
+    <form method="post" action="/trade/toggle" style="margin:0">
+      <input type="hidden" name="enabled" value="{{ '0' if live.enabled else '1' }}">
+      <button type="submit" class="{{ 'off' if live.enabled else 'on' }}">
+        {{ '■ 자동매매 끄기' if live.enabled else '▶ 자동매매 켜기' }}</button>
+    </form>
+    {% if run_state == 'running' %}
+      <span class="state running">● 실행 중 — 전략대로 장중 매매</span>
+    {% elif run_state == 'idle' %}
+      <span class="state idle">● 켜짐 · 대기 중 (장마감/휴장 — 장 열리면 실행)</span>
+    {% else %}
+      <span class="state off">○ 꺼짐</span>
+    {% endif %}
+
+    {# E. 장 상태 배지 #}
+    {% if market %}
+      {% set sess = market.session %}
+      <span class="badge {{ 'open' if sess == 'regular' else 'closed' }}">
+        {% if market.is_holiday %}휴장
+        {% elif sess == 'regular' %}장중
+        {% elif sess == 'pre' %}장 시작 전
+        {% else %}장 마감{% endif %}
+      </span>
+      <span class="meta">기준 {{ market.as_of }} (KST)</span>
+    {% elif errors.market %}
+      <span class="meta">장 상태 조회 실패: {{ errors.market }}</span>
+    {% endif %}
+  </div>
+
+  {# 무장/환경/한도 — 실주문 안전장치 #}
+  <details class="help" {{ 'open' if live.env == 'real' and not live.armed else '' }}>
+    <summary class="meta">안전 설정(무장 · 환경 · 주문한도) — 실전 매매는 무장이 필요합니다</summary>
+    <form method="post" action="/trade/arm" style="margin-top:0.6rem">
+      <label>환경
+        <select name="env">
+          <option value="demo" {{ 'selected' if live.env != 'real' }}>모의투자(demo) — 가짜 돈, 안전</option>
+          <option value="real" {{ 'selected' if live.env == 'real' }}>실전(real) — 실제 계좌·실제 돈</option>
+        </select></label>
+      <label><input type="checkbox" name="armed" value="1" {{ 'checked' if live.armed }}>
+        무장(arming) — 켜야 실제 주문이 전송됩니다
+        <small>실전(real)에서 자동매매를 켜려면 무장이 필수입니다. 모의는 무장 없이도 동작.</small></label>
+      <label>1회 주문금액 한도(원) <input type="text" name="max_order_amount" value="{{ live.max_order_amount }}" size="12">
+        <small>주문 1건 금액이 이 값을 넘으면 차단(0 = 무제한 — 실전은 한도 설정 권장).</small></label>
+      <label>HTS 아이디 <input type="text" name="hts_id" value="{{ live.hts_id }}" size="16">
+        <small>실시간 체결통보 수신용(KIS). 없으면 체결 자동확인이 제한됩니다.</small></label>
+      <button type="submit">안전 설정 저장</button>
+    </form>
+  </details>
+</section>
+
+<div class="cols2">
+  {# ── B. 예수금 + 보유종목 (1열) ── #}
+  <section class="card">
+    <h2>잔고</h2>
+    {% if balance %}
+    <table class="stats">
+      <tr><th>예수금</th><td>{{ format_won(balance.deposit) }}</td></tr>
+      <tr><th>매수가능(현금)</th><td>{{ format_won(balance.buying_power) }}</td></tr>
+      <tr><th>주식 평가금액</th><td>{{ format_won(balance.total_eval) }}</td></tr>
+      <tr><th>평가손익</th>
+        <td class="{{ 'pos' if balance.total_pnl >= 0 else 'neg' }}">
+          {{ '+' if balance.total_pnl >= 0 else '' }}{{ format_won(balance.total_pnl) }}
+          ({{ '%+.2f'|format(balance.total_pnl_pct) }}%)</td></tr>
+    </table>
+    <h3 class="subhead">보유 종목</h3>
+    <div class="scrolly">
+      <table class="runs">
+        <thead><tr><th>종목</th><th>수량</th><th>매수가</th><th>현재가</th><th>평가금액</th><th>손익</th></tr></thead>
+        <tbody>
+          {% for h in balance['items'] %}
+          <tr>
+            <td>{{ h.name or h.ticker }}<br><small class="meta">{{ h.ticker }}</small></td>
+            <td>{{ "{:,}".format(h.qty) }}</td>
+            <td>{{ "{:,}".format(h.avg_price) }}</td>
+            <td>{{ "{:,}".format(h.cur_price) }}</td>
+            <td>{{ format_won(h.eval_amount) }}</td>
+            <td class="{{ 'pos' if h.pnl >= 0 else 'neg' }}">
+              {{ '+' if h.pnl >= 0 else '' }}{{ format_won(h.pnl) }}<br>
+              <small>({{ '%+.2f'|format(h.pnl_pct) }}%)</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty">보유 종목 없음</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="meta">{{ errors.balance or '잔고를 불러올 수 없습니다.' }}</p>
+    {% endif %}
+  </section>
+
+  {# ── C. 매매 내역 (2열) — 날짜 선택 + 화살표 + 손익 ── #}
+  <section class="card">
+    <h2>매매 내역</h2>
+    <div class="dates">
+      {% if prev_date %}<a class="chip" href="/trade?date={{ prev_date }}">◀ {{ prev_date }}</a>
+      {% else %}<span class="chip" style="opacity:.4">◀</span>{% endif %}
+      <form method="get" action="/trade" style="margin:0; display:inline-flex">
+        <input type="date" name="date" value="{{ sel_date }}" onchange="this.form.submit()">
+      </form>
+      {% if next_date %}<a class="chip" href="/trade?date={{ next_date }}">{{ next_date }} ▶</a>
+      {% else %}<span class="chip" style="opacity:.4">▶</span>{% endif %}
+    </div>
+    <p class="meta">실현손익 합:
+      <span class="{{ 'pos' if daily_pnl >= 0 else 'neg' }}">
+        {{ '+' if daily_pnl >= 0 else '' }}{{ format_won(daily_pnl) }}</span></p>
+    <div class="scrolly">
+      <table class="runs">
+        <thead><tr><th>시각</th><th>종목</th><th>구분</th><th>수량</th><th>단가</th><th>금액</th><th>손익</th><th>사유</th></tr></thead>
+        <tbody>
+          {% for t in trades %}
+          <tr>
+            <td>{{ t.ts[11:16] }}</td>
+            <td>{{ t.name or t.ticker }}</td>
+            <td class="{{ 'pos' if t.side == 'BUY' else 'neg' }}">{{ '매수' if t.side == 'BUY' else '매도' }}</td>
+            <td>{{ "{:,}".format(t.qty) }}</td>
+            <td>{{ "{:,.0f}".format(t.price) }}</td>
+            <td>{{ format_won(t.amount) }}</td>
+            <td class="{{ 'pos' if (t.realized_pnl or 0) >= 0 else 'neg' }}">
+              {% if t.realized_pnl is not none %}{{ '+' if t.realized_pnl >= 0 else '' }}{{ format_won(t.realized_pnl) }}{% else %}-{% endif %}</td>
+            <td><small class="meta">{{ t.reason or '-' }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="empty">이 날짜의 매매 내역이 없습니다</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="meta">※ 매매 내역은 buylow가 직접 낸 주문·체결 기록입니다(증권사 종료주문 조회는 토스 미지원이라 자체 기록 사용).</p>
+  </section>
+</div>
+{% endblock %}

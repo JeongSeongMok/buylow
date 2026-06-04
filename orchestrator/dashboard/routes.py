@@ -255,8 +255,16 @@ def register_dashboard(
     store: Any,
     run_and_store: Callable[..., dict[str, Any]],
     jobs: Any,
+    trade_store: Any = None,
+    get_broker: Callable[[], tuple] | None = None,
 ) -> None:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    # 매매 탭 의존성 — 주입 안 되면 기본(SQLite TradeStore + KIS 조회 브로커).
+    if trade_store is None:
+        from ..persistence import TradeStore
+        trade_store = TradeStore()
+    if get_broker is None:
+        from brokers.kis_broker import get_trading_broker as get_broker
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     def submit_backtest(name: str, req: RunRequest):
@@ -507,6 +515,80 @@ def register_dashboard(
             progress = _parse_progress(lines)  # 백테스트 진행률(%) — 'PROGRESS NN%' 마지막 값
         return templates.TemplateResponse(
             request, "job_detail.html", {"job": job, "log_tail": log_tail, "progress": progress})
+
+    # ── 매매(라이브) 탭 ───────────────────────────────────────────────
+    def _seoul_today() -> str:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
+
+    @app.get("/trade", response_class=HTMLResponse)
+    def trade_page(request: Request):
+        # 섹션별 실패가 페이지 전체를 깨지 않게 각각 try/except로 감싼다(브로커 미설정/네트워크 등).
+        live = config.get_live_config()
+        broker, broker_err = get_broker()
+        account, balance, market = None, None, None
+        errors = {"account": None, "balance": None, "market": None}
+        if broker is None:
+            errors = {k: broker_err for k in errors}
+        else:
+            try: account = broker.account_info()
+            except Exception as e: errors["account"] = f"{type(e).__name__}: {e}"
+            try: balance = broker.balance()
+            except Exception as e: errors["balance"] = f"{type(e).__name__}: {e}"
+            try: market = broker.market_status()
+            except Exception as e: errors["market"] = f"{type(e).__name__}: {e}"
+
+        # C. 매매 내역 — 날짜 선택 + 인접 거래일 화살표(자체 거래로그).
+        sel_date = request.query_params.get("date") or _seoul_today()
+        trades = trade_store.list_trades(sel_date)
+        prev_date = trade_store.adjacent_date(sel_date, -1)
+        next_date = trade_store.adjacent_date(sel_date, +1)
+        daily_pnl = trade_store.daily_pnl(sel_date)
+
+        # 자동매매 실행 상태 라벨(E와 결합): 꺼짐 / 장중 실행 / 장마감 대기.
+        if not live["enabled"]:
+            run_state = "off"
+        elif market and market.get("open"):
+            run_state = "running"
+        else:
+            run_state = "idle"  # 켜져 있으나 장마감/휴장 → 대기
+
+        return templates.TemplateResponse(request, "trade.html", {
+            "live": live, "account": account, "balance": balance, "market": market,
+            "errors": errors, "broker_ok": broker is not None,
+            "trades": trades, "sel_date": sel_date, "prev_date": prev_date,
+            "next_date": next_date, "daily_pnl": daily_pnl, "run_state": run_state,
+            "format_won": format_won,
+            "saved": request.query_params.get("saved"),
+            "error": request.query_params.get("error"),
+        })
+
+    @app.post("/trade/toggle")
+    async def trade_toggle(request: Request):
+        # 자동매매 on/off. 켤 때 실전(real)은 무장 가드를 통과해야 한다(미무장이면 거부).
+        form = await request.form()
+        want_on = str(form.get("enabled", "")).lower() in ("1", "true", "on", "yes")
+        if want_on:
+            cfg = config.get_live_config()
+            if cfg["env"] == "real" and not cfg["armed"]:
+                return RedirectResponse(
+                    url="/trade?error=실전(real)은 무장 후에만 켤 수 있습니다(아래 무장 설정).",
+                    status_code=303)
+        config.set_live_enabled(want_on)
+        return RedirectResponse(url="/trade?saved=1", status_code=303)
+
+    @app.post("/trade/arm")
+    async def trade_arm(request: Request):
+        # 무장/환경/주문한도/HTS ID 저장. 실전 전환 시 안전장치를 한 화면에서 설정.
+        form = await request.form()
+        config.save_live_config({
+            "armed": str(form.get("armed", "")).lower() in ("1", "true", "on", "yes"),
+            "env": form.get("env") or "demo",
+            "max_order_amount": form.get("max_order_amount") or 0,
+            "hts_id": form.get("hts_id") or "",
+        })
+        return RedirectResponse(url="/trade?saved=1", status_code=303)
 
     @app.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request):

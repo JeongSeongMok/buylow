@@ -41,6 +41,13 @@ _MINUTE_CHART_PATH = "/uapi/domestic-stock/v1/quotations/inquire-time-dailychart
 _MINUTE_CHART_TR = "FHKST03010230"
 _MAX_MIN_ROWS_PER_CALL = 120
 
+# 주식잔고조회 — 보유종목(output1) + 예수금/평가(output2). 실전/모의 TR 분기.
+_BALANCE_PATH = "/uapi/domestic-stock/v1/trading/inquire-balance"
+_BALANCE_TR = {"real": "TTTC8434R", "demo": "VTTC8434R"}
+# 국내휴장일조회 — 개장(거래)일 여부. 실전/모의 공통 TR. (일 1회 호출 권장)
+_HOLIDAY_PATH = "/uapi/domestic-stock/v1/quotations/chk-holiday"
+_HOLIDAY_TR = "CTCA0903R"
+
 
 # KIS 레이트리밋 에러코드 — 초당 거래건수 초과. 분봉처럼 호출을 연발하면 즉시 걸린다.
 RATE_LIMIT_CODE = "EGW00201"
@@ -377,6 +384,80 @@ class KisClient:
                 break
             cursor = f"{prev // 3600:02d}{(prev % 3600) // 60:02d}00"
         return [by_ms[k] for k in sorted(by_ms)]
+
+
+    # ── 주문/계좌 조회 (매매 탭 읽기용) ────────────────────────────────────────
+    @staticmethod
+    def _num(v) -> float:
+        """KIS 문자열 숫자를 float로(콤마/공백/빈값 방어). 실패 시 0."""
+        try:
+            return float(str(v).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return 0.0
+
+    def fetch_balance(self, cano: str, acnt_prdt_cd: str = "01") -> dict:
+        """주식잔고조회 — 보유종목 + 예수금/평가. env(real/demo)에 맞는 TR로 조회.
+
+        반환: {holdings: [{ticker,name,qty,avg_price,cur_price,eval_amount,pnl,pnl_pct}],
+               deposit, d2_deposit, total_eval, net_asset}. 금액은 KRW 정수(반올림).
+        ⚠️ 첫 페이지만 읽는다(보통 보유종목 수가 적음). 다수 보유 시 페이지네이션은 후속.
+        """
+        if not cano:
+            raise KisError("계좌번호(CANO)가 필요합니다 (설정에서 KIS 계좌번호 입력).")
+        tr = _BALANCE_TR.get(self.env, _BALANCE_TR["real"])
+        data = self._get(_BALANCE_PATH, tr, {
+            "CANO": cano,
+            "ACNT_PRDT_CD": acnt_prdt_cd,
+            "AFHR_FLPR_YN": "N",
+            "OFL_YN": "",
+            "INQR_DVSN": "02",
+            "UNPR_DVSN": "01",
+            "FUND_STTL_ICLD_YN": "N",
+            "FNCG_AMT_AUTO_RDPT_YN": "N",
+            "PRCS_DVSN": "00",
+            "CTX_AREA_FK100": "",
+            "CTX_AREA_NK100": "",
+        })
+        holdings = []
+        for row in (data.get("output1") or []):
+            qty = int(self._num(row.get("hldg_qty")))
+            if qty <= 0:
+                continue
+            avg = self._num(row.get("pchs_avg_pric"))
+            cur = self._num(row.get("prpr"))
+            pnl = self._num(row.get("evlu_pfls_amt"))
+            holdings.append({
+                "ticker": row.get("pdno", ""),
+                "name": row.get("prdt_name", ""),
+                "qty": qty,
+                "avg_price": int(round(avg)),
+                "cur_price": int(round(cur)),
+                "eval_amount": int(round(self._num(row.get("evlu_amt")))),
+                "pnl": int(round(pnl)),
+                "pnl_pct": self._num(row.get("evlu_pfls_rt")),
+            })
+        out2 = (data.get("output2") or [{}])
+        o2 = out2[0] if out2 else {}
+        return {
+            "holdings": holdings,
+            "deposit": int(round(self._num(o2.get("dnca_tot_amt")))),
+            "d2_deposit": int(round(self._num(o2.get("prvs_rcdl_excc_amt")))),
+            "total_eval": int(round(self._num(o2.get("tot_evlu_amt")))),
+            "net_asset": int(round(self._num(o2.get("nass_amt")))),
+        }
+
+    def check_market_open(self, day: date) -> bool:
+        """국내휴장일조회 — 해당일이 개장(거래)일이면 True. (env 무관 공통 TR)"""
+        data = self._get(_HOLIDAY_PATH, _HOLIDAY_TR, {
+            "BASS_DT": day.strftime("%Y%m%d"),
+            "CTX_AREA_NK": "",
+            "CTX_AREA_FK": "",
+        })
+        ymd = day.strftime("%Y%m%d")
+        for row in (data.get("output") or []):
+            if row.get("bass_dt") == ymd:
+                return row.get("opnd_yn") == "Y"
+        return False
 
 
 def from_config(**overrides):

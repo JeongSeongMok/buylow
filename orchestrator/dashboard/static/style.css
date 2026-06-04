@@ -27,6 +27,30 @@ nav.chapters { margin-top: 0.7rem; display: flex; gap: 0.5rem; justify-content: 
 nav.chapters a { padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 6px;
                  color: var(--fg); text-decoration: none; font-size: 0.9rem; }
 nav.chapters a:hover { background: var(--card); }
+/* '매매' 탭 — 실거래 진입점이라 채운 강조색으로 더 눈에 띄게 */
+nav.chapters a.live-tab { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+nav.chapters a.live-tab:hover { filter: brightness(1.1); background: var(--accent); }
+
+/* 매매 탭: 상태 배지 */
+.badge { display: inline-block; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.82rem;
+         font-weight: 600; border: 1px solid var(--border); }
+.badge.open { background: rgba(76,175,80,0.18); color: var(--accent); border-color: var(--accent); }
+.badge.closed { background: #232b34; color: var(--muted); }
+.badge.real { background: rgba(229,115,115,0.18); color: #e57373; border-color: #e57373; }
+.badge.demo { background: rgba(111,179,255,0.16); color: #6fb3ff; border-color: #6fb3ff; }
+
+/* 매매 탭: 자동매매 큰 토글 버튼 */
+.bigtoggle { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.bigtoggle button { font-size: 1.05rem; padding: 0.7rem 1.6rem; border-radius: 8px; }
+.bigtoggle button.on { background: var(--accent); }
+.bigtoggle button.off { background: #c0392b; }
+.bigtoggle .state { font-size: 1rem; font-weight: 600; }
+.bigtoggle .state.running { color: var(--accent); }
+.bigtoggle .state.idle { color: #e6d08a; }
+.bigtoggle .state.off { color: var(--muted); }
+/* 손익 색 */
+.pos { color: var(--accent); }
+.neg { color: #e57373; }
 main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
 
 /* 넓은 페이지(전략설정·결과): 화면 폭의 85% */
