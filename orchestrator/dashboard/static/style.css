@@ -74,6 +74,9 @@ details.help summary { cursor: pointer; font-size: 0.85rem; }
   margin-bottom: 1.4rem;
 }
 .card h2 { margin-top: 0; font-size: 1.1rem; }
+/* 카드 내 소제목(병합된 리스크·체결 카드의 구역 구분) */
+.card h3.subhead { font-size: 0.95rem; margin: 1.3rem 0 0.6rem; padding-top: 0.95rem; border-top: 1px solid var(--border); }
+.card h3.subhead small { color: var(--muted); font-weight: normal; font-size: 0.8rem; }
 
 form label { display: block; margin-bottom: 0.8rem; color: var(--muted); font-size: 0.85rem; }
 /* hidden 속성이 'form label { display:block }'에 덮이지 않게 — 체결 방식별 파라미터 숨김에 필요 */

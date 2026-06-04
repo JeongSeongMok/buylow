@@ -160,15 +160,21 @@ EXECUTION_STYLES = [
     ("immediate", "시초가 즉시"),
 ]
 _STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
+# 사용자가 분봉에서 고를 수 있는 장중 방식(immediate는 폴백 전용 — 분봉 없는 종목/일 자동 대체).
+MINUTE_STYLE_KEYS = ("pullback", "twap")
 DEFAULT_EXECUTION = {"style": "pullback", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
-                     "slices": 6, "force_by_close": True, "risk_eval": "bar",
-                     "select_eval": "close"}
+                     "slices": 6, "force_by_close": True, "risk_eval": "daily",
+                     "select_eval": "close", "daily_fill": "open"}
 
 
 def execution_from_form(form) -> tuple[str, dict]:
-    """폼에서 해상도('daily'|'minute')와 장중 타이밍 파라미터를 추출.
+    """폼에서 해상도('daily'|'minute')와 체결/리스크 파라미터를 추출.
 
-    분봉이 아니면 execution은 무의미하지만(다음 시가 즉시 체결) 값은 보존한다.
+    해상도가 나머지를 결정한다(사용자가 일일이 고르지 않게):
+      - 일봉: 선별=전날 종가 1회(close), 리스크 평가=종가 1회(daily),
+              체결=다음 거래일 시가/종가(daily_fill: open|close).
+      - 분봉: 선별=장중 매분(intraday), 리스크 평가=매분(bar),
+              체결=눌림목/TWAP(style)+파라미터. 분봉 없는 종목/일은 시가 즉시로 자동 폴백.
     """
     resolution = "minute" if form.get("resolution") == "minute" else "daily"
 
@@ -178,18 +184,27 @@ def execution_from_form(form) -> tuple[str, dict]:
         except (TypeError, ValueError):
             return default
 
-    style = form.get("exec_style") or DEFAULT_EXECUTION["style"]
+    if resolution == "minute":
+        select_eval, risk_eval = "intraday", "bar"
+        style = form.get("exec_style") or "pullback"
+        if style not in MINUTE_STYLE_KEYS:  # 분봉은 눌림목/TWAP만
+            style = "pullback"
+    else:
+        select_eval, risk_eval = "close", "daily"
+        style = "pullback"  # 일봉은 장중 방식 무의미(체결은 daily_fill로)
+
     execution = {
-        "style": style if style in _STYLE_KEYS else "pullback",
+        "style": style,
         "entry_drop_pct": num("exec_entry_drop_pct", 1.0, float),
         "exit_rebound_pct": num("exec_exit_rebound_pct", 1.0, float),
         "slices": max(1, num("exec_slices", 6, int)),
         # 체크박스: 폼에 키 있으면 True. 템플릿은 기본 체크로 렌더한다.
         "force_by_close": bool(form.get("exec_force_by_close")),
-        # 리스크 평가 주기(분봉일 때만 의미): 'bar'(매분) | 'daily'(종가 1회).
-        "risk_eval": "daily" if form.get("risk_eval") == "daily" else "bar",
-        # 선별 주기(분봉일 때만 의미): 'close'(전날 종가 1회) | 'intraday'(장중 매분).
-        "select_eval": "intraday" if form.get("select_eval") == "intraday" else "close",
+        # 리스크 평가 주기·선별 주기는 해상도에서 파생(위).
+        "risk_eval": risk_eval,
+        "select_eval": select_eval,
+        # 일봉 체결 시점: 'open'(다음 거래일 시가) | 'close'(다음 거래일 종가, MarketOnClose).
+        "daily_fill": "close" if form.get("daily_fill") == "close" else "open",
     }
     return resolution, execution
 

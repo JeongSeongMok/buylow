@@ -134,6 +134,10 @@ class RuleStrategy(KrxFrameworkAlgorithm):
             data_dir = spec.get("data_folder", "./data")
             avail = {t: list_minute_days(data_dir, "krx", t) for t in spec["universe"]}
             self.set_execution(IntradayExecutionModel(cfg, available_days=avail))
+        elif ex_spec.get("daily_fill") == "close":
+            # 일봉 종가 체결: 다음 거래일 MarketOnClose. ('open'은 프레임워크 기본=다음 시가 시장가)
+            from daily_execution import DailyExecutionModel
+            self.set_execution(DailyExecutionModel(fill="close"))
 
         self.add_alpha(RuleAlpha(spec["signals"], spec["rule"],
                                  int(spec.get("period_days", 5)),

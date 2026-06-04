@@ -69,57 +69,50 @@
       <label>보유 기간(일) <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6"></label>
     </section>
 
+    {% set ex = strategy.get('execution') or {} %}
+    {% set res = strategy.get('resolution') or 'daily' %}
     <section class="card">
-      <h2>리스크 관리 <small>(전역 · 비우면 미적용)</small></h2>
+      <h2>리스크 · 체결 <small>(해상도 기반)</small></h2>
+      <label>해상도
+        <select name="resolution" id="resolution-sel" onchange="toggleResolution()">
+          <option value="daily" {{ 'selected' if res != 'minute' }}>일봉</option>
+          <option value="minute" {{ 'selected' if res == 'minute' }}>분봉</option>
+        </select>
+        <small>일봉: 전날 종가로 선별·평가하고 다음 거래일 시가/종가에 체결. 분봉: 장중 매분 선별·평가하고
+          장중 타이밍으로 체결(분봉 데이터 필요 — 없는 종목/일은 일봉으로 자동 폴백).</small></label>
+
+      <h3 class="subhead">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
       <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
         <small>매수가 대비 이만큼 떨어지면 매도</small></label>
       <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">
         <small>평가이익이 이만큼 나면 매도</small></label>
       <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
         <small>매수 후 고점 대비 이만큼 떨어지면 매도(고점 자동 추적 → 이익 보호)</small></label>
-      {% set rev = (strategy.get('execution') or {}).get('risk_eval', 'bar') %}
-      <label id="risk-eval-row" hidden>평가 주기
-        <select name="risk_eval">
-          <option value="bar" {{ 'selected' if rev != 'daily' }}>매분 (장중 실시간)</option>
-          <option value="daily" {{ 'selected' if rev == 'daily' }}>일별 (종가 1회)</option>
-        </select>
-        <small>분봉일 때만 적용 — 장중 손절/익절을 매 분 볼지, 하루 1회(종가)만 볼지. 일봉은 항상 일별.
-          '매분' 평가에는 <a href="/data">데이터</a> 탭에서 적재한 분봉이 필요합니다.</small></label>
-    </section>
 
-    {% set ex = strategy.get('execution') or {} %}
-    {% set res = strategy.get('resolution') or 'daily' %}
-    <section class="card">
-      <h2>체결 타이밍 <small>(장중 진입/청산 시점)</small></h2>
-      <p class="meta">일봉으로 <b>매수/청산 대상</b>을 선별한 뒤, 그 대상을 그날 <b>언제 체결</b>할지를 정한다.
-        '일봉'은 다음 거래일 시초가에 즉시 전량. '분봉'은 장중 분봉으로 타이밍을 잡는다(분봉 데이터 필요 ·
-        KIS 적재). </p>
-      <label>해상도
-        <select name="resolution" id="resolution-sel" onchange="toggleIntraday()">
-          <option value="daily" {{ 'selected' if res != 'minute' }}>일봉 (다음 시가 즉시)</option>
-          <option value="minute" {{ 'selected' if res == 'minute' }}>분봉 (장중 타이밍)</option>
-        </select></label>
-      <p class="meta" id="daily-note" hidden>일봉은 선별한 다음 거래일 <b>시초가에 전량 즉시 체결</b>됩니다 — 아래 장중 타이밍 옵션은 분봉에서만 적용됩니다.</p>
-      <p class="notice" id="minute-note" hidden>⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요. 분봉이 없는 종목/날짜는 시가 기준으로 처리됩니다.</p>
-      <div id="intraday-opts">
-        <label>선별 주기
-          <select name="select_eval">
-            <option value="close" {{ 'selected' if (ex.get('select_eval') or 'close') != 'intraday' }}>전날 종가 1회</option>
-            <option value="intraday" {{ 'selected' if (ex.get('select_eval') or 'close') == 'intraday' }}>장중 매분 (진행 중 일봉 포함)</option>
+      {# ── 해상도=일봉 전용 ── #}
+      <div id="daily-opts">
+        <p class="meta">선별 <b>전날 종가 1회</b> · 리스크 평가 <b>종가 1회</b> <span class="meta">(일봉 고정)</span></p>
+        <label class="subhead-label">체결 시점
+          <select name="daily_fill">
+            <option value="open" {{ 'selected' if ex.get('daily_fill', 'open') != 'close' }}>다음 거래일 시가</option>
+            <option value="close" {{ 'selected' if ex.get('daily_fill', 'open') == 'close' }}>다음 거래일 종가</option>
           </select>
-          <small>매수/청산 대상을 언제 판단할지. '장중 매분'은 가격계열 신호(EMA·MACD·RSI·MOM·BB)를 매 분봉
-            현재가로 재평가(수급·가치는 전날값). 휩쏘 방지로 당일 청산 종목은 당일 재진입하지 않습니다.</small></label>
-        <label>장중 방식
+          <small>신호는 당일 종가에 계산되므로 룩어헤드 방지로 체결은 다음 거래일입니다. '종가'는 MarketOnClose 주문으로 다음 거래일 종가에 체결됩니다.</small></label>
+      </div>
+
+      {# ── 해상도=분봉 전용 ── #}
+      <div id="minute-opts">
+        <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요. 분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
+        <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> <span class="meta">(분봉 고정)</span>. 가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
+        <label class="subhead-label">체결 방식
           <select name="exec_style" onchange="toggleExecStyle()">
-            {% for key, name in execution_styles %}
+            {% for key, name in execution_styles if key != 'immediate' %}
             <option value="{{ key }}" {{ 'selected' if (ex.get('style') or 'pullback') == key }}>{{ name }}</option>
             {% endfor %}
-          </select>
-          <small>'장중 매분' 선별과 함께 쓰면 <b>눌림목</b>은 선별과 역할이 겹칩니다 — 보통 '시가 즉시' 또는 'VWAP/TWAP' 권장.</small></label>
+          </select></label>
         <details class="help">
-          <summary class="meta">장중 방식 설명 보기</summary>
+          <summary class="meta">체결 방식 설명 보기</summary>
           <ul class="help-list">
-            <li><b>시초가 즉시</b> — 선별된 종목을 그날 시초가에 전량 한 번에 체결. 가장 단순하며 다른 방식의 비교 기준선입니다.</li>
             <li><b>눌림목 진입 / 반등 청산</b> — 매수는 당일 시초가 대비 <b>눌림 진입(%)</b>만큼 하락하면 진입, 청산은 시초가 대비 <b>반등 청산(%)</b>만큼 오르면 매도. 더 유리한 단가를 노리지만 조건이 안 차면 미체결될 수 있어 '마감 전 강제 체결'로 보완합니다.</li>
             <li><b>VWAP/TWAP 분할</b> — 하루치 목표 수량을 정규장을 <b>분할 수</b>만큼 등분해 시간에 걸쳐 나눠 체결합니다. 한 번에 몰아서 체결할 때 생기는 체결가 쏠림·시장충격을 줄이는 방식입니다.
               <ul>
@@ -168,25 +161,23 @@
     document.getElementById('groups').appendChild(node);
     checkDirty();
   }
-  // 해상도=일봉이면 장중 타이밍 옵션은 의미 없으므로 숨기고 안내만 표시.
-  function toggleIntraday() {
+  // 해상도가 일봉/분봉 전용 옵션 묶음을 가른다(나머지는 해상도에서 자동 결정).
+  function toggleResolution() {
     const minute = document.getElementById('resolution-sel').value === 'minute';
-    document.getElementById('intraday-opts').hidden = !minute;
-    document.getElementById('daily-note').hidden = minute;
-    document.getElementById('minute-note').hidden = !minute;  // 분봉 데이터 적재 필요 안내
-    // 리스크 평가 주기는 분봉일 때만 의미(일봉은 항상 일별).
-    document.getElementById('risk-eval-row').hidden = !minute;
+    document.getElementById('minute-opts').hidden = !minute;
+    document.getElementById('daily-opts').hidden = minute;
+    if (minute) toggleExecStyle();
   }
-  // 장중 방식별로 필요한 파라미터만 표시(시초가 즉시는 추가 파라미터 없음).
+  // 분봉 체결 방식별로 필요한 파라미터만 표시.
   function toggleExecStyle() {
     const style = document.querySelector('select[name=exec_style]').value;
-    document.querySelectorAll('#intraday-opts .exec-param').forEach(el => {
+    document.querySelectorAll('#minute-opts .exec-param').forEach(el => {
       el.hidden = !(el.dataset.styles || '').split(' ').includes(style);
     });
   }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
-  toggleIntraday();
+  toggleResolution();
   toggleExecStyle();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();

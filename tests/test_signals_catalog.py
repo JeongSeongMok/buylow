@@ -70,14 +70,18 @@ def test_bool_param_unchecked_is_zero():
     assert p["foreign"] == 0 and p["institution"] == 0 and p["individual"] == 0
 
 
-def test_execution_from_form_defaults_to_daily():
+def test_execution_from_form_daily_couples_close_and_open_fill():
+    # 일봉 → 선별·평가 고정(close/daily), 체결은 daily_fill로 결정.
     res, ex = sc.execution_from_form({})
     assert res == "daily"
-    assert ex["style"] == "pullback"          # 기본 스타일
-    assert ex["force_by_close"] is False       # 체크박스 부재 → False
+    assert ex["select_eval"] == "close" and ex["risk_eval"] == "daily"
+    assert ex["daily_fill"] == "open"          # 기본 시가
+    res, ex = sc.execution_from_form({"daily_fill": "close"})
+    assert ex["daily_fill"] == "close"          # 다음날 종가(MarketOnClose)
 
 
-def test_execution_from_form_minute_and_params():
+def test_execution_from_form_minute_forces_intraday_and_bar():
+    # 분봉 → 선별=장중매분(intraday)·평가=매분(bar) 자동 결정. daily_fill은 일봉용이라 무의미.
     res, ex = sc.execution_from_form({
         "resolution": "minute", "exec_style": "twap",
         "exec_entry_drop_pct": "1.5", "exec_exit_rebound_pct": "2",
@@ -86,27 +90,15 @@ def test_execution_from_form_minute_and_params():
     assert res == "minute"
     assert ex == {"style": "twap", "entry_drop_pct": 1.5, "exit_rebound_pct": 2.0,
                   "slices": 8, "force_by_close": True, "risk_eval": "bar",
-                  "select_eval": "close"}
+                  "select_eval": "intraday", "daily_fill": "open"}
 
 
-def test_execution_from_form_risk_eval():
-    _, ex = sc.execution_from_form({"risk_eval": "daily"})
-    assert ex["risk_eval"] == "daily"
-    _, ex = sc.execution_from_form({})  # 기본 매분
-    assert ex["risk_eval"] == "bar"
-
-
-def test_execution_from_form_select_eval():
-    _, ex = sc.execution_from_form({"select_eval": "intraday"})
-    assert ex["select_eval"] == "intraday"
-    _, ex = sc.execution_from_form({})  # 기본 전날 종가
-    assert ex["select_eval"] == "close"
-
-
-def test_execution_from_form_rejects_bad_style_and_slices():
-    _, ex = sc.execution_from_form({"exec_style": "bogus", "exec_slices": "0"})
-    assert ex["style"] == "pullback"  # 미지원 스타일 → 기본
-    assert ex["slices"] == 1          # 최소 1
+def test_execution_from_form_minute_rejects_immediate_style():
+    # 분봉 사용자 선택은 눌림목/TWAP만 — immediate(폴백 전용)나 미지원 값은 pullback으로.
+    _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "immediate"})
+    assert ex["style"] == "pullback"
+    _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "bogus", "exec_slices": "0"})
+    assert ex["style"] == "pullback" and ex["slices"] == 1
 
 
 def test_descriptions_hide_internal_tokens():
