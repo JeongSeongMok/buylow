@@ -159,7 +159,22 @@ def test_trade_page_renders(client):
     assert r.status_code == 200
     assert "자동매매" in r.text and "삼성전자" in r.text  # B 잔고 표
     assert "장중" in r.text                              # E 장상태 배지
-    assert "모의투자(demo)" in r.text                    # A env 배지
+    assert "모의투자" in r.text                          # A 환경 배지(모의일 때만)
+    assert "안전 설정" not in r.text                     # 안전설정 UI는 제거됨
+
+
+def test_trade_page_hides_badge_for_real(tmp_path, isolated_config):
+    # 실전(env=real)이면 '모의투자' 배지를 표시하지 않는다.
+    class RealBroker(FakeBroker):
+        def account_info(self):
+            d = super().account_info(); d["env"] = "real"; return d
+        def market_status(self):
+            m = super().market_status(); m["env"] = "real"; return m
+    app = create_app(runner=FakeRunner(), store=RunStore(tmp_path / "u3.db"),
+                     trade_store=TradeStore(tmp_path / "t3.db"),
+                     get_broker=lambda: (RealBroker(), None))
+    r = TestClient(app).get("/trade")
+    assert r.status_code == 200 and "모의투자" not in r.text
 
 
 def test_trade_page_graceful_when_broker_missing(tmp_path, isolated_config):
