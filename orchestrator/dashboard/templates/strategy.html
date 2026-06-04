@@ -42,7 +42,7 @@
         {% for s in catalog %}
         <fieldset class="alpha">
           <b>{{ s.label }}</b> · {{ s.name }}
-          <p class="meta">{{ s.description }}</p>
+          <p class="meta desc">{{ s.description }}</p>
           <div class="params">
             {% for p in s.params %}
             {% if p.type == "bool" %}

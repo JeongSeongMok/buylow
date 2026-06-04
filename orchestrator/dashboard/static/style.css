@@ -132,6 +132,8 @@ table.stats th { color: var(--muted); width: 40%; }
 .ok { color: var(--accent); }
 .fail { color: #e57373; }
 .meta { color: var(--muted); font-size: 0.85rem; margin: 0.3rem 0; }
+/* 문장 단위 줄바꿈(\n) 보존 — 지표 설명 등이 한 줄에 다 붙지 않게 */
+.desc { white-space: pre-line; line-height: 1.55; }
 .notice { background: #2a2410; border: 1px solid #5a4a1a; color: #e6d08a; padding: 0.7rem 1rem;
           border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
 .notice a { color: #ffd866; }
