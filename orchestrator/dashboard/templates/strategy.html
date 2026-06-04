@@ -64,8 +64,8 @@
     <div>
     <section class="card">
       <h2>신호 보유 기간</h2>
-      <p class="meta">매수 신호가 마지막으로 뜬 날로부터 며칠 더 보유할지(기본 3일). 보유 중 매도 신호가 나오면
-        기간과 무관하게 즉시 청산, 신호가 사라지면 이 기간 후 청산. 짧을수록 반응 빠름·잡음에 잘 털림.</p>
+      <p class="meta">매수 신호가 마지막으로 뜬 날로부터 며칠 더 보유할지(기본 3일).<br>
+        보유 중 매도 신호가 나오면 기간과 무관하게 즉시 청산, 신호가 사라지면 이 기간 후 청산. 짧을수록 반응 빠름·잡음에 잘 털림.</p>
       <label>보유 기간(일) <input type="text" name="period_days" value="{{ strategy.period_days }}" size="6"></label>
     </section>
 
@@ -78,8 +78,8 @@
           <option value="daily" {{ 'selected' if res != 'minute' }}>일봉</option>
           <option value="minute" {{ 'selected' if res == 'minute' }}>분봉</option>
         </select>
-        <small>일봉: 전날 종가로 선별·평가하고 다음 거래일 시가/종가에 체결. 분봉: 장중 매분 선별·평가하고
-          장중 타이밍으로 체결(분봉 데이터 필요 — 없는 종목/일은 일봉으로 자동 폴백).</small></label>
+        <small>일봉: 전날 종가로 선별·평가하고 다음 거래일 시가/종가에 체결.<br>
+          분봉: 장중 매분 선별·평가하고 장중 타이밍으로 체결(분봉 데이터 필요 — 없는 종목/일은 일봉으로 자동 폴백).</small></label>
 
       <h3 class="subhead">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
       <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
@@ -97,13 +97,13 @@
             <option value="open" {{ 'selected' if ex.get('daily_fill', 'open') != 'close' }}>다음 거래일 시가</option>
             <option value="close" {{ 'selected' if ex.get('daily_fill', 'open') == 'close' }}>다음 거래일 종가</option>
           </select>
-          <small>신호는 당일 종가에 계산되므로 룩어헤드 방지로 체결은 다음 거래일입니다. '종가'는 MarketOnClose 주문으로 다음 거래일 종가에 체결됩니다.</small></label>
+          <small>신호는 당일 종가에 계산되므로 룩어헤드 방지로 체결은 다음 거래일입니다.<br>'종가'는 MarketOnClose 주문으로 다음 거래일 종가에 체결됩니다.</small></label>
       </div>
 
       {# ── 해상도=분봉 전용 ── #}
       <div id="minute-opts">
-        <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요. 분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
-        <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> <span class="meta">(분봉 고정)</span>. 가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
+        <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요.<br>분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
+        <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
         <label class="subhead-label">체결 방식
           <select name="exec_style" onchange="toggleExecStyle()">
             {% for key, name in execution_styles if key != 'immediate' %}
