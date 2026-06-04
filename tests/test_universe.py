@@ -83,6 +83,48 @@ def test_index_members_empty_when_all_blank():
     assert index_members("1028", on=date(2026, 6, 3), stock=FakeStock()) == []
 
 
+class _CountingStock:
+    """구성종목 조회 횟수를 세는 가짜 — 캐시 적중 시 재조회가 없음을 검증."""
+    def __init__(self, members):
+        self.calls = 0
+        self.members = members
+    def get_index_portfolio_deposit_file(self, code, date):
+        self.calls += 1
+        return list(self.members)
+
+
+def test_index_members_cached_hits_disk_and_skips_refetch(tmp_path):
+    from etl.universe import index_members_cached, _index_cache_path
+    s = _CountingStock(["005930", "000660"])
+    on = date(2026, 6, 3)
+    out1 = index_members_cached("KOSPI200", tmp_path, on=on, stock=s)
+    assert out1 == ["005930", "000660"] and s.calls == 1
+    assert _index_cache_path(tmp_path).exists()
+    # 같은 날 재호출 → 디스크 캐시 적중, KRX 재조회 없음
+    out2 = index_members_cached("KOSPI200", tmp_path, on=on, stock=s)
+    assert out2 == ["005930", "000660"] and s.calls == 1
+
+
+def test_index_members_cached_refetches_when_stale(tmp_path):
+    from etl.universe import index_members_cached
+    s = _CountingStock(["005930"])
+    index_members_cached("KOSPI200", tmp_path, on=date(2026, 6, 3), stock=s)
+    assert s.calls == 1
+    # 8일 뒤(기본 max_age_days=7 초과) → 재조회
+    index_members_cached("KOSPI200", tmp_path, on=date(2026, 6, 11), stock=s)
+    assert s.calls == 2
+    # 갱신된 캐시(6/11) 기준 7일 이내 → 다시 적중
+    index_members_cached("KOSPI200", tmp_path, on=date(2026, 6, 12), stock=s)
+    assert s.calls == 2
+
+
+def test_index_members_cached_does_not_cache_empty(tmp_path):
+    from etl.universe import index_members_cached, _index_cache_path
+    s = _CountingStock([])  # 빈 결과 → 캐시 오염 방지(파일 미생성)
+    assert index_members_cached("KOSPI200", tmp_path, on=date(2026, 6, 3), stock=s) == []
+    assert not _index_cache_path(tmp_path).exists()
+
+
 @pytest.mark.integration
 def test_ingest_kospi200_small(tmp_path):
     from orchestrator.config import apply_krx_credentials

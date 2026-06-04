@@ -62,6 +62,57 @@ def index_members(code: str, on: date | None = None, stock=None) -> list[str]:
     return []
 
 
+def _index_cache_path(data_dir: str | Path) -> Path:
+    return Path(data_dir) / "krx" / "index_members.json"
+
+
+def index_members_cached(market: str, data_dir: str | Path = DEFAULT_DATA_DIR,
+                         max_age_days: int = 7, on: date | None = None,
+                         stock=None) -> list[str]:
+    """지수 구성종목을 디스크 캐시 우선으로 반환. 캐시 미스/만료 시에만 KRX 조회(느림).
+
+    왜: 구성종목은 분기 단위로만 바뀌는데, 기존엔 버튼을 누를 때마다 KRX 로그인+포털 조회를
+    매번 수행해 수 초씩 걸렸다. 코드별로 마지막 조회일·구성종목을 `data/krx/index_members.json`에
+    저장하고 max_age_days 이내면 즉시 반환한다(분기 변경 대비 기본 7일). 미스일 때만 list_universe로
+    실조회 후 캐시를 갱신한다. stock 주입 가능(테스트).
+    """
+    import json
+    code = INDEX_CODES.get(market.upper())
+    if not code:  # 지수가 아니면(KOSPI/KOSDAQ 전체 등) 캐시 대상 아님 — 그대로 조회
+        return list_universe(market, on)
+
+    today = on or date.today()
+    path = _index_cache_path(data_dir)
+    blob: dict = {}
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(blob, dict):
+            blob = {}
+    except (OSError, ValueError):
+        blob = {}
+
+    rec = blob.get(code)
+    if isinstance(rec, dict) and rec.get("members"):
+        try:
+            cached = date.fromisoformat(rec.get("date", ""))
+        except ValueError:
+            cached = None
+        if cached and 0 <= (today - cached).days <= max_age_days:
+            return list(rec["members"])
+
+    # 캐시 미스/만료 → 실조회(KRX 로그인+포털). 성공 시에만 캐시 갱신(빈 결과로 캐시 오염 방지).
+    members = (index_members(code, today, stock) if stock is not None
+               else list_universe(market, on))
+    if members:
+        blob[code] = {"date": today.isoformat(), "members": members}
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(blob), encoding="utf-8")
+        except OSError:
+            pass
+    return members
+
+
 def list_universe(market: str = "KOSPI200", on: date | None = None) -> list[str]:
     """유니버스 종목코드 목록. market: KOSPI200 | KOSDAQ150 | KOSPI | KOSDAQ | ALL."""
     from pykrx import stock

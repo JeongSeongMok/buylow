@@ -400,7 +400,8 @@ def test_data_detail_shows_minute_bars(tmp_path, monkeypatch):
 def test_universe_index_returns_loaded_constituents(client, monkeypatch):
     import etl.universe as u
     import etl.catalog as cat
-    monkeypatch.setattr(u, "list_universe", lambda market: ["005930", "000660", "999999"])
+    monkeypatch.setattr(u, "index_members_cached",
+                        lambda market, data_dir=None, **k: ["005930", "000660", "999999"])
     monkeypatch.setattr(cat, "list_price_tickers", lambda d: ["005930", "000660"])  # 적재된 것만
     data = client.get("/universe/index/KOSPI200").json()
     assert data["tickers"] == ["005930", "000660"]  # 교집합(멤버 순서)
@@ -414,8 +415,8 @@ def test_universe_index_unknown_name(client):
 
 def test_universe_index_krx_failure_is_graceful(client, monkeypatch):
     import etl.universe as u
-    def boom(market): raise RuntimeError("login needed")
-    monkeypatch.setattr(u, "list_universe", boom)
+    def boom(market, data_dir=None, **k): raise RuntimeError("login needed")
+    monkeypatch.setattr(u, "index_members_cached", boom)
     data = client.get("/universe/index/KOSDAQ150").json()
     assert "조회 실패" in data["error"] and data["tickers"] == []
 

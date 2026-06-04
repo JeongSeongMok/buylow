@@ -69,7 +69,7 @@ Every Claude session working in this repo follows these:
 - Background-job backtests with live log + progress %; run history; Korean result summary (억/만원) + **trade history** (date/name/side/qty/amount/reason; risk tag > signal reason)
 - **Rule engine** — condition-group builder (AND within group, OR across groups); single persisted strategy; signal-hold period
 - **Signals (7)** — EMA, MACD, RSI, momentum, Bollinger (mean-reversion + breakout switch), value (저PER/저PBR + derived ROE), flow (수급: foreign/inst/individual selectable, N-day cumulative)
-- Universe — scan all loaded + index bulk-add (KOSPI200/KOSDAQ150) + name/code search; portfolio is **long-only** + concurrent-holding cap (top by liquidity)
+- Universe — scan all loaded + index bulk-add (KOSPI200/KOSDAQ150) + name/code search; portfolio is **long-only** + concurrent-holding cap (top by liquidity). Index constituents are **disk-cached** (`etl.universe.index_members_cached` → `data/krx/index_members.json`, 7-day TTL) so the dashboard bulk-add button doesn't re-hit KRX (login + portal scrape) on every click — membership only changes ~quarterly
 - **Risk management** (global per-security stop-loss/take-profit/trailing); config & secrets (env → config.local.yaml → dashboard)
 - **Broker selection** (`config.get_broker`, dashboard) — KIS now; per-broker secrets separate from always-needed pykrx login
 - **KIS data layer** — `brokers/kis.py` `KisClient` (OAuth + disk-cached token), daily (수정주가) + `fetch_today` + minute (`fetch_minute`); selectable ETL source (`etl.sources.KisSource`); minute ETL → LEAN minute format (`etl/kis_minute.py`, `lean_format.write_equity_minute`)

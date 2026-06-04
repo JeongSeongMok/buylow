@@ -332,13 +332,14 @@ def register_dashboard(
     def universe_index(name: str):
         # 인덱스(KOSPI200/KOSDAQ150) 구성종목을 한 번에 추가하기 위한 조회.
         # 적재된 종목과 교집합만 반환(백테스트 가능한 것만). KRX 로그인이 필요할 수 있음.
-        from etl.universe import INDEX_CODES, list_universe
+        from etl.universe import INDEX_CODES, index_members_cached
         from etl.catalog import list_price_tickers
         key = name.upper()
         if key not in INDEX_CODES:
             return {"error": f"지원하지 않는 인덱스: {name}", "tickers": []}
         try:
-            members = list_universe(key)
+            # 디스크 캐시 우선 — 구성종목은 분기 단위로만 바뀌므로 매 클릭 KRX 재조회를 피한다.
+            members = index_members_cached(key, config.get_data_folder())
         except Exception as e:
             return {"error": f"구성종목 조회 실패({type(e).__name__}) — KRX 로그인(설정) 필요할 수 있음",
                     "tickers": []}
