@@ -593,10 +593,15 @@ def register_dashboard(
     def settings_page(request: Request):
         from etl.catalog import latest_loaded_date
         data_dir = config.get_data_folder()
-        broker = config.get_broker()
+        saved_broker = config.get_broker()
+        # 드롭다운을 바꾸면 ?broker=로 그 증권사 입력칸을 '미리보기'한다(저장 전). 저장값과 다르면
+        # 화면에 '미저장' 표시. 이렇게 해야 "실전 선택했는데 모의 키가 설정됨처럼" 보이는 혼란이 없다.
+        view = request.query_params.get("broker")
+        broker = view if view in config.BROKERS else saved_broker
         return templates.TemplateResponse(request, "settings.html", {
             "secrets": config.secret_status(),
             "broker": broker,
+            "saved_broker": saved_broker,
             "brokers": config.BROKERS,
             "broker_labels": config.BROKER_LABELS,
             "broker_secrets": config.broker_secret_status(broker),

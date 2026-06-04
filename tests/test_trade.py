@@ -184,6 +184,14 @@ def test_toggle_demo_allowed(client, isolated_config):
     assert isolated_config.get_live_config()["enabled"] is True
 
 
+def test_settings_broker_preview(client, isolated_config):
+    # 드롭다운 변경 = ?broker= 미리보기. 저장된 증권사(기본 kis)와 다르면 해당 슬롯 + '미저장' 표시.
+    r = client.get("/settings?broker=kis_demo")
+    assert "KIS 모의 App Key" in r.text and "미저장" in r.text
+    # 미리보기 파라미터 없으면 저장된 증권사(kis) 그대로 → '미저장' 없음
+    assert "미저장" not in client.get("/settings").text
+
+
 def test_arm_saves_safety_settings(client, isolated_config):
     client.post("/trade/arm", data={"env": "real", "armed": "1",
                                     "max_order_amount": "300000", "hts_id": "myhts"},
