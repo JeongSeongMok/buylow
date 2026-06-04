@@ -116,6 +116,19 @@
             {% endfor %}
           </select>
           <small>'장중 매분' 선별과 함께 쓰면 <b>눌림목</b>은 선별과 역할이 겹칩니다 — 보통 '시가 즉시' 또는 'VWAP/TWAP' 권장.</small></label>
+        <details class="help">
+          <summary class="meta">장중 방식 설명 보기</summary>
+          <ul class="help-list">
+            <li><b>시초가 즉시</b> — 선별된 종목을 그날 시초가에 전량 한 번에 체결. 가장 단순하며 다른 방식의 비교 기준선입니다.</li>
+            <li><b>눌림목 진입 / 반등 청산</b> — 매수는 당일 시초가 대비 <b>눌림 진입(%)</b>만큼 하락하면 진입, 청산은 시초가 대비 <b>반등 청산(%)</b>만큼 오르면 매도. 더 유리한 단가를 노리지만 조건이 안 차면 미체결될 수 있어 '마감 전 강제 체결'로 보완합니다.</li>
+            <li><b>VWAP/TWAP 분할</b> — 하루치 목표 수량을 정규장을 <b>분할 수</b>만큼 등분해 시간에 걸쳐 나눠 체결합니다. 한 번에 몰아서 체결할 때 생기는 체결가 쏠림·시장충격을 줄이는 방식입니다.
+              <ul>
+                <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가): 시간을 균등 분할해 일정 간격으로 나눠 체결 — <b>현재 구현 방식</b>.</li>
+                <li><b>VWAP</b> (Volume-Weighted Average Price, 거래량가중평균가): 거래량이 많은 시간대에 더 많이 체결 — 향후 확장 예정.</li>
+              </ul>
+            </li>
+          </ul>
+        </details>
         <label>눌림 진입(%) <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
           <small>매수: 당일 시초가 대비 이만큼 눌리면 진입(눌림목 방식)</small></label>
         <label>반등 청산(%) <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">

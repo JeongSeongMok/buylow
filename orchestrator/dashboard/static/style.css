@@ -43,6 +43,14 @@ main.wide { max-width: 85vw; }
 .cols2.fit .stats td small.meta { white-space: normal; }    /* 설명 문구는 컬럼 안에서 줄바꿈 허용 */
 @media (max-width: 860px) { .cols2.fit { grid-template-columns: 1fr; } }
 
+/* 접이식 도움말(체결 방식 설명 등) */
+details.help { margin: 0.2rem 0 0.9rem; }
+details.help summary { cursor: pointer; font-size: 0.85rem; }
+.help-list { margin: 0.5rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
+.help-list li { margin-bottom: 0.4rem; }
+.help-list ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+.help-list b { color: var(--fg); }
+
 /* 인라인 로딩 스피너(인덱스 일괄추가 등 비동기 작업 표시) */
 .spinner { display: inline-block; width: 0.8em; height: 0.8em; border: 2px solid var(--border);
            border-top-color: var(--muted); border-radius: 50%; animation: spin 0.6s linear infinite;
