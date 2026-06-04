@@ -170,11 +170,15 @@ Concern split so onboarding stays keyless where possible:
   token) is implemented for **data**: daily (수정주가), `fetch_today` (the not-yet-loaded current bar),
   and `fetch_minute`. Minute ETL → LEAN minute files via `etl/kis_minute.py` + `lean_format.write_equity_minute`.
   ⚠️ KIS keeps only ~1y of minute history (120 bars/call) → minute backtest is universe-scoped + recent.
-- **Live execution (NOT built — design only).** Live needs a C# `IBrokerage` + `IDataQueueHandler`
-  adapter DLL (`MyTrading.Kis.dll` / `MyTrading.Toss.dll`) so the *same* ① + ② code runs live. Per the
-  current decision the backtest path is finished but **no real-order code ships** — live execution stays
-  gated behind explicit user arming + a real account. The Python `KisClient` token/data layer is the
-  reusable foundation it will sit on.
+- **Live execution (KIS adapter built — gated).** Live runs through a C# `IBrokerage` +
+  `IDataQueueHandler` adapter (`adapter/MyTrading.Kis`, builds to `MyTrading.Kis.dll`) so the *same*
+  ① + ② code runs live. `LeanRunner.build_live_config` emits a `live-kis` LEAN environment
+  (`live-mode-brokerage: KisBrokerage`, live handlers + `BrokerageSetupHandler`); the adapter maps LEAN
+  orders → KIS order-cash REST and KIS fills/quotes → LEAN events. **Real orders ship only behind an
+  arming gate**: `config.live_arming_ok()` (orchestrator) and `KisBrokerage.PlaceOrder` (brokerage) both
+  refuse to transmit unless armed, with a per-order amount cap; defaults are disabled/unarmed/demo, so
+  nothing trades by accident. Toss follows the same `IBrokerage` shape when its API opens. Full design,
+  TR table, and the demo verification procedure: **[LIVE_KIS.md](./LIVE_KIS.md)**.
 
 ### Risk management (global)
 
@@ -253,14 +257,18 @@ warm-up / indicators. The Toss API can also be a historical data source here.
    `Launcher/Program.cs` (Apache-2.0) verbatim and references the LEAN Engine NuGet. We build
    our own because the published launcher NuGet targets net462. Engine logic stays in the
    untouched NuGet; only the entry point is ours.
-2. **`MyTrading.Toss.dll`** (`adapter/`) — the Korea/Toss adapter: `TossBrokerage`,
-   `TossDataQueueHandler`, market definition (`Market.Add("krx")`, KRW), Korean fee/tax model.
+2. **`MyTrading.Kis.dll`** (`adapter/MyTrading.Kis`, **built**) — the Korea/KIS live adapter:
+   `KisBrokerage` (+ `IDataQueueHandler`), `KisRestClient`/`KisWebSocketClient`, `KisSymbolMapper`,
+   `KisBrokerageModel` (`Market.Add("krx", 50)`, KRW, `KoreanFeeModel`), `KisBrokerageFactory`.
+   Real orders gated behind arming. `MyTrading.Toss.dll` follows the same shape when Toss opens.
+   See [LIVE_KIS.md](./LIVE_KIS.md).
 
 ## Directory structure
 
 ```
 launcher/      C# thin launcher                                    (done)
-adapter/       C# MyTrading.Toss (brokerage/dataqueue/KRX/fees)     (planned)
+adapter/       C# MyTrading.Kis (brokerage/dataqueue/KRX/fees)      (built, gated)
+               + MyTrading.Kis.Tests (xUnit); MyTrading.Toss        (planned)
 orchestrator/  Python: api/ · dashboard/ · core/ (registry,
                scheduler, jobmgr, config) · persistence/ (SQLite)
                · lean/ (runner) · ai/                              (planned)

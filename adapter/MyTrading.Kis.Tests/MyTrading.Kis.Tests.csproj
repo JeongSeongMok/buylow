@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    KIS 어댑터의 '순수' 로직(웹소켓 프레임 파싱·심볼 매핑·상수 분기) 단위 테스트.
+    네트워크/실계좌 없이 검증 가능한 부분만 다룬다(실주문 e2e는 모의투자 키로 수동 검증 — docs/LIVE_KIS.md).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyTrading.Kis/MyTrading.Kis.csproj" />
+  </ItemGroup>
+
+</Project>

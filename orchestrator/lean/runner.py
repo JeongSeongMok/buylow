@@ -127,6 +127,74 @@ def _build_config(request: RunRequest, results_dir: Path, algorithm_id: str) -> 
     }
 
 
+# 라이브(live-kis) 환경 핸들러 — LEAN 라이브 모드 표준(클론 Launcher/config.json의 라이브 블록 기준).
+_LIVE_HANDLERS = {
+    "live-mode": True,
+    "setup-handler": "QuantConnect.Lean.Engine.Setup.BrokerageSetupHandler",
+    "result-handler": "QuantConnect.Lean.Engine.Results.LiveTradingResultHandler",
+    "data-feed-handler": "QuantConnect.Lean.Engine.DataFeeds.LiveTradingDataFeed",
+    "real-time-handler": "QuantConnect.Lean.Engine.RealTime.LiveTradingRealTimeHandler",
+    "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BrokerageTransactionHandler",
+    "history-provider": [
+        "BrokerageHistoryProvider",
+        "QuantConnect.Lean.Engine.HistoricalData.SubscriptionDataReaderHistoryProvider",
+    ],
+    # Composer가 이름으로 로드 — adapter/MyTrading.Kis 의 KisBrokerage / KisBrokerageFactory.
+    "live-mode-brokerage": "KisBrokerage",
+    "data-queue-handler": ["KisBrokerage"],
+}
+
+
+def build_live_config(request: RunRequest, results_dir: Path, algorithm_id: str,
+                      *, live: dict, kis: dict, token_cache: str | None = None) -> dict:
+    """라이브(live-kis)용 LEAN config(dict) 생성 — 백테스트 _build_config의 라이브 짝.
+
+    같은 전략 .py를 라이브 모드로 돌리되, KIS 어댑터에 필요한 자격증명/환경/안전장치(무장·한도)를
+    브로커리지 데이터(kis-* 키)로 주입한다. KisBrokerageFactory.BrokerageData가 이 키들을 읽는다.
+
+    안전: env=real이면 KisBrokerage가 armed=true에서만 실제 전송한다(미무장=드라이런 거부).
+    이 함수는 순수(파일/네트워크 없음)라 단위테스트로 키 주입을 검증한다.
+    """
+    config = {
+        "environment": "live-kis",
+        "close-automatically": False,  # 라이브는 수동/킬스위치로 종료
+        "algorithm-id": algorithm_id,
+        "algorithm-type-name": request.resolved_algorithm_type(),
+        "algorithm-language": "Python",
+        "algorithm-location": str(request.resolved_strategy()),
+        "data-folder": str(Path(request.data_folder).resolve()),
+        "results-destination-folder": str(results_dir),
+        "log-handler": "QuantConnect.Logging.CompositeLogHandler",
+        "messaging-handler": "QuantConnect.Messaging.Messaging",
+        "job-queue-handler": "QuantConnect.Queues.JobQueue",
+        "api-handler": "QuantConnect.Api.Api",
+        "map-file-provider": "QuantConnect.Data.Auxiliary.LocalDiskMapFileProvider",
+        "factor-file-provider": "QuantConnect.Data.Auxiliary.LocalDiskFactorFileProvider",
+        "data-provider": "QuantConnect.Lean.Engine.DataFeeds.DefaultDataProvider",
+        "data-channel-provider": "DataChannelProvider",
+        "object-store": "QuantConnect.Lean.Engine.Storage.LocalObjectStore",
+        "data-aggregator": "QuantConnect.Lean.Engine.DataFeeds.AggregationManager",
+        "job-user-id": "0",
+        "api-access-token": "",
+        "job-organization-id": "",
+        "maximum-data-points-per-chart-series": 1000000,
+        "maximum-chart-series": 30,
+        "parameters": _params_with_risk(request.parameters),
+        "python-additional-paths": [],
+        # ── KIS 어댑터 브로커리지 데이터(무장 게이트 포함) ──
+        "kis-app-key": kis.get("app_key") or "",
+        "kis-app-secret": kis.get("app_secret") or "",
+        "kis-account-no": kis.get("account_no") or "",
+        "kis-env": live.get("env", "demo"),
+        "kis-hts-id": live.get("hts_id", "") or "",
+        "kis-armed": "true" if live.get("armed") else "false",
+        "kis-max-order-amount": str(int(live.get("max_order_amount", 0) or 0)),
+        "kis-token-cache": token_cache or "",
+        "environments": {"live-kis": dict(_LIVE_HANDLERS)},
+    }
+    return config
+
+
 class LeanRunner:
     """LEAN 프로세스를 띄워 백테스트를 실행한다."""
 
@@ -198,6 +266,66 @@ class LeanRunner:
             log_path=log_path,
             result_json=result_json,
         )
+
+
+    def run_live(self, request: RunRequest, on_start=None) -> RunResult:
+        """라이브(실주문) 실행 — 백테스트와 같은 전략 .py를 LEAN 라이브 모드로 spawn.
+
+        ⚠️ 실주문 경로. config.live_arming_ok로 안전 가드를 먼저 확인하고, KIS 어댑터 DLL이 런처
+        출력폴더에 있는지(scripts/build-adapter.sh로 빌드) 검증한다. 라이브 프로세스는 장시간 살아
+        있으며(킬 스위치로 종료), 종료될 때까지 로그를 스트리밍한다.
+        """
+        from .. import config
+        ok, why = config.live_arming_ok()
+        if not ok:
+            raise RuntimeError(f"라이브 시작 거부: {why}")
+
+        strategy = request.resolved_strategy()
+        if not strategy.is_file():
+            raise FileNotFoundError(f"전략 파일 없음: {strategy}")
+
+        out_dir = self._env.launcher_dll.parent
+        adapter_dll = out_dir / "MyTrading.Kis.dll"
+        if not adapter_dll.exists():
+            raise FileNotFoundError(
+                f"KIS 어댑터 DLL이 없음: {adapter_dll} — 'scripts/build-adapter.sh'로 먼저 빌드하세요")
+
+        algo_type = request.resolved_algorithm_type()
+        run_id = f"live-{algo_type}-{datetime.now():%Y%m%d-%H%M%S}"
+        run_dir = RUNS_DIR / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        live = config.get_live_config()
+        kis = config.get_kis_credentials()
+        from brokers.kis import DEFAULT_TOKEN_CACHE
+        cfg = build_live_config(request, run_dir, run_id, live=live, kis=kis,
+                                token_cache=str(DEFAULT_TOKEN_CACHE))
+        (out_dir / "config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+        pythonpath_parts = [
+            str(self._env.venv_site_packages),
+            str(self._env.algorithm_imports_dir),
+            str(REPO_ROOT),
+            str(strategy.parent),
+        ]
+        proc_env = self._env.process_env(pythonpath_parts)
+
+        log_path = run_dir / "run.log"
+        if on_start:
+            on_start(run_id, log_path)
+        with open(log_path, "w", encoding="utf-8", buffering=1) as log:
+            proc = subprocess.Popen(
+                [str(self._env.dotnet_exe), "BuylowLauncher.dll"],
+                cwd=str(out_dir), env=proc_env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+            )
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                log.write(line)
+            proc.wait()
+
+        return RunResult(run_id=run_id, exit_code=proc.returncode, statistics={},
+                         run_dir=run_dir, log_path=log_path, result_json=None)
 
 
 def _parse_param(item: str) -> tuple[str, str]:

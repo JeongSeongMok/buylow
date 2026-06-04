@@ -145,6 +145,84 @@ def save_strategy(spec: dict) -> None:
     _write_local(data)
 
 
+# ── 라이브(실주문) 설정 ────────────────────────────────────────────────────
+# 자동매매 on/off + 안전장치(무장·환경·주문한도). 실주문은 LEAN 라이브 + KIS 어댑터(adapter/)가 집행.
+# 안전 원칙(docs/LIVE_KIS.md): real(실전) 환경에서 enabled는 armed=True일 때만 유효하고, 주문 1건은
+# max_order_amount(원) 이하만 허용한다. 기본은 비활성·미무장·모의(demo)로 둬 사고를 막는다.
+LIVE_KEYS = ("enabled", "armed", "env", "max_order_amount", "hts_id")
+DEFAULT_LIVE = {"enabled": False, "armed": False, "env": "demo",
+                "max_order_amount": 0, "hts_id": ""}
+
+
+def get_live_config() -> dict:
+    """라이브 설정. env BUYLOW_LIVE_* → config.local.yaml live: → 기본값."""
+    lc = _load_local().get("live") or {}
+
+    def _b(key):
+        ev = os.environ.get(f"BUYLOW_LIVE_{key.upper()}")
+        v = ev if ev is not None else lc.get(key, DEFAULT_LIVE[key])
+        return str(v).strip().lower() in ("1", "true", "yes", "on") if isinstance(v, str) else bool(v)
+
+    env = (os.environ.get("BUYLOW_LIVE_ENV") or lc.get("env") or DEFAULT_LIVE["env"]).lower()
+    if env not in ("real", "demo"):
+        env = "demo"
+    try:
+        max_amt = int(float(os.environ.get("BUYLOW_LIVE_MAX_ORDER_AMOUNT")
+                            or lc.get("max_order_amount") or 0))
+    except (TypeError, ValueError):
+        max_amt = 0
+    return {
+        "enabled": _b("enabled"),
+        "armed": _b("armed"),
+        "env": env,
+        "max_order_amount": max(0, max_amt),
+        "hts_id": os.environ.get("BUYLOW_LIVE_HTS_ID") or lc.get("hts_id") or "",
+    }
+
+
+def save_live_config(values: dict) -> None:
+    """대시보드 라이브 폼 저장. enabled/armed=불리언, env=real|demo, max_order_amount=원, hts_id=문자열."""
+    data = _load_local()
+    live = data.setdefault("live", {})
+
+    def _truthy(v):
+        return bool(v) if not isinstance(v, str) else v.strip().lower() in ("1", "true", "yes", "on")
+
+    if "enabled" in values:
+        live["enabled"] = _truthy(values.get("enabled"))
+    if "armed" in values:
+        live["armed"] = _truthy(values.get("armed"))
+    if "env" in values:
+        env = str(values.get("env") or "demo").lower()
+        live["env"] = env if env in ("real", "demo") else "demo"
+    if "max_order_amount" in values:
+        try:
+            live["max_order_amount"] = max(0, int(float(values.get("max_order_amount") or 0)))
+        except (TypeError, ValueError):
+            live["max_order_amount"] = 0
+    if "hts_id" in values:
+        live["hts_id"] = str(values.get("hts_id") or "").strip()
+    _write_local(data)
+
+
+def set_live_enabled(enabled: bool) -> None:
+    save_live_config({"enabled": bool(enabled)})
+
+
+def set_live_armed(armed: bool) -> None:
+    save_live_config({"armed": bool(armed)})
+
+
+def live_arming_ok(cfg: dict | None = None) -> tuple[bool, str]:
+    """실주문 안전 가드. (허용여부, 사유). real+enabled는 armed 필수."""
+    cfg = cfg or get_live_config()
+    if not cfg["enabled"]:
+        return False, "자동매매가 꺼져 있습니다"
+    if cfg["env"] == "real" and not cfg["armed"]:
+        return False, "실전(real) 자동매매는 무장(arming) 후에만 시작할 수 있습니다"
+    return True, "ok"
+
+
 def get_scheduler_config() -> dict:
     """일일 증분 적재 스케줄 설정. 기본 비활성(사용자가 켜야 자동 적재)."""
     sc = _load_local().get("scheduler") or {}

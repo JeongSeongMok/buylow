@@ -45,7 +45,7 @@ Every Claude session working in this repo follows these:
 | Strategy language | Python (pythonnet) |
 | Brokerage model | User picks broker in dashboard (KIS=한국투자증권 now; Toss when API opens). Broker drives "today/live" data + (live) orders; historical daily stays keyless pykrx |
 | Two-layer strategy | ① daily selection (alpha, once/day) + ② intraday timing (LEAN `ExecutionModel` on minute bars). Same code in backtest & live. Timing logic is pure (`orchestrator/execution.py`) + thin adapter (`strategies/intraday_execution.py`) — mirrors `rules.py`/`RuleAlpha` |
-| C# artifacts | **Two**: a thin net10 launcher (vendored LEAN `Program.cs`) + a broker adapter DLL (`MyTrading.Toss.dll` / `MyTrading.Kis.dll`) — **live only, not built yet** |
+| C# artifacts | **Two**: a thin net10 launcher (vendored LEAN `Program.cs`) + a broker adapter DLL. `MyTrading.Kis` is **built** (`adapter/MyTrading.Kis`, gated behind arming); `MyTrading.Toss` follows when Toss API opens |
 | LEAN NuGet version | `2.5.17757` lineage (net10); **never** `10730.x` (net462) — see DEVELOPMENT.md |
 | Orchestrator ↔ LEAN | Filesystem (config in / results out) + process control |
 | Persistence | SQLite (orchestrator-owned, WAL) for state + disk files (`runs/<id>/`) for blobs; no DB server |
@@ -80,8 +80,14 @@ Every Claude session working in this repo follows these:
   - **분봉**: 선별=장중 매분(`select_eval=intraday`), 리스크 평가=매분(`risk_eval=bar`), 체결=**TWAP 고정**(`style=twap`; 사용자는 **분할 수**만 지정). 눌림목은 장중 매분 선별과 가격 반응 역할이 겹쳐(같은 축) 제외 — TWAP는 "수량을 시간에 분산"이라 선별과 직교. immediate는 폴백 전용. 분봉 있으면 TWAP, **없는 종목/일은 일봉(시가)로 자동 폴백**(`TimingConfig.for_availability`, `lean_format.list_minute_days`)
 - **Intraday timing layer (②)** — `Resolution.MINUTE` runs daily selection + intraday execution; pure logic unit-tested (`orchestrator/execution.py`). 장중 매분 선별: price signals re-evaluated each minute with the forming day's bar (prior daily closes + current price, pure `orchestrator/indicators.py`; 수급·가치 stay prior-close). Whipsaw guard: same-day re-entry blocked (cooldown). No look-ahead (data ≤ now)
 
+**Live (KIS) — built, gated behind arming:**
+- **KIS live adapter** (`adapter/MyTrading.Kis`, `MyTrading.Kis.dll`) — C# `KisBrokerage` (+`IDataQueueHandler`): `KisRestClient` (token cache, order-cash `TTTC0012U`/`0011U`, order-rvsecncl, inquire-balance, inquire-psbl-order, chk-holiday; real/demo TR 분기), `KisWebSocketClient` (실시간 체결가 `H0STCNT0` → feed, 체결통보 `H0STCNI0`/`9` AES-CBC → OrderEvent), `KisSymbolMapper`, `KisBrokerageModel` (`Market.Add("krx",50)`, `KoreanFeeModel` matching `market/krx.py`), `KisBrokerageFactory`. Builds to net10 against LEAN NuGet `2.5.17757`; `scripts/build-adapter.sh` copies the DLL next to the launcher so Composer loads `KisBrokerage` by name.
+- **Live wiring** — `runner.build_live_config` emits the `live-kis` LEAN environment (live handlers + `BrokerageSetupHandler` + brokerage data); `runner.run_live` spawns it. `config.get_live_config`/`live_arming_ok` + the brokerage's own `PlaceOrder` gate enforce **arming**: real orders never transmit unless armed, with a per-order 원 cap; defaults disabled/unarmed/demo. Tests: `tests/test_live.py` (pure config/builder), `adapter/MyTrading.Kis.Tests` (xUnit frame parsing/constants). See **[docs/LIVE_KIS.md](./docs/LIVE_KIS.md)**.
+
 **Not done / gated:**
-- ⛔ **Live trading (real orders)** — KIS/Toss `IBrokerage`+`IDataQueueHandler` C# adapter DLL. **Design only** (per decision): backtest path complete; live execution intentionally not built — no real-order code ships without explicit user arming + a real account. Toss also gated on its API (not open).
+- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의투자(demo)** first (procedure in LIVE_KIS.md). Real(real) must stay unarmed until validated. Remaining: live-process supervision/kill-switch (JobManager 확장), open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존.
+- ⛔ **매매(라이브) 대시보드 탭** — 계좌/잔고/장상태/자동매매 on·off 제어 표면(KIS∩Toss 교집합)은 이 엔진 위 후속 단계.
+- ⛔ **Toss live** — same `IBrokerage` shape; gated on Toss API (not open).
 - ⚠️ **KIS minute history is bounded** (~1y kept, 120 bars/call) → minute backtest is universe-scoped + recent, not whole-market 5y.
 - Volatility-breakout (intraday signals), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
 - (No AI/NL strategy generation — intentionally out of scope.)
