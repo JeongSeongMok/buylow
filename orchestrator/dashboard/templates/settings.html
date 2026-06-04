@@ -40,7 +40,7 @@
         <select id="broker" name="broker">
           {% for b in brokers %}
           <option value="{{ b }}" {{ 'selected' if broker == b }} {{ 'disabled' if b == 'toss' }}>
-            {{ '한국투자증권 (KIS)' if b == 'kis' else '토스증권 (미구현)' }}
+            {{ '한국투자증권 (KIS) — 모의투자 가능' if b == 'kis' else '토스증권 (미구현)' }}
           </option>
           {% endfor %}
         </select>
