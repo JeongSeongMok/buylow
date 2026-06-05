@@ -21,19 +21,49 @@
   {% endif %}
 </section>
 
+{# ── 대상 종목(라이브 유니버스) 선택 ── #}
+<section class="card">
+  <div class="actionbar">
+    <h2>대상 종목 <small>(자동매매 유니버스 · {{ live_universe|length }}종목)</small></h2>
+    <span class="grow"></span>
+    <button type="submit" form="live-universe-form">대상종목 저장</button>
+  </div>
+  <p class="meta">자동매매가 매매할 종목입니다. 인덱스·그룹 버튼이나 검색으로 추가하세요(저장 후 자동매매를 켜면 이 종목들을 전략대로 매매).</p>
+  <form method="post" action="/trade/universe" id="live-universe-form">
+    <div class="add-row">
+      {% for idx in indices %}
+      <button type="button" class="ghost" onclick="uAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+      {% endfor %}
+      <span class="meta" id="u-index-status"></span>
+    </div>
+    <div class="add-row search-wrap">
+      <input type="text" id="u-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();uAddTyped();}">
+      <button type="button" class="ghost" onclick="uAddTyped()">추가</button>
+      <div id="u-results" class="search-results" hidden></div>
+    </div>
+    <p class="meta spaced">대상 종목 <span id="u-count"></span>
+      <button type="button" class="ghost clear-btn" onclick="uClear()">전체비우기</button></p>
+    <div id="u-chips"></div>
+    <input type="hidden" name="universe" id="u-hidden" value="">
+  </form>
+</section>
+
 {# ── D. 자동매매 on/off + E. 장 상태 (컬럼 구분 없이) ── #}
 <section class="card">
   <h2>자동매매</h2>
+  {% if not has_strategy %}<p class="notice">전략이 없습니다 — <a href="/strategy">전략 설정</a>에서 먼저 저장하세요.</p>{% endif %}
+  {% if not live_universe %}<p class="notice">대상 종목이 없습니다 — 위에서 선택해 저장하세요.</p>{% endif %}
   <div class="bigtoggle">
     <form method="post" action="/trade/toggle" style="margin:0">
-      <input type="hidden" name="enabled" value="{{ '0' if live.enabled else '1' }}">
-      <button type="submit" class="{{ 'off' if live.enabled else 'on' }}">
-        {{ '■ 자동매매 끄기' if live.enabled else '▶ 자동매매 켜기' }}</button>
+      <input type="hidden" name="enabled" value="{{ '0' if running else '1' }}">
+      <button type="submit" class="{{ 'off' if running else 'on' }}">
+        {{ '■ 자동매매 끄기' if running else '▶ 자동매매 켜기' }}</button>
     </form>
     {% if run_state == 'running' %}
-      <span class="state running">● 실행 중 — 전략대로 장중 매매</span>
+      <span class="state running">● 실행 중 — 전략대로 매매(분봉=1분봉마다)</span>
     {% elif run_state == 'idle' %}
-      <span class="state idle">● 켜짐 · 대기 중 (장마감/휴장 — 장 열리면 실행)</span>
+      <span class="state idle">● 켜짐 · 프로세스 대기/종료됨 (로그 확인)</span>
     {% else %}
       <span class="state off">○ 꺼짐</span>
     {% endif %}
@@ -59,4 +89,63 @@
   {% include "partials/trade_balance.html" %}
   {% include "partials/trade_trades.html" %}
 </div>
+
+<script>
+  // 대상종목(라이브 유니버스) 선택 — 백테스트 종목선택과 같은 패턴(종목명 검색 + 인덱스/그룹 + 칩).
+  const U_NAMES = {{ names|tojson }};
+  let uTickers = {{ live_universe|tojson }};   // 저장된 대상종목으로 초기화
+  function uLabel(c) { return U_NAMES[c] ? (U_NAMES[c] + ' ' + c) : c; }
+  function uSync() {
+    const box = document.getElementById('u-chips'); box.innerHTML = '';
+    uTickers.forEach((t, i) => {
+      const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = uLabel(t);
+      const x = document.createElement('a'); x.href = '#'; x.textContent = '×';
+      x.onclick = (e) => { e.preventDefault(); uTickers.splice(i, 1); uSync(); };
+      chip.appendChild(x); box.appendChild(chip);
+    });
+    document.getElementById('u-count').textContent = `(${uTickers.length})`;
+    document.getElementById('u-hidden').value = uTickers.join(',');
+  }
+  function uAdd(code) { if (code && !uTickers.includes(code)) uTickers.push(code); uSync(); }
+  function uClear() { uTickers = []; uSync(); }
+  async function uAddIndex(name, btn) {
+    const status = document.getElementById('u-index-status');
+    const btns = btn.parentElement.querySelectorAll('button');
+    btns.forEach(b => b.disabled = true);
+    status.innerHTML = '<span class="spinner"></span>' + name + ' 구성종목 불러오는 중…';
+    try {
+      const r = await fetch('/universe/index/' + encodeURIComponent(name)); const d = await r.json();
+      if (d.error) { alert(d.error); status.textContent = ''; return; }
+      let added = 0;
+      d.tickers.forEach(t => { if (!uTickers.includes(t)) { uTickers.push(t); added++; } });
+      uSync();
+      status.textContent = `${name} ${d.tickers.length}종목 추가 (신규 ${added})`;
+    } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
+    finally { btns.forEach(b => b.disabled = false); }
+  }
+  const uIn = document.getElementById('u-search');
+  const uRes = document.getElementById('u-results');
+  uIn.addEventListener('input', () => {
+    const q = uIn.value.trim().toLowerCase(); uRes.innerHTML = '';
+    if (!q) { uRes.hidden = true; return; }
+    let n = 0;
+    for (const code in U_NAMES) {
+      if (code.includes(q) || U_NAMES[code].toLowerCase().includes(q)) {
+        const d = document.createElement('div'); d.textContent = U_NAMES[code];
+        const s = document.createElement('small'); s.textContent = code; d.appendChild(s);
+        d.onclick = () => { uAdd(code); uIn.value = ''; uRes.hidden = true; };
+        uRes.appendChild(d); if (++n >= 30) break;
+      }
+    }
+    uRes.hidden = (n === 0);
+  });
+  function uAddTyped() {
+    const v = uIn.value.trim(); if (!v) return;
+    if (/^\d{6}$/.test(v)) { uAdd(v); }
+    else { const q = v.toLowerCase(); for (const c in U_NAMES) { if (U_NAMES[c].toLowerCase().includes(q)) { uAdd(c); break; } } }
+    uIn.value = ''; uRes.hidden = true;
+  }
+  document.addEventListener('click', (e) => { if (!uRes.contains(e.target) && e.target !== uIn) uRes.hidden = true; });
+  uSync();
+</script>
 {% endblock %}

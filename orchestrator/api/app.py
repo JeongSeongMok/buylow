@@ -62,7 +62,7 @@ def _default_get_broker():
 
 def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
                jobs: JobManager | None = None, trade_store: TradeStore | None = None,
-               get_broker=None, broker_cache=None) -> FastAPI:
+               get_broker=None, broker_cache=None, live_manager=None) -> FastAPI:
     # 활성 증권사 기준 잔고·당일 체결을 백그라운드로 주기 갱신해 메모리 캐시(매매 탭 즉시 표시).
     _get_broker = get_broker or _default_get_broker
     if broker_cache is None:
@@ -120,6 +120,11 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
         return record
 
+    # 라이브 자동매매 프로세스 매니저(매매 탭 토글로 LEAN 라이브 start/stop, 킬 스위치)
+    if live_manager is None:
+        from ..live_runner import LiveProcessManager
+        live_manager = LiveProcessManager(state["jobs"])
+
     # 브라우저 대시보드(HTML) 라우트를 같은 앱에 얹는다
     register_dashboard(
         app,
@@ -130,6 +135,7 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
         trade_store=state["trade_store"],
         get_broker=_get_broker,  # 테스트는 가짜 브로커 주입; 없으면 기본 KIS 브로커
         broker_cache=broker_cache,
+        live_manager=live_manager,
     )
 
     return app

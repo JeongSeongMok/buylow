@@ -258,9 +258,10 @@ def register_dashboard(
     trade_store: Any = None,
     get_broker: Callable[[], tuple] | None = None,
     broker_cache: Any = None,
+    live_manager: Any = None,
 ) -> None:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-    # 매매 탭 의존성 — 주입 안 되면 기본(SQLite TradeStore + KIS 조회 브로커 + 메모리 캐시).
+    # 매매 탭 의존성 — 주입 안 되면 기본(SQLite TradeStore + KIS 조회 브로커 + 메모리 캐시 + 라이브 매니저).
     if trade_store is None:
         from ..persistence import TradeStore
         trade_store = TradeStore()
@@ -269,6 +270,9 @@ def register_dashboard(
     if broker_cache is None:
         from ..broker_cache import BrokerCache
         broker_cache = BrokerCache(get_broker)
+    if live_manager is None:
+        from ..live_runner import LiveProcessManager
+        live_manager = LiveProcessManager(jobs)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     def submit_backtest(name: str, req: RunRequest):
@@ -617,13 +621,16 @@ def register_dashboard(
         sel_date = request.query_params.get("date") or _seoul_today()
         prev_date, next_date = _date_nav(sel_date)
 
-        # 자동매매 실행 상태 라벨(E와 결합): 꺼짐 / 장중 실행 / 장마감 대기.
-        if not live["enabled"]:
-            run_state = "off"
-        elif market and market.get("open"):
+        # 라이브 자동매매: 대상종목(유니버스) + 전략 저장여부 + 실제 프로세스 실행여부.
+        from etl.names import load_names
+        running = live_manager.is_running()
+        # 실행 상태 라벨: 실제 프로세스가 돌면 running, 토글만 켜졌으면 idle, 아니면 off.
+        if running:
             run_state = "running"
+        elif live["enabled"]:
+            run_state = "idle"
         else:
-            run_state = "idle"  # 켜져 있으나 장마감/휴장 → 대기
+            run_state = "off"
 
         return templates.TemplateResponse(request, "trade.html", {
             "live": live, "account": account, "market": market,
@@ -631,10 +638,24 @@ def register_dashboard(
             "loading": True,  # B/C는 '불러오는 중' 자리표시 → hx로 채움
             "balance": None, "trades": [], "sel_date": sel_date,
             "prev_date": prev_date, "next_date": next_date, "daily_pnl": 0, "has_pnl": False,
-            "run_state": run_state, "format_won": format_won,
+            "run_state": run_state, "running": running,
+            # 라이브 유니버스 선택 UI(백테스트 패턴 재사용)
+            "live_universe": config.get_live_universe(),
+            "indices": config.all_indices(),
+            "names": load_names(config.get_data_folder()),
+            "has_strategy": config.get_strategy() is not None,
+            "format_won": format_won,
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })
+
+    @app.post("/trade/universe")
+    async def trade_universe_save(request: Request):
+        # 라이브 자동매매 대상종목 저장(매매 탭). 백테스트와 동일한 칩(csv) 형식.
+        form = await request.form()
+        tickers = [t.strip() for t in (form.get("universe") or "").split(",") if t.strip()]
+        config.save_live_universe(tickers)
+        return RedirectResponse(url="/trade?saved=1", status_code=303)
 
     @app.get("/trade/balance", response_class=HTMLResponse)
     def trade_balance(request: Request):
@@ -653,16 +674,49 @@ def register_dashboard(
 
     @app.post("/trade/toggle")
     async def trade_toggle(request: Request):
-        # 자동매매 on/off. 켤 때 실전(real)은 무장 가드를 통과해야 한다(미무장이면 거부).
+        # 자동매매 on/off → LEAN 라이브 프로세스 start/stop(킬 스위치).
         form = await request.form()
         want_on = str(form.get("enabled", "")).lower() in ("1", "true", "on", "yes")
-        if want_on:
-            cfg = config.get_live_config()
-            if cfg["env"] == "real" and not cfg["armed"]:
-                return RedirectResponse(
-                    url="/trade?error=실전(real)은 무장 후에만 켤 수 있습니다(아래 무장 설정).",
-                    status_code=303)
-        config.set_live_enabled(want_on)
+
+        if not want_on:  # 끄기 → 라이브 프로세스 종료
+            live_manager.stop()
+            config.set_live_enabled(False)
+            return RedirectResponse(url="/trade?saved=1", status_code=303)
+
+        # 켜기 — 안전 가드(무장) + 전략·유니버스·어댑터 준비 확인.
+        import json as _json
+        config.set_live_enabled(True)  # arming_ok가 enabled를 보므로 먼저 설정
+        ok, why = config.live_arming_ok()
+        strategy = config.get_strategy()
+        universe = config.get_live_universe()
+        from ..lean.environment import LAUNCHER_OUT
+        adapter_ok = (LAUNCHER_OUT / "MyTrading.Kis.dll").exists()
+
+        def _fail(msg):
+            config.set_live_enabled(False)
+            return RedirectResponse(url=f"/trade?error={msg}", status_code=303)
+
+        if not ok:
+            return _fail(why)
+        if strategy is None:
+            return _fail("전략을 먼저 저장하세요(전략 설정 탭).")
+        if not universe:
+            return _fail("대상종목(유니버스)을 먼저 선택하세요.")
+        if not adapter_ok:
+            return _fail("KIS 어댑터가 없습니다 — 터미널에서 scripts/build-adapter.sh 로 먼저 빌드하세요.")
+
+        # 저장된 전략 + 라이브 유니버스로 라이브 spec(백테스트의 start/end/cash는 없음 — 라이브는 무한·계좌잔액).
+        spec = {**strategy, "universe": universe, "data_folder": config.get_data_folder()}
+        req = RunRequest(
+            strategy_path="strategies/RuleStrategy.py",
+            data_folder=config.get_data_folder(),
+            algorithm_type="RuleStrategy",
+            parameters={"rule_spec": _json.dumps(spec)},
+        )
+        try:
+            live_manager.start(get_runner(), req)
+        except Exception as e:
+            return _fail(f"라이브 시작 실패: {type(e).__name__} {e}")
         return RedirectResponse(url="/trade?saved=1", status_code=303)
 
     @app.post("/trade/arm")

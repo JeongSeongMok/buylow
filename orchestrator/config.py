@@ -237,6 +237,25 @@ def save_live_config(values: dict) -> None:
     _write_local(data)
 
 
+def get_live_universe() -> list[str]:
+    """라이브 자동매매 대상종목(코드 리스트). 매매 탭에서 선택해 저장. 해상도는 전략 spec을 따른다."""
+    lc = _load_local().get("live") or {}
+    uni = lc.get("universe") or []
+    return [str(t).strip() for t in uni if str(t).strip()]
+
+
+def save_live_universe(tickers: list[str]) -> None:
+    """라이브 대상종목 저장(중복 제거, 순서 보존)."""
+    seen, uniq = set(), []
+    for t in tickers:
+        t = str(t).strip()
+        if t and t not in seen:
+            seen.add(t); uniq.append(t)
+    data = _load_local()
+    data.setdefault("live", {})["universe"] = uniq
+    _write_local(data)
+
+
 def set_live_enabled(enabled: bool) -> None:
     save_live_config({"enabled": bool(enabled)})
 

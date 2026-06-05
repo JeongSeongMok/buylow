@@ -135,9 +135,10 @@ DOTNET_ROOT=$HOME/.dotnet dotnet test adapter/MyTrading.Kis.Tests
 - **체결통보 HTS ID 미설정 시** 실시간 체결확인 불가(주문은 Submitted까지). 체결은 잔고로만 반영.
 - **수수료**는 OrderEvent에 0으로 보고하고 잔고로 정산 — 정밀 체결수수료 반영은 후속.
 - **킬 스위치/프로세스 감독**(장시간 라이브 프로세스 모니터·재시작)은 JobManager 확장으로 후속.
-- **매매 탭 대시보드**(`/trade`)는 구현됨 — 계좌(A)/잔고(B)/장상태(E)는 KIS 실데이터, 매매내역(C)은
-  자체 거래로그(`TradeStore`), 자동매매 on·off + 무장/환경/한도(D)는 제어 표면. **단, 토글은 현재 의도·무장
-  상태를 저장하고 장상태로 실행여부를 표시할 뿐**, 토글에서 라이브 LEAN 프로세스를 직접 spawn/kill 하는
-  감독(킬 스위치) + 라이브 유니버스 선택은 후속이다. 지금 실주문을 돌리려면 `run_live`를 직접 사용한다(위 절차).
+- **매매 탭 자동매매 가동(구현됨)**: 매매 탭에서 **대상종목(라이브 유니버스)**을 인덱스·그룹·검색으로 골라
+  저장하고, **자동매매 토글 ON**(`/trade/toggle`)이 가드(무장·전략·유니버스·어댑터 DLL) 통과 시
+  `LiveProcessManager.start`(`orchestrator/live_runner.py`)로 LEAN 라이브 프로세스를 spawn,
+  **OFF**면 `stop()`으로 종료(킬 스위치). `run_live(proc_sink=...)`가 Popen 핸들을 매니저에 넘긴다.
+  해상도는 저장 전략의 resolution(분봉=1분봉마다). 남은 것: 라이브 프로세스 헬스/재시작 감독, 실전 무장 UI.
 - **Toss**는 동일 `IBrokerage` 형태로 추가; 대시보드엔 KIS∩Toss 교집합 기능만 노출.
 - ⛔ 실전(real) 실주문은 **실계좌 검증 전까지 무장하지 말 것**.

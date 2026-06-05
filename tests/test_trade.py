@@ -150,12 +150,31 @@ def isolated_config(tmp_path, monkeypatch):
     return config
 
 
+class FakeLiveManager:
+    def __init__(self, running=False):
+        self._running = running
+        self.started = self.stopped = False
+    def is_running(self):
+        return self._running
+    def start(self, runner, req):
+        self.started = True; self._running = True; return "live-job"
+    def stop(self):
+        self.stopped = True; self._running = False; return True
+
+
 @pytest.fixture
-def client(tmp_path, isolated_config):
+def live_manager():
+    return FakeLiveManager()
+
+
+@pytest.fixture
+def client(tmp_path, isolated_config, live_manager):
     app = create_app(runner=FakeRunner(), store=RunStore(tmp_path / "ui.db"),
                      trade_store=TradeStore(tmp_path / "trade.db"),
-                     get_broker=lambda: (FakeBroker(), None))
-    return TestClient(app)
+                     get_broker=lambda: (FakeBroker(), None), live_manager=live_manager)
+    c = TestClient(app)
+    c.live_manager = live_manager  # 테스트에서 start/stop 호출 확인
+    return c
 
 
 def test_trade_page_renders(client):
@@ -170,9 +189,9 @@ def test_trade_page_renders(client):
 
 
 def test_trade_page_balance_is_lazy(client):
-    # 진입 시 잔고 데이터(삼성전자)는 서버 렌더에 없고, /trade/balance 비동기로만 온다.
-    assert "삼성전자" not in client.get("/trade").text
-    assert "삼성전자" in client.get("/trade/balance").text
+    # 진입 시 잔고 데이터는 서버 렌더에 없고(예수금/보유표), /trade/balance 비동기로만 온다.
+    assert "예수금" not in client.get("/trade").text
+    assert "예수금" in client.get("/trade/balance").text
 
 
 def test_trade_page_hides_badge_for_real(tmp_path, isolated_config):
@@ -242,17 +261,63 @@ def test_trade_page_graceful_when_broker_missing(tmp_path, isolated_config):
     assert r.status_code == 200 and "KIS 키를 입력하세요" in r.text  # 페이지는 안 깨짐
 
 
+def _save_demo_strategy(cfg):
+    cfg.save_strategy({"signals": {}, "rule": "EMA", "groups": [["EMA"]],
+                       "period_days": 3, "resolution": "daily", "execution": {}})
+
+
 def test_toggle_blocks_real_when_unarmed(client, isolated_config):
-    isolated_config.save_live_config({"env": "real", "armed": False})
+    # 실전(kis) 미무장 → 켜기 거부(무장 가드), 프로세스 미시작.
+    isolated_config.set_broker("kis")
     r = client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
     assert r.status_code == 303 and "error" in r.headers["location"]
-    assert isolated_config.get_live_config()["enabled"] is False  # 켜지지 않음
+    assert isolated_config.get_live_config()["enabled"] is False
+    assert client.live_manager.started is False
 
 
-def test_toggle_demo_allowed(client, isolated_config):
-    isolated_config.set_broker("kis_demo")  # 모의투자 증권사 → 무장 없이 켜기 허용
+def test_toggle_on_requires_strategy(client, isolated_config):
+    isolated_config.set_broker("kis_demo")  # 모의 → 무장 불필요
+    r = client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
+    assert "error" in r.headers["location"]  # 전략 미저장 → 거부
+    assert client.live_manager.started is False
+
+
+def test_toggle_on_requires_universe(client, isolated_config):
+    isolated_config.set_broker("kis_demo")
+    _save_demo_strategy(isolated_config)
+    r = client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
+    assert "error" in r.headers["location"]  # 유니버스 미선택 → 거부
+    assert client.live_manager.started is False
+
+
+def test_toggle_on_starts_when_ready(client, isolated_config):
+    # 모의 + 전략 + 유니버스 준비 → 어댑터 DLL이 있으면 start, 없으면 어댑터 안내(둘 다 가드 정상).
+    isolated_config.set_broker("kis_demo")
+    _save_demo_strategy(isolated_config)
+    isolated_config.save_live_universe(["005930"])
     client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
-    assert isolated_config.get_live_config()["enabled"] is True
+    from orchestrator.lean.environment import LAUNCHER_OUT
+    if (LAUNCHER_OUT / "MyTrading.Kis.dll").exists():
+        assert client.live_manager.started and isolated_config.get_live_config()["enabled"]
+    else:
+        assert client.live_manager.started is False  # 어댑터 없으면 차단
+
+
+def test_toggle_off_stops(isolated_config, tmp_path):
+    # 끄기 → 라이브 프로세스 stop 호출 + enabled False.
+    lm = FakeLiveManager(running=True)
+    app = create_app(runner=FakeRunner(), store=RunStore(tmp_path / "u.db"),
+                     trade_store=TradeStore(tmp_path / "t.db"),
+                     get_broker=lambda: (FakeBroker(), None), live_manager=lm)
+    isolated_config.set_live_enabled(True)
+    TestClient(app).post("/trade/toggle", data={"enabled": "0"}, follow_redirects=False)
+    assert lm.stopped is True
+    assert isolated_config.get_live_config()["enabled"] is False
+
+
+def test_trade_universe_save(client, isolated_config):
+    client.post("/trade/universe", data={"universe": "005930,000660"}, follow_redirects=False)
+    assert isolated_config.get_live_universe() == ["005930", "000660"]
 
 
 def test_settings_shows_active_broker_slots(client, isolated_config):

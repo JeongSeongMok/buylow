@@ -106,11 +106,16 @@ Every Claude session working in this repo follows these:
   즉시 반환(KIS 왕복 없음). 캐시 미스(첫 진입·과거 날짜)는 동기 1회로 메우고, 증권사/키 변경 시 `invalidate()`.
   화면: 진입 시 A/E만 서버 렌더 + B/C는 `loading` 자리표시 → HTMX `hx-trigger="load, every 10s"`로 캐시 표시.
   날짜 **화살표/선택은 `#trade-trades`만 부분 교체**(전체 리로드/브라우저 탭 로딩 없음). 헤더에 캐시 기준시각 표시.
-- **D 제어 표면** — `/trade/toggle`(켤 때 실전은 무장 가드 통과 필수), `/trade/arm`(무장/한도/HTS ID
-  저장). 섹션별 try/except로 브로커 실패가 페이지를 깨지 않음. 테스트: `tests/test_trade.py`, `test_live.py`.
+- **D 자동매매 가동(LEAN 라이브)** — 매매 탭에서 **대상종목(라이브 유니버스)**을 인덱스·그룹·검색 칩으로
+  골라 `POST /trade/universe`(`config.save_live_universe`)로 저장. 토글 ON(`/trade/toggle`)이 가드
+  (무장·전략저장·유니버스·어댑터 DLL) 통과 시 저장 전략+유니버스로 live-kis spec을 만들어
+  `LiveProcessManager.start`(`orchestrator/live_runner.py`)로 **LEAN 라이브 프로세스 spawn**, OFF면
+  `stop()`으로 종료(킬 스위치). `run_live(proc_sink=...)`가 Popen 핸들을 매니저에 넘겨 terminate/kill.
+  해상도는 저장 전략의 resolution(분봉=1분봉마다, 일봉=다음 거래일). `RuleStrategy`는 라이브 시 start/end/cash
+  미설정(현재시각·계좌잔액). v1 계좌당 1전략. ⚠️ 실주문 e2e는 모의(demo)+어댑터 빌드 수동 검증(LIVE_KIS.md).
 
 **Not done / gated:**
-- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의투자(demo)** first (procedure in LIVE_KIS.md). Real(real) must stay unarmed until validated. Remaining: live-process supervision/kill-switch (JobManager 확장) — **D 토글은 현재 의도·무장 상태를 저장하고 장상태로 실행여부를 표시**하며, 토글에서 라이브 LEAN 프로세스를 직접 spawn/kill + 라이브 유니버스 선택은 후속. open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존.
+- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의(demo)** first (어댑터 빌드 + 절차 LIVE_KIS.md). Real(real)은 검증 전까지 무장 금지. **토글→LEAN 라이브 spawn/kill·라이브 유니버스는 구현됨**(위 D). 남은 것: 라이브 프로세스 헬스/재시작 감독, open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존, 실전 무장 UI.
 - ⛔ **Toss live** — same `IBrokerage` shape; gated on Toss API (not open).
 - ⚠️ **KIS minute history is bounded** (~1y kept, 120 bars/call) → minute backtest is universe-scoped + recent, not whole-market 5y.
 - Volatility-breakout (intraday signals), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.

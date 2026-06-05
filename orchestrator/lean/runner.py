@@ -268,12 +268,13 @@ class LeanRunner:
         )
 
 
-    def run_live(self, request: RunRequest, on_start=None) -> RunResult:
+    def run_live(self, request: RunRequest, on_start=None, proc_sink=None) -> RunResult:
         """라이브(실주문) 실행 — 백테스트와 같은 전략 .py를 LEAN 라이브 모드로 spawn.
 
         ⚠️ 실주문 경로. config.live_arming_ok로 안전 가드를 먼저 확인하고, KIS 어댑터 DLL이 런처
         출력폴더에 있는지(scripts/build-adapter.sh로 빌드) 검증한다. 라이브 프로세스는 장시간 살아
-        있으며(킬 스위치로 종료), 종료될 때까지 로그를 스트리밍한다.
+        있으며 종료될 때까지 로그를 스트리밍한다. proc_sink(proc)가 주어지면 Popen 직후 호출해
+        프로세스 핸들을 넘긴다 — 매니저가 이를 보관했다 킬 스위치로 terminate/kill 할 수 있다.
         """
         from .. import config
         ok, why = config.live_arming_ok()
@@ -319,6 +320,8 @@ class LeanRunner:
                 cwd=str(out_dir), env=proc_env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
             )
+            if proc_sink:
+                proc_sink(proc)  # 매니저에 핸들 전달(킬 스위치용)
             assert proc.stdout is not None
             for line in proc.stdout:
                 log.write(line)

@@ -100,10 +100,14 @@ class RuleAlpha(AlphaModel):
 class RuleStrategy(KrxFrameworkAlgorithm):
     def initialize(self):
         spec = json.loads(self.get_parameter("rule_spec"))
-        s, e = spec["start"].split("-"), spec["end"].split("-")
-        self.set_start_date(int(s[0]), int(s[1]), int(s[2]))
-        self.set_end_date(int(e[0]), int(e[1]), int(e[2]))
-        self.set_cash(int(spec.get("cash", 10_000_000)))
+        # 백테스트는 start/end/cash를 지정하지만, 라이브는 현재 시각부터·계좌 잔액 기준이라 없다.
+        # 따라서 값이 있을 때만 설정한다(라이브에선 set_start/end_date·set_cash를 호출하지 않음).
+        if spec.get("start") and spec.get("end"):
+            s, e = spec["start"].split("-"), spec["end"].split("-")
+            self.set_start_date(int(s[0]), int(s[1]), int(s[2]))
+            self.set_end_date(int(e[0]), int(e[1]), int(e[2]))
+        if spec.get("cash"):
+            self.set_cash(int(spec["cash"]))
 
         # 해상도: 'minute'면 일봉 선별 + 장중(분봉) 타이밍 실행, 그 외(기본)는 일봉/다음시가 체결.
         # 신호 지표는 Resolution.DAILY로 생성되므로, 분봉 구독에서도 선별은 일봉 기준 유지된다.
