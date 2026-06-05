@@ -376,12 +376,17 @@ def register_dashboard(
 
     @app.post("/universe/custom")
     async def universe_custom_create(request: Request):
-        # 커스텀 인덱스(종목 묶음) 생성/덮어쓰기. '그룹' 탭에서 호출.
+        # 커스텀 인덱스 생성/수정. '그룹' 탭에서 호출. original_key가 있고 이름이 바뀌었으면 rename
+        # (옛 키 삭제 후 새 이름으로 저장). 같은 이름이면 단순 덮어쓰기.
         form = await request.form()
+        name = (form.get("name") or "").strip()
+        original = (form.get("original_key") or "").strip()
         try:
-            config.save_custom_index(form.get("name"), form.get("universe") or "")
+            config.save_custom_index(name, form.get("universe") or "")
         except ValueError as e:
             return RedirectResponse(url=f"/groups?error={e}", status_code=303)
+        if original and original != name:
+            config.delete_custom_index(original)  # 이름 변경 → 옛 그룹 제거
         return RedirectResponse(url="/groups?saved=1", status_code=303)
 
     @app.post("/universe/custom/delete")

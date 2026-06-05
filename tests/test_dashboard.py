@@ -98,6 +98,19 @@ def test_custom_index_end_to_end(client, isolated_config):
     assert "내그룹" not in isolated_config.get_custom_indices()
 
 
+def test_custom_index_edit_and_rename(client, isolated_config):
+    client.post("/universe/custom", data={"name": "A", "universe": "005930"}, follow_redirects=False)
+    # 종목 수정(같은 이름 → 덮어쓰기)
+    client.post("/universe/custom", data={"name": "A", "universe": "005930,000660",
+                                          "original_key": "A"}, follow_redirects=False)
+    assert isolated_config.get_custom_indices()["A"]["tickers"] == ["005930", "000660"]
+    # 이름 변경(rename A→B: 옛 키 삭제)
+    client.post("/universe/custom", data={"name": "B", "universe": "005930,000660",
+                                          "original_key": "A"}, follow_redirects=False)
+    ci = isolated_config.get_custom_indices()
+    assert "B" in ci and "A" not in ci
+
+
 def test_index_selectors_rendered_from_ssot(client):
     # 인덱스 선택은 SSOT(etl.universe.INDEXES)에서 동적 렌더된다(데이터 탭: 분봉적재 버튼 + 적재현황 필터).
     # (백테스트 종목선택 버튼도 동일 패턴이나, 데이터 0건이면 종목 UI를 숨기므로 데이터 탭으로 검증.)

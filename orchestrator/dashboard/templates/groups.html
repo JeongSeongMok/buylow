@@ -7,12 +7,15 @@
   <div class="actionbar">
     <h2>내 인덱스 <small>(커스텀 종목 그룹)</small></h2>
     <span class="grow"></span>
+    <button type="button" class="ghost" onclick="cResetForm()">새 그룹</button>
     <button type="submit" form="custom-form">그룹 저장</button>
   </div>
   <p class="meta">원하는 종목을 묶어 이름을 붙이면, <b>백테스트·분봉적재·적재현황</b>에서 KOSPI200처럼
-    <b>★이름</b>으로 한 번에 골라 쓸 수 있습니다(같은 이름으로 저장하면 덮어쓰기).</p>
+    <b>★이름</b>으로 한 번에 골라 쓸 수 있습니다. 저장된 그룹의 <b>수정</b>을 누르면 여기로 불러와 편집합니다.</p>
   <form method="post" action="/universe/custom" id="custom-form">
-    <label>인덱스 이름 <input type="text" name="name" placeholder="예: 반도체3종" required></label>
+    <input type="hidden" name="original_key" id="c-original-key" value="">
+    <label>인덱스 이름 <input type="text" name="name" id="c-name" placeholder="예: 반도체3종" required></label>
+    <p class="notice" id="c-edit-banner" hidden></p>
     <div id="c-universe-box">
       <label>종목 추가</label>
       <div class="add-row search-wrap">
@@ -37,10 +40,13 @@
       <tr>
         <td>★ {{ v.label }}</td>
         <td>{{ v.tickers|length }}종목</td>
-        <td><form method="post" action="/universe/custom/delete" style="margin:0"
-              onsubmit="return confirm('\'{{ v.label }}\' 그룹을 삭제할까요?')">
+        <td style="white-space:nowrap">
+          <button type="button" class="ghost" onclick="cEdit('{{ key }}')">수정</button>
+          <form method="post" action="/universe/custom/delete" style="display:inline; margin:0"
+                onsubmit="return confirm('\'{{ v.label }}\' 그룹을 삭제할까요?')">
             <input type="hidden" name="key" value="{{ key }}">
-            <button type="submit" class="ghost">삭제</button></form></td>
+            <button type="submit" class="ghost">삭제</button></form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -51,7 +57,8 @@
 </section>
 
 <script>
-  const C_NAMES = {{ names|tojson }};   // 코드→이름(검색·칩 표시)
+  const C_NAMES = {{ names|tojson }};        // 코드→이름(검색·칩 표시)
+  const C_INDICES = {{ custom_indices|tojson }};  // 저장된 그룹(수정 시 폼에 로드)
   let cTickers = [];
   function cLabel(c) { return C_NAMES[c] ? (C_NAMES[c] + ' ' + c) : c; }
   function cSync() {
@@ -90,6 +97,26 @@
     cIn.value = ''; cRes.hidden = true;
   }
   document.addEventListener('click', (e) => { if (!cRes.contains(e.target) && e.target !== cIn) cRes.hidden = true; });
+
+  // 저장된 그룹 '수정' — 이름·종목을 폼에 불러온다(저장 시 덮어쓰기; 이름 바꾸면 rename).
+  function cEdit(key) {
+    const g = C_INDICES[key]; if (!g) return;
+    document.getElementById('c-original-key').value = key;
+    document.getElementById('c-name').value = g.label || key;
+    cTickers = (g.tickers || []).slice();
+    cSync();
+    const b = document.getElementById('c-edit-banner');
+    b.hidden = false;
+    b.innerHTML = '✎ <b>' + (g.label || key) + '</b> 수정 중 — 저장하면 덮어씁니다(이름을 바꾸면 이름도 변경).';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('c-name').focus();
+  }
+  function cResetForm() {
+    document.getElementById('c-original-key').value = '';
+    document.getElementById('c-name').value = '';
+    cTickers = []; cSync();
+    document.getElementById('c-edit-banner').hidden = true;
+  }
   cSync();
 </script>
 {% endblock %}
