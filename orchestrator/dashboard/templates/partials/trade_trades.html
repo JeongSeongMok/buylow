@@ -1,0 +1,40 @@
+{# C. 매매 내역 — 선택 날짜 기준, 10초마다 HTMX로 갱신(/trade/trades?date=). #}
+<section class="card" id="trade-trades"
+         hx-get="/trade/trades?date={{ sel_date }}" hx-trigger="every 10s" hx-swap="outerHTML">
+  <h2>매매 내역 <small class="meta">· 10초마다 갱신</small></h2>
+  <div class="dates">
+    {% if prev_date %}<a class="chip" href="/trade?date={{ prev_date }}">◀ {{ prev_date }}</a>
+    {% else %}<span class="chip" style="opacity:.4">◀</span>{% endif %}
+    <form method="get" action="/trade" style="margin:0; display:inline-flex">
+      <input type="date" name="date" value="{{ sel_date }}" onchange="this.form.submit()">
+    </form>
+    {% if next_date %}<a class="chip" href="/trade?date={{ next_date }}">{{ next_date }} ▶</a>
+    {% else %}<span class="chip" style="opacity:.4">▶</span>{% endif %}
+  </div>
+  <p class="meta">실현손익 합:
+    <span class="{{ 'pos' if daily_pnl >= 0 else 'neg' }}">
+      {{ '+' if daily_pnl >= 0 else '' }}{{ format_won(daily_pnl) }}</span></p>
+  <div class="scrolly">
+    <table class="runs">
+      <thead><tr><th>시각</th><th>종목</th><th>구분</th><th>수량</th><th>단가</th><th>금액</th><th>손익</th><th>사유</th></tr></thead>
+      <tbody>
+        {% for t in trades %}
+        <tr>
+          <td>{{ t.ts[11:16] }}</td>
+          <td>{{ t.name or t.ticker }}</td>
+          <td class="{{ 'pos' if t.side == 'BUY' else 'neg' }}">{{ '매수' if t.side == 'BUY' else '매도' }}</td>
+          <td>{{ "{:,}".format(t.qty) }}</td>
+          <td>{{ "{:,.0f}".format(t.price) }}</td>
+          <td>{{ format_won(t.amount) }}</td>
+          <td class="{{ 'pos' if (t.realized_pnl or 0) >= 0 else 'neg' }}">
+            {% if t.realized_pnl is not none %}{{ '+' if t.realized_pnl >= 0 else '' }}{{ format_won(t.realized_pnl) }}{% else %}-{% endif %}</td>
+          <td><small class="meta">{{ t.reason or '-' }}</small></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">이 날짜의 매매 내역이 없습니다</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="meta">※ 매매 내역은 buylow가 직접 낸 주문·체결 기록입니다(증권사 종료주문 조회는 토스 미지원이라 자체 기록 사용).</p>
+</section>

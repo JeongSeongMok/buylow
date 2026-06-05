@@ -177,6 +177,20 @@ def test_trade_page_hides_badge_for_real(tmp_path, isolated_config):
     assert r.status_code == 200 and "모의투자" not in r.text
 
 
+def test_trade_balance_partial_polls(client):
+    # 잔고 부분 템플릿: 데이터 + 10초 폴링 속성.
+    r = client.get("/trade/balance")
+    assert r.status_code == 200
+    assert "삼성전자" in r.text
+    assert 'hx-get="/trade/balance"' in r.text and 'hx-trigger="every 10s"' in r.text
+
+
+def test_trade_trades_partial_polls(client):
+    r = client.get("/trade/trades?date=2026-06-05")
+    assert r.status_code == 200
+    assert 'hx-get="/trade/trades?date=2026-06-05"' in r.text and 'every 10s' in r.text
+
+
 def test_trade_page_graceful_when_broker_missing(tmp_path, isolated_config):
     app = create_app(runner=FakeRunner(), store=RunStore(tmp_path / "ui2.db"),
                      trade_store=TradeStore(tmp_path / "trade2.db"),

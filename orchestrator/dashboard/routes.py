@@ -615,6 +615,31 @@ def register_dashboard(
             "error": request.query_params.get("error"),
         })
 
+    @app.get("/trade/balance", response_class=HTMLResponse)
+    def trade_balance(request: Request):
+        # 잔고/보유종목 부분 갱신(매매 탭 10초 폴링). 브로커 실패 시에도 섹션은 유지.
+        broker, broker_err = get_broker()
+        balance, errors = None, {"balance": None}
+        if broker is None:
+            errors["balance"] = broker_err
+        else:
+            try:
+                balance = broker.balance()
+            except Exception as e:
+                errors["balance"] = f"{type(e).__name__}: {e}"
+        return templates.TemplateResponse(request, "partials/trade_balance.html", {
+            "balance": balance, "errors": errors, "format_won": format_won})
+
+    @app.get("/trade/trades", response_class=HTMLResponse)
+    def trade_trades(request: Request):
+        # 매매내역 부분 갱신(선택 날짜 기준, 10초 폴링).
+        sel_date = request.query_params.get("date") or _seoul_today()
+        return templates.TemplateResponse(request, "partials/trade_trades.html", {
+            "trades": trade_store.list_trades(sel_date), "sel_date": sel_date,
+            "prev_date": trade_store.adjacent_date(sel_date, -1),
+            "next_date": trade_store.adjacent_date(sel_date, +1),
+            "daily_pnl": trade_store.daily_pnl(sel_date), "format_won": format_won})
+
     @app.post("/trade/toggle")
     async def trade_toggle(request: Request):
         # 자동매매 on/off. 켤 때 실전(real)은 무장 가드를 통과해야 한다(미무장이면 거부).

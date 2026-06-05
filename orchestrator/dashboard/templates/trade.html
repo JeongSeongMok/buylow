@@ -55,84 +55,8 @@
 </section>
 
 <div class="cols2">
-  {# ── B. 예수금 + 보유종목 (1열) ── #}
-  <section class="card">
-    <h2>잔고</h2>
-    {% if balance %}
-    <table class="stats">
-      <tr><th>예수금</th><td>{{ format_won(balance.deposit) }}</td></tr>
-      <tr><th>매수가능(현금)</th><td>{{ format_won(balance.buying_power) }}</td></tr>
-      <tr><th>주식 평가금액</th><td>{{ format_won(balance.total_eval) }}</td></tr>
-      <tr><th>평가손익</th>
-        <td class="{{ 'pos' if balance.total_pnl >= 0 else 'neg' }}">
-          {{ '+' if balance.total_pnl >= 0 else '' }}{{ format_won(balance.total_pnl) }}
-          ({{ '%+.2f'|format(balance.total_pnl_pct) }}%)</td></tr>
-    </table>
-    <h3 class="subhead">보유 종목</h3>
-    <div class="scrolly">
-      <table class="runs">
-        <thead><tr><th>종목</th><th>수량</th><th>매수가</th><th>현재가</th><th>평가금액</th><th>손익</th></tr></thead>
-        <tbody>
-          {% for h in balance['items'] %}
-          <tr>
-            <td>{{ h.name or h.ticker }}<br><small class="meta">{{ h.ticker }}</small></td>
-            <td>{{ "{:,}".format(h.qty) }}</td>
-            <td>{{ "{:,}".format(h.avg_price) }}</td>
-            <td>{{ "{:,}".format(h.cur_price) }}</td>
-            <td>{{ format_won(h.eval_amount) }}</td>
-            <td class="{{ 'pos' if h.pnl >= 0 else 'neg' }}">
-              {{ '+' if h.pnl >= 0 else '' }}{{ format_won(h.pnl) }}<br>
-              <small>({{ '%+.2f'|format(h.pnl_pct) }}%)</small></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="6" class="empty">보유 종목 없음</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p class="meta">{{ errors.balance or '잔고를 불러올 수 없습니다.' }}</p>
-    {% endif %}
-  </section>
-
-  {# ── C. 매매 내역 (2열) — 날짜 선택 + 화살표 + 손익 ── #}
-  <section class="card">
-    <h2>매매 내역</h2>
-    <div class="dates">
-      {% if prev_date %}<a class="chip" href="/trade?date={{ prev_date }}">◀ {{ prev_date }}</a>
-      {% else %}<span class="chip" style="opacity:.4">◀</span>{% endif %}
-      <form method="get" action="/trade" style="margin:0; display:inline-flex">
-        <input type="date" name="date" value="{{ sel_date }}" onchange="this.form.submit()">
-      </form>
-      {% if next_date %}<a class="chip" href="/trade?date={{ next_date }}">{{ next_date }} ▶</a>
-      {% else %}<span class="chip" style="opacity:.4">▶</span>{% endif %}
-    </div>
-    <p class="meta">실현손익 합:
-      <span class="{{ 'pos' if daily_pnl >= 0 else 'neg' }}">
-        {{ '+' if daily_pnl >= 0 else '' }}{{ format_won(daily_pnl) }}</span></p>
-    <div class="scrolly">
-      <table class="runs">
-        <thead><tr><th>시각</th><th>종목</th><th>구분</th><th>수량</th><th>단가</th><th>금액</th><th>손익</th><th>사유</th></tr></thead>
-        <tbody>
-          {% for t in trades %}
-          <tr>
-            <td>{{ t.ts[11:16] }}</td>
-            <td>{{ t.name or t.ticker }}</td>
-            <td class="{{ 'pos' if t.side == 'BUY' else 'neg' }}">{{ '매수' if t.side == 'BUY' else '매도' }}</td>
-            <td>{{ "{:,}".format(t.qty) }}</td>
-            <td>{{ "{:,.0f}".format(t.price) }}</td>
-            <td>{{ format_won(t.amount) }}</td>
-            <td class="{{ 'pos' if (t.realized_pnl or 0) >= 0 else 'neg' }}">
-              {% if t.realized_pnl is not none %}{{ '+' if t.realized_pnl >= 0 else '' }}{{ format_won(t.realized_pnl) }}{% else %}-{% endif %}</td>
-            <td><small class="meta">{{ t.reason or '-' }}</small></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="8" class="empty">이 날짜의 매매 내역이 없습니다</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <p class="meta">※ 매매 내역은 buylow가 직접 낸 주문·체결 기록입니다(증권사 종료주문 조회는 토스 미지원이라 자체 기록 사용).</p>
-  </section>
+  {# B 잔고(1열) · C 매매내역(2열) — 각 부분 템플릿이 10초마다 HTMX로 자기 갱신 #}
+  {% include "partials/trade_balance.html" %}
+  {% include "partials/trade_trades.html" %}
 </div>
 {% endblock %}

@@ -1,0 +1,40 @@
+{# B. 예수금 + 보유종목 — 10초마다 HTMX로 자기 자신을 갱신(/trade/balance). #}
+<section class="card" id="trade-balance"
+         hx-get="/trade/balance" hx-trigger="every 10s" hx-swap="outerHTML">
+  <h2>잔고 <small class="meta">· 10초마다 갱신</small></h2>
+  {% if balance %}
+  <table class="stats">
+    <tr><th>예수금</th><td>{{ format_won(balance.deposit) }}</td></tr>
+    <tr><th>매수가능(현금)</th><td>{{ format_won(balance.buying_power) }}</td></tr>
+    <tr><th>주식 평가금액</th><td>{{ format_won(balance.total_eval) }}</td></tr>
+    <tr><th>평가손익</th>
+      <td class="{{ 'pos' if balance.total_pnl >= 0 else 'neg' }}">
+        {{ '+' if balance.total_pnl >= 0 else '' }}{{ format_won(balance.total_pnl) }}
+        ({{ '%+.2f'|format(balance.total_pnl_pct) }}%)</td></tr>
+  </table>
+  <h3 class="subhead">보유 종목</h3>
+  <div class="scrolly">
+    <table class="runs">
+      <thead><tr><th>종목</th><th>수량</th><th>매수가</th><th>현재가</th><th>평가금액</th><th>손익</th></tr></thead>
+      <tbody>
+        {% for h in balance['items'] %}
+        <tr>
+          <td>{{ h.name or h.ticker }}<br><small class="meta">{{ h.ticker }}</small></td>
+          <td>{{ "{:,}".format(h.qty) }}</td>
+          <td>{{ "{:,}".format(h.avg_price) }}</td>
+          <td>{{ "{:,}".format(h.cur_price) }}</td>
+          <td>{{ format_won(h.eval_amount) }}</td>
+          <td class="{{ 'pos' if h.pnl >= 0 else 'neg' }}">
+            {{ '+' if h.pnl >= 0 else '' }}{{ format_won(h.pnl) }}<br>
+            <small>({{ '%+.2f'|format(h.pnl_pct) }}%)</small></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">보유 종목 없음</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="meta">{{ errors.balance or '잔고를 불러올 수 없습니다.' }}</p>
+  {% endif %}
+</section>
