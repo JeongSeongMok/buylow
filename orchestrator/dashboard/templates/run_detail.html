@@ -1,6 +1,25 @@
 {% extends "base.html" %}
 {% block main_class %}wide{% endblock %}
 {% block content %}
+{% if diag %}
+<section class="card">
+  <h2>신호 진단 <small>(추정 · 일봉 종가 근사)</small></h2>
+  <p class="meta">{{ diag.start }} ~ {{ diag.end }} · {{ diag.tickers }}종목{% if diag.sampled %}
+    (전체 {{ diag.universe_total }}종목 중 표본){% endif %} · {{ diag.evals }}회 평가</p>
+  <p>매수신호 발생률 <b>{{ diag.buy_pct }}%</b>
+    {% if diag.blockers %} — 매수를 주로 막은 신호: <b class="neg">{{ diag.blockers|join(', ') }}</b>
+      <span class="meta">(UP 비율 낮음)</span>{% endif %}</p>
+  <table class="stats">
+    {% for label, pct in diag.up_pct.items() %}
+    <tr><th>{{ label }}</th>
+      <td>{{ pct }}% UP{% if label in diag.blockers %} <span class="neg">← 차단 가능</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="meta">분봉 백테스트는 장중 매분 평가하지만, 이 진단은 일봉 종가 기준 근사라 실제 체결과 다를 수
+    있습니다(경향 파악용). 매수가 적다면 UP 비율이 낮은 신호(차단 가능)를 완화하거나 유니버스를 넓혀 보세요.</p>
+</section>
+{% endif %}
+
 <div class="cols2 fit">
   <section class="card">
     <h2>백테스트 결과
@@ -57,23 +76,4 @@
     {% endif %}
   </section>
 </div>
-
-{% if diag %}
-<section class="card">
-  <h2>신호 진단 <small>(추정 · 일봉 종가 근사)</small></h2>
-  <p class="meta">{{ diag.start }} ~ {{ diag.end }} · {{ diag.tickers }}종목{% if diag.sampled %}
-    (전체 {{ diag.universe_total }}종목 중 표본){% endif %} · {{ diag.evals }}회 평가</p>
-  <p>매수신호 발생률 <b>{{ diag.buy_pct }}%</b>
-    {% if diag.blockers %} — 매수를 주로 막은 신호: <b class="neg">{{ diag.blockers|join(', ') }}</b>
-      <span class="meta">(UP 비율 낮음)</span>{% endif %}</p>
-  <table class="stats">
-    {% for label, pct in diag.up_pct.items() %}
-    <tr><th>{{ label }}</th>
-      <td>{{ pct }}% UP{% if label in diag.blockers %} <span class="neg">← 차단 가능</span>{% endif %}</td></tr>
-    {% endfor %}
-  </table>
-  <p class="meta">분봉 백테스트는 장중 매분 평가하지만, 이 진단은 일봉 종가 기준 근사라 실제 체결과 다를 수
-    있습니다(경향 파악용). 매수가 적다면 UP 비율이 낮은 신호(차단 가능)를 완화하거나 유니버스를 넓혀 보세요.</p>
-</section>
-{% endif %}
 {% endblock %}
