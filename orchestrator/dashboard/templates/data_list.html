@@ -46,8 +46,10 @@
       <div class="add-row">
         <button type="button" class="ghost" onclick="mAddAll(this)"
                 title="적재된 전 종목을 칩으로 추가">전체종목</button>
-        <button type="button" class="ghost" onclick="mAddIndex('KOSPI200', this)">KOSPI200</button>
-        <button type="button" class="ghost" onclick="mAddIndex('KOSDAQ150', this)">KOSDAQ150</button>
+        {# 인덱스 버튼은 SSOT(etl.universe.INDEXES)에서 동적 렌더 #}
+        {% for idx in indices %}
+        <button type="button" class="ghost" onclick="mAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+        {% endfor %}
         <span class="meta" id="m-index-status"></span>
       </div>
       <div class="add-row search-wrap">
@@ -139,13 +141,24 @@
 
 <section class="card">  {# 오른쪽: 적재 현황 #}
   <h2>적재 현황</h2>
-  <label>검색 <input type="text" id="data-search" placeholder="종목명 또는 코드" oninput="filterData()"></label>
+  <div class="add-row">
+    <label>인덱스
+      <select id="data-index-filter" onchange="setIndexFilter(this.value)">
+        <option value="">전체종목</option>
+        {% for idx in indices %}
+        <option value="{{ idx.key }}">{{ idx.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>검색 <input type="text" id="data-search" placeholder="종목명 또는 코드" oninput="filterData()"></label>
+    <span class="meta" id="data-index-status"></span>
+  </div>
   <div class="scrolly">
     <table class="runs" id="data-table">
       <thead><tr><th>종목</th><th>가격</th><th>수급</th><th>분봉</th><th></th></tr></thead>
       <tbody>
         {% for t in tickers %}
-        <tr data-q="{{ t.name|lower }} {{ t.ticker }}">
+        <tr data-q="{{ t.name|lower }} {{ t.ticker }}" data-code="{{ t.ticker }}">
           <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
           <td>{% if t.price %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
           <td>{% if t.flow %}<span class="ok">✓</span>{% else %}—{% endif %}</td>
@@ -161,11 +174,28 @@
 </section>
 </div>  {# /.cols2 #}
 <script>
+  // 적재현황 필터: 검색어(AND) + 인덱스 구성종목(AND). 인덱스 선택 시 구성종목을 조회해 집합으로 보관.
+  let dataIndexSet = null;  // null=전체종목, Set=해당 인덱스 구성종목(적재된 것만)
+  async function setIndexFilter(key) {
+    const st = document.getElementById('data-index-status');
+    if (!key) { dataIndexSet = null; st.textContent = ''; filterData(); return; }
+    st.innerHTML = '<span class="spinner"></span>' + key + ' 구성종목 불러오는 중…';
+    try {
+      const r = await fetch('/universe/index/' + key); const d = await r.json();
+      if (d.error) { alert(d.error); st.textContent = ''; return; }
+      dataIndexSet = new Set(d.tickers);
+      st.textContent = `${key} ${d.tickers.length}종목(적재됨)`;
+    } catch (e) { alert('인덱스 구성종목 조회 실패'); st.textContent = ''; return; }
+    filterData();
+  }
   function filterData() {
     const q = document.getElementById('data-search').value.trim().toLowerCase();
     document.querySelectorAll('#data-table tbody tr').forEach(tr => {
       const hay = tr.getAttribute('data-q') || '';
-      tr.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+      const code = tr.getAttribute('data-code') || '';
+      const okQ = !q || hay.indexOf(q) !== -1;
+      const okIdx = !dataIndexSet || dataIndexSet.has(code);
+      tr.style.display = (okQ && okIdx) ? '' : 'none';
     });
   }
 </script>

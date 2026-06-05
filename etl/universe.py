@@ -25,9 +25,24 @@ from .sources import Bar
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
 
-# pykrx 지수코드 (지수 구성종목 조회용). 표준 KRX 코드.
-INDEX_CODES = {"KOSPI200": "1028", "KOSDAQ150": "2203"}
-KOSPI200_INDEX = INDEX_CODES["KOSPI200"]  # 하위호환
+# 지수(인덱스) 정의 — 단일 출처(SSOT). 새 인덱스는 **여기 한 줄만** 추가하면
+# 분봉 적재·적재현황·백테스트 세 화면의 선택 버튼/필터에 자동 반영된다.
+#   key   : 내부 식별자(라우트/폼에서 사용; 대문자)
+#   code  : pykrx 지수 구성종목 조회용 표준 KRX 지수코드
+#   label : 화면 표시명(키와 달리 한글화 등 자유롭게)
+INDEXES = [
+    {"key": "KOSPI200", "code": "1028", "label": "KOSPI200"},
+    {"key": "KOSDAQ150", "code": "2203", "label": "KOSDAQ150"},
+]
+
+# 파생 매핑(하위호환): 기존 코드는 INDEX_CODES/KOSPI200_INDEX를 계속 쓴다.
+INDEX_CODES = {i["key"]: i["code"] for i in INDEXES}
+KOSPI200_INDEX = INDEX_CODES["KOSPI200"]
+
+
+def list_indices() -> list[dict]:
+    """대시보드 버튼/필터 동적 렌더용 인덱스 목록 [{key, label}]. (확장 시 INDEXES만 고치면 됨.)"""
+    return [{"key": i["key"], "label": i["label"]} for i in INDEXES]
 
 
 def _as_codes(res) -> list[str]:

@@ -79,6 +79,17 @@ def test_backtest_page_renders(client):
     assert "백테스트" in r.text and "실행 이력" in r.text
 
 
+def test_index_selectors_rendered_from_ssot(client):
+    # 인덱스 선택은 SSOT(etl.universe.INDEXES)에서 동적 렌더된다(데이터 탭: 분봉적재 버튼 + 적재현황 필터).
+    # (백테스트 종목선택 버튼도 동일 패턴이나, 데이터 0건이면 종목 UI를 숨기므로 데이터 탭으로 검증.)
+    from etl.universe import list_indices
+    dl = client.get("/data").text
+    for i in list_indices():
+        assert f"mAddIndex('{i['key']}'" in dl     # 분봉적재 버튼
+        assert f'value="{i["key"]}"' in dl         # 적재현황 인덱스 필터 옵션
+    assert 'id="data-index-filter"' in dl          # 적재현황 인덱스 필터 존재
+
+
 def test_first_run_prompts_data_load(client):
     # 적재 0개면 전략/백테스트 화면에 '데이터 먼저 적재' 안내 배너가 뜬다
     assert "데이터 최신화" in client.get("/strategy").text

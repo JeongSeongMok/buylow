@@ -125,6 +125,14 @@ def test_index_members_cached_does_not_cache_empty(tmp_path):
     assert not _index_cache_path(tmp_path).exists()
 
 
+def test_list_indices_matches_ssot():
+    # list_indices()는 SSOT(INDEXES)와 일치하고 라벨을 포함한다(대시보드 동적 렌더용).
+    from etl.universe import list_indices, INDEX_CODES
+    indices = list_indices()
+    assert [i["key"] for i in indices] == list(INDEX_CODES)
+    assert all(i.get("label") for i in indices)
+
+
 @pytest.mark.integration
 def test_ingest_kospi200_small(tmp_path):
     from orchestrator.config import apply_krx_credentials

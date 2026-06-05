@@ -287,9 +287,11 @@ def register_dashboard(
     def backtest_page(request: Request):
         from datetime import date, timedelta
         from etl.names import load_names
+        from etl.universe import list_indices
         today = date.today()
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
+            "indices": list_indices(),  # 인덱스 버튼 동적 렌더(SSOT: etl.universe.INDEXES)
             "has_strategy": config.get_strategy() is not None,
             "data_loaded": _loaded_count(),
             "default_data_folder": config.get_data_folder(),
@@ -421,6 +423,7 @@ def register_dashboard(
         # 목록은 '파일 존재 여부'만 본다(glob) — 수천 종목의 일봉/수급을 다 파싱하면
         # 페이지가 멈추므로, 상세 행 수는 종목 상세(/data/{ticker})에서만 계산한다.
         from etl import catalog
+        from etl.universe import list_indices
         data_dir = config.get_data_folder()
         from etl.names import load_names
         names = load_names(data_dir)
@@ -435,6 +438,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
+            "indices": list_indices(),  # 분봉적재 버튼 + 적재현황 필터 동적 렌더(SSOT)
             "loaded_codes": [t["ticker"] for t in tickers],  # [전체종목] 일괄 칩 추가용(적재된 전 종목)
             "latest_date": catalog.latest_loaded_date(data_dir),
             # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
