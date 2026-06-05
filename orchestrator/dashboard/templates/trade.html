@@ -42,9 +42,12 @@
       <button type="button" class="ghost" onclick="uAddTyped()">추가</button>
       <div id="u-results" class="search-results" hidden></div>
     </div>
-    <p class="meta spaced">대상 종목 <span id="u-count"></span>
-      <button type="button" class="ghost clear-btn" onclick="uClear()">전체비우기</button></p>
-    <div id="u-chips"></div>
+    <details id="u-details" open>
+      <summary class="meta spaced">대상 종목 <span id="u-count"></span>
+        <button type="button" class="ghost clear-btn"
+                onclick="event.preventDefault();event.stopPropagation();uClear()">전체비우기</button></summary>
+      <div id="u-chips"></div>
+    </details>
     <input type="hidden" name="universe" id="u-hidden" value="">
   </form>
 </section>
@@ -147,5 +150,7 @@
   }
   document.addEventListener('click', (e) => { if (!uRes.contains(e.target) && e.target !== uIn) uRes.hidden = true; });
   uSync();
+  // 종목이 많으면(>20) 화면을 가리지 않게 처음엔 접어둔다 — 사용자가 펼칠 수 있음.
+  if (uTickers.length > 20) document.getElementById('u-details').open = false;
 </script>
 {% endblock %}
