@@ -90,6 +90,19 @@ class RunStore:
             rows = cur.fetchall()
         return [self._from_row(r) for r in rows]
 
+    def delete_run(self, run_id: str) -> bool:
+        """실행 1건 삭제(DB 행만). 디스크 blob(runs/<id>/) 삭제는 호출측 책임.
+        삭제된 행이 있으면 True."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+        return cur.rowcount > 0
+
+    def clear_runs(self) -> int:
+        """모든 실행 이력 삭제(DB 행). 삭제 건수 반환. 디스크 blob 삭제는 호출측 책임."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM runs")
+        return cur.rowcount
+
     # --- (역)직렬화 ---
     def _to_row(self, record: dict[str, Any]) -> dict[str, Any]:
         row = dict(record)

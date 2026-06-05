@@ -209,6 +209,10 @@ button.ghost.active { border-color: var(--accent); color: var(--accent); }
 .add-row button.ghost.active { background: rgba(76, 175, 80, 0.15); border-color: var(--accent); color: var(--accent); }
 /* '전체비우기'는 '추가된 종목' 줄 안에서 살짝 띄워 배치(보조 동작이라 가볍게 유지) */
 button.ghost.clear-btn { margin-left: 0.5rem; padding: 0.15rem 0.6rem; }
+/* 삭제 같은 파괴적 동작 — 평소엔 차분하게, 호버 시 위험을 또렷이 */
+button.ghost.danger { color: #e57373; border-color: #5a3a3a; }
+button.ghost.danger:hover:not(:disabled) { background: rgba(229, 115, 115, 0.12); border-color: #e57373; color: #ff8a80; }
+button.ghost.small { font-size: 0.75rem; padding: 0.2rem 0.6rem; }
 button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 
 /* 종목명/코드 검색 드롭다운 */

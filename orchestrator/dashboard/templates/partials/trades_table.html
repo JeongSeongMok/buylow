@@ -1,0 +1,40 @@
+<div id="trades-page">
+  <div class="actionbar">
+    {% if total %}
+    <span class="meta">{{ "{:,}".format(start1) }}–{{ "{:,}".format(end1) }} / 총 {{ "{:,}".format(total) }}건 (최신순)</span>
+    {% else %}
+    <span class="meta">체결된 거래가 없습니다.</span>
+    {% endif %}
+    <span class="grow"></span>
+    {% if has_prev %}
+    <button type="button" class="ghost"
+            hx-get="/ui/runs/{{ run.run_id }}/trades?offset={{ prev_offset }}&limit={{ limit }}"
+            hx-target="#trades-page" hx-swap="outerHTML">◀ 이전</button>
+    {% endif %}
+    {% if has_next %}
+    <button type="button" class="ghost"
+            hx-get="/ui/runs/{{ run.run_id }}/trades?offset={{ next_offset }}&limit={{ limit }}"
+            hx-target="#trades-page" hx-swap="outerHTML">다음 ▶</button>
+    {% endif %}
+  </div>
+  {% if trades %}
+  <div class="scrolly">
+    <table class="runs">
+      <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>금액</th><th>사유</th></tr></thead>
+      <tbody>
+        {% for t in trades %}
+        <tr>
+          <td>{{ t.time }}</td>
+          <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
+          <td>{% if t.buy %}<span class="ok">매수</span>{% else %}<span class="fail">매도</span>{% endif %}</td>
+          <td>{{ "{:,}".format(t.qty) }}</td>
+          <td>{{ t.price }}</td>
+          <td>{{ t.amount }}</td>
+          <td class="meta">{{ t.reason }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>

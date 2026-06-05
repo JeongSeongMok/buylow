@@ -3,9 +3,16 @@
 {% block content %}
 <div class="cols2 fit">
   <section class="card">
-    <h2>백테스트 결과
-      {% if run.success %}<span class="ok">성공 ✓</span>{% else %}<span class="fail">실패 ✗</span>{% endif %}
-    </h2>
+    <div class="actionbar">
+      <h2>백테스트 결과
+        {% if run.success %}<span class="ok">성공 ✓</span>{% else %}<span class="fail">실패 ✗</span>{% endif %}
+      </h2>
+      <span class="grow"></span>
+      <form method="post" action="/ui/runs/{{ run.run_id }}/delete" style="margin:0"
+            onsubmit="return confirm('이 백테스트 기록과 결과 파일을 삭제할까요? 되돌릴 수 없습니다.')">
+        <button type="submit" class="ghost danger">삭제</button>
+      </form>
+    </div>
     <p class="meta">{{ run.created_at[:10] }} {{ run.created_at[11:13] }}시{{ run.created_at[14:16] }}분{{ run.created_at[17:19] }}초</p>
 
     <table class="stats">
@@ -53,29 +60,13 @@
     {% endif %}
 
     <section class="card">
-      <h2>거래 내역 <small>{{ trades|length }}건</small></h2>
-      {% if trades %}
-      <div class="scrolly">
-        <table class="runs">
-          <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>수량</th><th>체결가</th><th>금액</th><th>사유</th></tr></thead>
-          <tbody>
-            {% for t in trades|reverse %}
-            <tr>
-              <td>{{ t.time }}</td>
-              <td>{% if t.name %}{{ t.name }} <small class="meta">{{ t.ticker }}</small>{% else %}{{ t.ticker }}{% endif %}</td>
-              <td>{% if t.buy %}<span class="ok">매수</span>{% else %}<span class="fail">매도</span>{% endif %}</td>
-              <td>{{ "{:,}".format(t.qty) }}</td>
-              <td>{{ t.price }}</td>
-              <td>{{ t.amount }}</td>
-              <td class="meta">{{ t.reason }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <h2>거래 내역</h2>
+      {# 거래가 6만+ 건이 될 수 있어 진입 시 한꺼번에 싣지 않고 HTMX로 페이지(100건)씩 가져온다.
+         첫 진입의 캐시 빌드(결과 JSON 1회 파싱)도 이 비동기 로드 뒤에서 일어나 화면이 안 멈춘다. #}
+      <div id="trades-page" hx-get="/ui/runs/{{ run.run_id }}/trades?offset=0&limit={{ trade_limit }}"
+           hx-trigger="load" hx-swap="outerHTML">
+        <p class="meta">거래 내역 불러오는 중…</p>
       </div>
-      {% else %}
-      <p class="meta">체결된 거래가 없습니다.</p>
-      {% endif %}
     </section>
   </div>
 </div>

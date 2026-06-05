@@ -54,3 +54,19 @@ def test_persists_across_instances(tmp_path):
     RunStore(path).save_run(_record("r1"))
     # 새 인스턴스(=앱 재시작 시뮬)에서도 보여야 함
     assert RunStore(path).get_run("r1") is not None
+
+
+def test_delete_run(store):
+    store.save_run(_record("r1"))
+    store.save_run(_record("r2"))
+    assert store.delete_run("r1") is True
+    assert store.get_run("r1") is None
+    assert store.get_run("r2") is not None  # 다른 건 남음
+    assert store.delete_run("nope") is False  # 없는 건 False
+
+
+def test_clear_runs(store):
+    store.save_run(_record("r1"))
+    store.save_run(_record("r2"))
+    assert store.clear_runs() == 2
+    assert store.list_runs() == []

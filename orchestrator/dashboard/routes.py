@@ -200,6 +200,68 @@ def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
     return rows
 
 
+# ── 거래내역 캐시 + 페이지네이션 ──────────────────────────────────────────
+# 분봉 백테스트는 거래가 6만+ 건이 되기도 한다. 그때마다 결과 JSON(수십~수백 MB)을 통째로
+# json.loads 하면 상세 페이지 진입이 매우 느리다. 그래서 한 번만 파싱해 거래내역을 슬림한
+# trades.jsonl(한 줄=한 거래, 최신순)로 캐시하고, 화면은 거기서 필요한 페이지 슬라이스만 읽는다
+# (완료된 run은 불변이라 1회 빌드가 안전 — '한 뎁스 추가' + 페이지네이션).
+
+def _trades_cache_path(record: dict) -> Path | None:
+    run_dir = record.get("run_dir")
+    if run_dir:
+        return Path(run_dir) / "trades.jsonl"
+    rj = record.get("result_json")
+    return Path(rj).parent / "trades.jsonl" if rj else None
+
+
+def _ensure_trades_cache(record: dict, reasons=None, names=None) -> Path | None:
+    """trades.jsonl 캐시를 보장(없으면 결과 JSON을 1회 파싱해 최신순으로 기록)."""
+    cache = _trades_cache_path(record)
+    if cache is None:
+        return None
+    if cache.exists():
+        return cache
+    rows = parse_orders(record.get("result_json"), reasons, names)  # 1회 풀 파싱
+    rows.reverse()  # 최신순(시간 내림차순) 저장 → offset=0이 가장 최근
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    except OSError:
+        return None
+    return cache
+
+
+def load_trades_page(record: dict, offset: int, limit: int,
+                     reasons=None, names=None) -> tuple[list[dict], int]:
+    """거래내역 한 페이지 + 전체 건수. 캐시(trades.jsonl)에서 [offset:offset+limit]만 파싱한다."""
+    cache = _ensure_trades_cache(record, reasons, names)
+    if cache is None or not cache.exists():
+        return [], 0
+    rows, total = [], 0
+    with open(cache, encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            total += 1
+            if offset <= i < offset + limit:
+                rows.append(json.loads(line))
+    return rows, total
+
+
+def _delete_run_dir(run_dir) -> None:
+    """run의 디스크 blob 디렉터리 삭제. 실수로 엉뚱한 경로를 지우지 않게 repo의 runs/ 하위만 허용."""
+    if not run_dir:
+        return
+    import shutil
+    runs_root = (REPO_ROOT / "runs").resolve()
+    try:
+        p = Path(run_dir).resolve()
+    except OSError:
+        return
+    if p.is_dir() and runs_root in p.parents:
+        shutil.rmtree(p, ignore_errors=True)
+
+
 def friendly_stats(stats: dict) -> list[dict]:
     """LEAN 통계(영문·원시)를 사용자용 한국어 핵심 지표로 변환. 이해 어려운 항목은 생략."""
     rows: list[dict] = []
@@ -408,9 +470,6 @@ def register_dashboard(
         record = store.get_run(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
-        from etl.names import load_names
-        reasons = parse_rule_reasons(record.get("run_dir"))
-        names = load_names(config.get_data_folder())
         # 신호 진단(추정) — 왜 매수/매도가 적었는지 경향(매수신호 발생률 + 차단 신호).
         # 실패해도(데이터 없음 등) 페이지엔 영향 없음(diag=None이면 섹션 미표시).
         diag = None
@@ -421,9 +480,45 @@ def register_dashboard(
             diag = analyze_run(spec, config.get_data_folder())
         except Exception:
             diag = None
+        # 거래내역은 6만+ 건이 될 수 있어 인라인으로 안 싣고, 아래 /ui/runs/{id}/trades 에서 HTMX로
+        # 페이지네이션해 가져온다(상세 진입 시 결과 JSON 통째 파싱 회피).
         return templates.TemplateResponse(request, "run_detail.html", {
             "run": record, "summary": friendly_stats(record.get("statistics") or {}),
-            "trades": parse_orders(record.get("result_json"), reasons, names), "diag": diag})
+            "diag": diag, "trade_limit": 100})
+
+    @app.get("/ui/runs/{run_id}/trades", response_class=HTMLResponse)
+    def ui_run_trades(request: Request, run_id: str, offset: int = 0, limit: int = 100):
+        record = store.get_run(run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"run not found: {run_id}")
+        from etl.names import load_names
+        limit = max(1, min(int(limit), 500))  # 페이지 크기 상한(DOM 폭주 방지)
+        offset = max(0, int(offset))
+        reasons = parse_rule_reasons(record.get("run_dir"))
+        names = load_names(config.get_data_folder())
+        rows, total = load_trades_page(record, offset, limit, reasons, names)
+        return templates.TemplateResponse(request, "partials/trades_table.html", {
+            "run": record, "trades": rows, "total": total, "offset": offset, "limit": limit,
+            "next_offset": offset + limit, "prev_offset": max(0, offset - limit),
+            "has_next": offset + limit < total, "has_prev": offset > 0,
+            "start1": (offset + 1) if total else 0, "end1": min(offset + limit, total)})
+
+    @app.post("/ui/runs/clear")
+    def ui_runs_clear(request: Request):
+        # 백테스트 히스토리 전체 삭제(DB 행 + 디스크 blob). 되돌릴 수 없다(화면에서 confirm).
+        for r in store.list_runs(limit=100000):
+            _delete_run_dir(r.get("run_dir"))
+        store.clear_runs()
+        return RedirectResponse(url="/backtest", status_code=303)
+
+    @app.post("/ui/runs/{run_id}/delete")
+    def ui_run_delete(request: Request, run_id: str):
+        # 백테스트 1건 삭제(DB 행 + 디스크 blob). 결과 JSON·로그가 GB 단위라 디스크도 정리한다.
+        record = store.get_run(run_id)
+        if record is not None:
+            _delete_run_dir(record.get("run_dir"))
+            store.delete_run(run_id)
+        return RedirectResponse(url="/backtest", status_code=303)
 
     # ── ① 전략 설정 탭 ───────────────────────────────────────────────
     @app.get("/strategy", response_class=HTMLResponse)

@@ -2,7 +2,7 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <table class="runs">
     <thead>
-      <tr><th>실행 시각</th><th>결과</th><th>순손익</th><th>주문수</th><th></th></tr>
+      <tr><th>실행 시각</th><th>결과</th><th>순손익</th><th>주문수</th><th></th><th></th></tr>
     </thead>
     <tbody>
       {% for r in runs %}
@@ -12,9 +12,15 @@
         <td>{{ r.statistics.get("Net Profit", "-") }}</td>
         <td>{{ r.statistics.get("Total Orders", "-") }}</td>
         <td><a href="/ui/runs/{{ r.run_id }}">상세</a></td>
+        <td>
+          <form method="post" action="/ui/runs/{{ r.run_id }}/delete" style="margin:0"
+                onsubmit="return confirm('이 백테스트 기록과 결과 파일을 삭제할까요? 되돌릴 수 없습니다.')">
+            <button type="submit" class="ghost danger small">삭제</button>
+          </form>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="5" class="empty">아직 실행 이력이 없습니다.</td></tr>
+      <tr><td colspan="6" class="empty">아직 실행 이력이 없습니다.</td></tr>
       {% endfor %}
     </tbody>
   </table>

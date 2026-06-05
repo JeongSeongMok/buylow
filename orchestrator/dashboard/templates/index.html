@@ -63,7 +63,16 @@
   </section>
 
   <section class="card">
-    <h2>실행 이력</h2>
+    <div class="actionbar">
+      <h2>실행 이력</h2>
+      <span class="grow"></span>
+      {% if runs %}
+      <form method="post" action="/ui/runs/clear" style="margin:0"
+            onsubmit="return confirm('모든 백테스트 기록과 결과 파일을 삭제할까요? 되돌릴 수 없습니다.')">
+        <button type="submit" class="ghost danger small">전체 삭제</button>
+      </form>
+      {% endif %}
+    </div>
     <div class="scrolly">{% include "partials/runs_table.html" %}</div>
   </section>
 </div>

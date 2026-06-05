@@ -334,6 +334,72 @@ def test_run_detail_page(client):
     assert client.get("/ui/runs/missing").status_code == 404
 
 
+def test_run_delete_removes_record(client):
+    _save_default_strategy(client)
+    client.post("/backtest", data={"universe": "005930", "start": "2023-01-02",
+                                   "end": "2023-12-28", "data_folder": "/data"})
+    _wait_calls(client.runner)
+    assert client.get("/ui/runs/fake-run-1").status_code == 200
+    r = client.post("/ui/runs/fake-run-1/delete", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/backtest"
+    assert client.get("/ui/runs/fake-run-1").status_code == 404
+
+
+def test_runs_clear_empties_history(client):
+    _save_default_strategy(client)
+    client.post("/backtest", data={"universe": "005930", "start": "2023-01-02",
+                                   "end": "2023-12-28", "data_folder": "/data"})
+    _wait_calls(client.runner)
+    r = client.post("/ui/runs/clear", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/backtest"
+    assert "아직 실행 이력이 없습니다" in client.get("/backtest").text
+
+
+def test_run_trades_pagination(tmp_path, monkeypatch):
+    import json
+    from orchestrator import config
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))
+    # 250건 체결을 가진 결과 JSON을 run_dir 에 만든다(캐시는 run_dir/trades.jsonl)
+    rundir = tmp_path / "runs" / "rid"
+    rundir.mkdir(parents=True)
+    orders = {str(i): {"status": 3, "quantity": (1 if i % 2 == 0 else -1), "price": 100,
+                       "value": 100, "lastFillTime": f"2026-01-{(i % 28) + 1:02d}T00:00:00Z",
+                       "symbol": {"value": "005930"}} for i in range(250)}
+    rj = rundir / "rid.json"
+    rj.write_text(json.dumps({"orders": orders}), encoding="utf-8")
+    store = RunStore(tmp_path / "s.db")
+    store.save_run({"run_id": "rid", "strategy": "s.py", "algorithm_type": "S",
+                    "data_folder": "/data", "parameters": {}, "exit_code": 0, "success": True,
+                    "statistics": {}, "run_dir": str(rundir), "log_path": str(rundir / "run.log"),
+                    "result_json": str(rj)})
+    c = TestClient(create_app(runner=FakeRunner(), store=store))
+
+    # 첫 페이지: 다음만, 이전 없음 + 전체 건수 표시 + 캐시 파일 생성
+    r = c.get("/ui/runs/rid/trades?offset=0&limit=100")
+    assert r.status_code == 200
+    assert "250건" in r.text
+    assert "다음" in r.text and "◀ 이전" not in r.text
+    assert (rundir / "trades.jsonl").exists()  # '한 뎁스' 캐시가 생성됨
+    assert r.text.count("<tr>") == 1 + 100  # 헤더 1 + 100행
+
+    # 마지막 페이지(offset 200): 이전만, 다음 없음, 50행
+    r2 = c.get("/ui/runs/rid/trades?offset=200&limit=100")
+    assert "◀ 이전" in r2.text and "다음 ▶" not in r2.text
+    assert r2.text.count("<tr>") == 1 + 50
+
+
+def test_run_detail_loads_trades_lazily(client):
+    # 상세 페이지는 거래를 인라인으로 싣지 않고 HTMX로 가져온다(대량 거래 성능).
+    _save_default_strategy(client)
+    client.post("/backtest", data={"universe": "005930", "start": "2023-01-02",
+                                   "end": "2023-12-28", "data_folder": "/data"})
+    _wait_calls(client.runner)
+    t = client.get("/ui/runs/fake-run-1").text
+    assert "/ui/runs/fake-run-1/trades" in t and 'hx-trigger="load"' in t
+    assert "삭제" in t  # 상세 페이지에 삭제 버튼
+
+
 def test_format_won_korean():
     from orchestrator.dashboard.routes import format_won
     assert format_won(147000257) == "1억 4,700만원"
