@@ -226,6 +226,27 @@ def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
 # trades.jsonl(한 줄=한 거래, 최신순)로 캐시하고, 화면은 거기서 필요한 페이지 슬라이스만 읽는다
 # (완료된 run은 불변이라 1회 빌드가 안전 — '한 뎁스 추가' + 페이지네이션).
 
+def _load_fills(record: dict) -> list[dict]:
+    """전략이 on_order_event로 남긴 완전한 체결 기록(run_dir/fills.jsonl)을 읽는다. 없으면 [].
+    각 줄은 LEAN order dict 형태(status/quantity/price/value/symbol/tag)라 _rows_from_orders로 바로 처리."""
+    run_dir = record.get("run_dir")
+    if not run_dir:
+        return []
+    fills = Path(run_dir) / "fills.jsonl"
+    if not fills.exists():
+        return []
+    out = []
+    try:
+        with open(fills, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    out.append(json.loads(line))
+    except (OSError, ValueError):
+        return []
+    return out
+
+
 def _trades_cache_path(record: dict) -> Path | None:
     run_dir = record.get("run_dir")
     if run_dir:
@@ -247,7 +268,11 @@ def _ensure_trades_cache(record: dict, reasons=None, names=None) -> Path | None:
         return None
     if cache.exists():
         return cache
-    raw = _load_result_orders(record.get("result_json"))  # 1회 풀 파싱
+    # 전략이 on_order_event로 직접 남긴 완전한 체결 기록(fills.jsonl)을 1순위로 쓴다 — LEAN 결과
+    # 파일의 orders는 대량 백테스트에서 truncation(0~100건)되므로. 없으면 결과 JSON으로 폴백.
+    fills = _load_fills(record)
+    complete = bool(fills)  # 우리 체결로그면 완전함(=truncation 고지 불필요)
+    raw = fills or _load_result_orders(record.get("result_json"))
     rows = _rows_from_orders(raw, reasons, names)
     rows.reverse()  # 최신순(시간 내림차순) 저장 → offset=0이 가장 최근
     try:
@@ -256,21 +281,21 @@ def _ensure_trades_cache(record: dict, reasons=None, names=None) -> Path | None:
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         _trades_meta_path(cache).write_text(
-            json.dumps({"orders_in_result": len(raw)}), encoding="utf-8")
+            json.dumps({"orders_in_result": len(raw), "complete": complete}), encoding="utf-8")
     except OSError:
         return None
     return cache
 
 
-def _trades_orders_in_result(record: dict):
-    """캐시 사이드카에서 '결과 파일에 든 주문 수'를 읽는다(없으면 None)."""
+def _trades_meta(record: dict) -> dict:
+    """캐시 사이드카(trades.meta.json) 읽기 — orders_in_result(결과 파일 주문 수), complete(완전 여부)."""
     cache = _trades_cache_path(record)
     if cache is None:
-        return None
+        return {}
     try:
-        return json.loads(_trades_meta_path(cache).read_text(encoding="utf-8")).get("orders_in_result")
+        return json.loads(_trades_meta_path(cache).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
+        return {}
 
 
 def load_trades_page(record: dict, offset: int, limit: int,
@@ -538,10 +563,12 @@ def register_dashboard(
         names = load_names(config.get_data_folder())
         rows, total = load_trades_page(record, offset, limit, reasons, names)
         # LEAN truncation 정직 고지: 통계상 총 주문수보다 결과 파일에 든 주문 수가 적으면,
-        # 보이는 거래내역이 '일부'임을 알린다(silent cap 금지).
+        # 보이는 거래내역이 '일부'임을 알린다(silent cap 금지). 단 우리 체결로그(complete)면 고지 안 함.
         stat_total = _to_int((record.get("statistics") or {}).get("Total Orders"))
-        orders_in_result = _trades_orders_in_result(record)
-        truncated = bool(stat_total and orders_in_result is not None and orders_in_result < stat_total)
+        meta = _trades_meta(record)
+        orders_in_result = meta.get("orders_in_result")
+        truncated = bool(not meta.get("complete") and stat_total
+                         and orders_in_result is not None and orders_in_result < stat_total)
         return templates.TemplateResponse(request, "partials/trades_table.html", {
             "run": record, "trades": rows, "total": total, "offset": offset, "limit": limit,
             "next_offset": offset + limit, "prev_offset": max(0, offset - limit),

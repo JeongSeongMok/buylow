@@ -36,7 +36,9 @@ def test_build_config_core_fields(tmp_path):
     assert os.path.isabs(cfg["algorithm-location"])  # 절대경로로 해석
     assert cfg["results-destination-folder"] == str(tmp_path / "run1")
     # 파라미터는 전부 문자열이어야 함 (LEAN get_parameter는 문자열 반환)
-    assert cfg["parameters"] == {"threshold": "0.12", "n": "5"}
+    assert cfg["parameters"]["threshold"] == "0.12" and cfg["parameters"]["n"] == "5"
+    # 체결 로그 경로가 run_dir/fills.jsonl 로 주입돼야 함(완전한 거래내역 확보용)
+    assert cfg["parameters"]["trade_log"] == str(tmp_path / "run1" / "fills.jsonl")
     # 백테스트 환경 핸들러가 있어야 함
     assert "backtesting" in cfg["environments"]
     assert cfg["environments"]["backtesting"]["live-mode"] is False

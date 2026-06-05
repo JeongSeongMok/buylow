@@ -418,6 +418,32 @@ def test_run_trades_shows_truncation_notice(tmp_path, monkeypatch):
     assert (rundir / "trades.meta.json").exists()
 
 
+def test_run_trades_uses_fills_log_when_present(tmp_path, monkeypatch):
+    # on_order_event가 남긴 fills.jsonl이 있으면 그게 완전한 기록 → truncation 고지 없이 전부 표시.
+    import json
+    from orchestrator import config
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))
+    rundir = tmp_path / "runs" / "fl"
+    rundir.mkdir(parents=True)
+    # 결과 JSON엔 주문 0건(트렁케이션), 하지만 우리 체결로그엔 3건 전부
+    (rundir / "fl.json").write_text(json.dumps({"orders": {}}), encoding="utf-8")
+    with open(rundir / "fills.jsonl", "w", encoding="utf-8") as f:
+        for i in range(3):
+            f.write(json.dumps({"status": 3, "quantity": 1, "price": 100, "value": 100,
+                                "tag": "", "lastFillTime": "2026-01-05T00:00:00Z",
+                                "symbol": {"value": "005930"}}) + "\n")
+    store = RunStore(tmp_path / "s.db")
+    store.save_run({"run_id": "fl", "strategy": "s.py", "algorithm_type": "S",
+                    "data_folder": "/data", "parameters": {}, "exit_code": 0, "success": True,
+                    "statistics": {"Total Orders": "5000"}, "run_dir": str(rundir),
+                    "log_path": str(rundir / "run.log"), "result_json": str(rundir / "fl.json")})
+    c = TestClient(create_app(runner=FakeRunner(), store=store))
+    t = c.get("/ui/runs/fl/trades?offset=0&limit=100").text
+    assert "총 3건" in t          # 체결로그의 3건이 보이고
+    assert "일부만 표시" not in t  # 완전하므로 truncation 고지 없음
+
+
 def test_run_detail_loads_trades_lazily(client):
     # 상세 페이지는 거래를 인라인으로 싣지 않고 HTMX로 가져온다(대량 거래 성능).
     _save_default_strategy(client)

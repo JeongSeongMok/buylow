@@ -76,13 +76,19 @@ class RunResult:
         return self.exit_code == 0
 
 
-def _params_with_risk(parameters: dict) -> dict:
-    """전략 파라미터에 전역 리스크 설정(%)을 risk_* 키로 합쳐 LEAN에 전달."""
+def _params_with_risk(parameters: dict, trade_log: Path | None = None) -> dict:
+    """전략 파라미터에 전역 리스크 설정(%)을 risk_* 키로 합쳐 LEAN에 전달.
+
+    trade_log가 주어지면 체결 로그 경로도 넘긴다 — 전략이 on_order_event에서 모든 체결을 이 파일에
+    직접 기록해, LEAN 결과 파일의 주문 truncation(대량 백테스트에서 0~100건만 저장)과 무관하게
+    완전한 거래내역을 남긴다."""
     params = {k: str(v) for k, v in parameters.items()}
     risk = get_risk_config()
     for k, v in risk.items():
         if v is not None:
             params[f"risk_{k}"] = str(v)
+    if trade_log is not None:
+        params["trade_log"] = str(trade_log)
     return params
 
 
@@ -124,8 +130,8 @@ def _build_config(request: RunRequest, results_dir: Path, algorithm_id: str) -> 
         "maximum-data-points-per-chart-series": 1000000,
         "maximum-chart-series": 30,
         "force-exchange-always-open": False,
-        # 전략 파라미터(전부 문자열) + 전역 리스크 설정 주입(전략은 get_parameter로 읽음).
-        "parameters": _params_with_risk(request.parameters),
+        # 전략 파라미터(전부 문자열) + 전역 리스크 설정 + 체결 로그 경로 주입(전략은 get_parameter로 읽음).
+        "parameters": _params_with_risk(request.parameters, results_dir / "fills.jsonl"),
         # PYTHONPATH로 주입하므로 비워둠
         "python-additional-paths": [],
         "environments": {

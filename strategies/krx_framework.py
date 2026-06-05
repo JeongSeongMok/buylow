@@ -5,6 +5,8 @@
 # 임의로 파는 충돌이 없다(docs/ARCHITECTURE.md, "A 방식").
 #
 # 하위 클래스는 initialize에서: 날짜/현금 → setup_krx_framework() → 유니버스 + add_alpha(...).
+import json
+
 from AlgorithmImports import *
 
 from market.krx import KRX_MARKET, KRX_MARKET_ID, KRX_CURRENCY
@@ -66,6 +68,45 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
         self.set_execution(ImmediateExecutionModel())
         self._apply_risk_management(risk_eval_daily)
         self._setup_progress_logging()
+        self._setup_fill_log()
+
+    def _setup_fill_log(self):
+        # 모든 체결을 우리가 직접 파일(fills.jsonl)에 남긴다. LEAN 결과 파일의 orders는 대량
+        # 백테스트에서 0~100건만 직렬화돼(truncation) 거래내역이 비어 보이므로, on_order_event로
+        # 완전한 체결 기록을 확보한다. 경로는 Runner가 trade_log 파라미터로 주입(run_dir/fills.jsonl).
+        self._fill_log = None
+        path = self.get_parameter("trade_log")
+        if not path:
+            return
+        try:
+            self._fill_log = open(path, "w", encoding="utf-8", buffering=1)
+        except OSError:
+            self._fill_log = None
+
+    def on_order_event(self, order_event):
+        # 체결(부분 포함)마다 한 줄씩 기록 — 대시보드가 그대로 파싱하도록 LEAN order dict 형태로 쓴다
+        # (status=3, quantity=부호 있는 체결수량, price=체결가, value=체결금액, tag=주문 태그).
+        if self._fill_log is None or order_event.fill_quantity == 0:
+            return
+        try:
+            tag = ""
+            order = self.transactions.get_order_by_id(order_event.order_id)
+            if order is not None:
+                tag = order.tag or ""
+            qty = float(order_event.fill_quantity)
+            price = float(order_event.fill_price)
+            rec = {
+                "status": 3,
+                "quantity": qty,
+                "tag": tag,
+                "lastFillTime": self.time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "symbol": {"value": order_event.symbol.value},
+                "price": price,
+                "value": abs(price * qty),
+            }
+            self._fill_log.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        except Exception:
+            pass  # 체결 기록 실패가 백테스트를 깨지 않게
 
     def _setup_progress_logging(self):
         # 백테스트 진행률을 주 1회 로그로 남겨 대시보드 작업 화면이 파싱해 표시한다.
