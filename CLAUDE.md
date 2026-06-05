@@ -122,6 +122,7 @@ Every Claude session working in this repo follows these:
 - ⛔ **Real-order e2e** — needs a KIS account; verify on **모의(demo)** first (어댑터 빌드 + 절차 LIVE_KIS.md). Real(real)은 검증 전까지 무장 금지. **토글→LEAN 라이브 spawn/kill·라이브 유니버스는 구현됨**(위 D). 남은 것: 라이브 프로세스 헬스/재시작 감독, open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존, 실전 무장 UI.
 - ⛔ **Toss live** — same `IBrokerage` shape; gated on Toss API (not open).
 - ⚠️ **KIS minute history is bounded** (~1y kept, 120 bars/call) → minute backtest is universe-scoped + recent, not whole-market 5y.
+- ⚠️ **LEAN 분봉 백테스트 규모 한도** — 동시구독 **종목수 × 거래일 ≳ 10,000**을 넘으면 LEAN 데이터피드 read-ahead가 멈추고 **fill-forward(마지막 봉 복제)**로 가짜봉을 채워 결과를 조용히 오염시킨다(데이터/전략 문제 아님 — 맨 알고리즘 `strategies/MinuteFeedProbe.py`로 통제실험 확인: 40종목×1년≈9,800 깨끗, 200·348 동결. 단일 config 상수 아닌 read-ahead 버퍼/워크스케줄러/zip캐시의 창발 천장). **가드**: `POST /backtest`가 분봉+`len(universe)×_trading_days > MINUTE_FEED_MAX_SYMBOL_DAYS(10,000)`이면 차단(최대 종목수 안내). 곱 한도라 1년≈40종목·3개월≈150·1개월≈400. 일봉·라이브는 무관(라이브는 실시간 1봉씩, read-ahead 없음). 메모리 `lean-minute-feed-scale-limit`
 - Volatility-breakout (intraday signals), parameter optimization (sweep), OpenDART deep financials, news/sentiment, universe criteria pre-filter, custom risk (ATR/vol), PCM selection, equity charts, alerts, named strategies, cross-platform packaging, LICENSE.
 - (No AI/NL strategy generation — intentionally out of scope.)
 

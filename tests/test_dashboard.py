@@ -66,6 +66,47 @@ def _save_default_strategy(client):
     return client.post("/strategy", data=data)
 
 
+def _save_minute_strategy(client):
+    from orchestrator import signals_catalog
+    data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
+    data.update({"g0_EMA": "1", "g1_RSI": "1", "period_days": "5",
+                 "resolution": "minute", "exec_slices": "4"})
+    return client.post("/strategy", data=data)
+
+
+def test_minute_backtest_budget_guard_blocks(client):
+    # 분봉 + (종목수 × 거래일) > ~10,000 이면 차단(데이터피드 천장 — fill-forward 오염 방지).
+    _save_minute_strategy(client)
+    uni = ",".join(f"{i:06d}" for i in range(1, 51))  # 50종목
+    r = client.post("/backtest", data={"universe": uni, "start": "2025-06-05",
+                                       "end": "2026-06-04", "data_folder": "/data"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert "error=" in r.headers["location"] and "%ED%95%9C%EB%8F%84" in r.headers["location"]  # '한도'
+    assert len(client.runner.calls) == 0  # 실행되지 않음
+
+
+def test_minute_backtest_under_budget_runs(client):
+    # 5종목 × 1년 ≈ 1,225 < 한도 → 정상 실행.
+    _save_minute_strategy(client)
+    r = client.post("/backtest", data={"universe": "005930,000660,000100,005380,035720",
+                                       "start": "2025-06-05", "end": "2026-06-04",
+                                       "data_folder": "/data"}, follow_redirects=False)
+    assert r.status_code == 303 and "/jobs/" in r.headers["location"]
+    _wait_calls(client.runner)
+    assert len(client.runner.calls) == 1
+
+
+def test_daily_backtest_not_limited(client):
+    # 일봉은 이 한도와 무관 — 50종목 × 1년도 실행돼야 함.
+    _save_default_strategy(client)  # resolution=daily(기본)
+    uni = ",".join(f"{i:06d}" for i in range(1, 51))
+    r = client.post("/backtest", data={"universe": uni, "start": "2025-06-05",
+                                       "end": "2026-06-04", "data_folder": "/data"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and "/jobs/" in r.headers["location"]
+
+
 def test_root_redirects_to_strategy(client):
     r = client.get("/", follow_redirects=False)
     assert r.status_code == 307
