@@ -30,9 +30,20 @@ DEFAULT_DATA_DIR = REPO_ROOT / "data"
 #   key   : 내부 식별자(라우트/폼에서 사용; 대문자)
 #   code  : pykrx 지수 구성종목 조회용 표준 KRX 지수코드
 #   label : 화면 표시명(키와 달리 한글화 등 자유롭게)
+# 내장 인덱스 = KRX 공식 인덱스 코드 기반(구성종목은 KRX deposit file로 조회, 7일 디스크 캐시).
+# 새 내장 인덱스 추가 = 여기 한 줄(실제 KRX 인덱스 코드 필요 — pykrx get_index_ticker_list로 확인).
+# 섹터/테마 인덱스 코드는 KRX가 분기 리밸런싱하므로 구성종목이 자동 최신화된다.
+# (※ KRX에 없는 테마(예: 로봇)는 '그룹' 탭의 커스텀 인덱스로 — 종목 직접 묶음.)
 INDEXES = [
     {"key": "KOSPI200", "code": "1028", "label": "KOSPI200"},
     {"key": "KOSDAQ150", "code": "2203", "label": "KOSDAQ150"},
+    {"key": "KOSPI50", "code": "1035", "label": "시총상위(코스피50)"},
+    {"key": "SEMICON", "code": "5422", "label": "반도체(Top15)"},
+    {"key": "POWER", "code": "5448", "label": "전력인프라"},
+    {"key": "BATTERY", "code": "5412", "label": "2차전지(Top10)"},
+    {"key": "BIO", "code": "5413", "label": "바이오(Top10)"},
+    {"key": "SHIP", "code": "5451", "label": "조선(Top10)"},
+    {"key": "EVCAR", "code": "5421", "label": "전기차(Top15)"},
 ]
 
 # 파생 매핑(하위호환): 기존 코드는 INDEX_CODES/KOSPI200_INDEX를 계속 쓴다.
