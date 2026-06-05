@@ -1,16 +1,18 @@
-{# C. 매매 내역 — 선택 날짜 기준, 10초마다 HTMX로 갱신(/trade/trades?date=). #}
+{# C. 매매 내역 — 진입 시 load로 1회 + 10초 갱신. 날짜 화살표/선택은 이 섹션만 부분 교체(전체 리로드 X). #}
 <section class="card" id="trade-trades"
-         hx-get="/trade/trades?date={{ sel_date }}" hx-trigger="every 10s" hx-swap="outerHTML">
-  <h2>매매 내역 <small class="meta">· 10초마다 갱신</small></h2>
+         hx-get="/trade/trades?date={{ sel_date }}" hx-trigger="load, every 10s" hx-swap="outerHTML">
+  <h2>매매 내역 <small class="meta">· 자동 갱신</small></h2>
   <div class="dates">
-    {% if prev_date %}<a class="chip" href="/trade?date={{ prev_date }}">◀ {{ prev_date }}</a>
-    {% else %}<span class="chip" style="opacity:.4">◀</span>{% endif %}
-    <form method="get" action="/trade" style="margin:0; display:inline-flex">
-      <input type="date" name="date" value="{{ sel_date }}" onchange="this.form.submit()">
-    </form>
-    {% if next_date %}<a class="chip" href="/trade?date={{ next_date }}">{{ next_date }} ▶</a>
-    {% else %}<span class="chip" style="opacity:.4">▶</span>{% endif %}
+    <a class="chip" style="cursor:pointer"
+       hx-get="/trade/trades?date={{ prev_date }}" hx-target="#trade-trades" hx-swap="outerHTML">◀ {{ prev_date }}</a>
+    <input type="date" name="date" value="{{ sel_date }}"
+           hx-get="/trade/trades" hx-target="#trade-trades" hx-swap="outerHTML" hx-trigger="change">
+    <a class="chip" style="cursor:pointer"
+       hx-get="/trade/trades?date={{ next_date }}" hx-target="#trade-trades" hx-swap="outerHTML">{{ next_date }} ▶</a>
   </div>
+  {% if loading %}
+  <p class="meta"><span class="spinner"></span>매매 내역 불러오는 중…</p>
+  {% else %}
   {% if has_pnl %}
   <p class="meta">실현손익 합:
     <span class="{{ 'pos' if daily_pnl >= 0 else 'neg' }}">
@@ -38,6 +40,6 @@
       </tbody>
     </table>
   </div>
-  <p class="meta">※ KIS 계좌의 실제 체결내역입니다(앱·HTS·자동매매 무관). 체결조회라 실현손익은 표시되지 않습니다.
-    (토스 등 체결조회 미지원 증권사는 buylow 자체 주문기록으로 대체됩니다.)</p>
+  <p class="meta">※ KIS 계좌의 실제 체결내역입니다(앱·HTS·자동매매 무관). 체결조회라 실현손익은 표시되지 않습니다.</p>
+  {% endif %}
 </section>

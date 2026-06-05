@@ -100,8 +100,10 @@ Every Claude session working in this repo follows these:
   거래로그(`TradeStore`, SQLite)로 폴백. 화살표는 달력 ±1일(체결조회는 임의 날짜 조회 가능). 체결조회엔
   실현손익이 없어 손익 합은 자체 로그가 있을 때만 표시(`has_pnl`). **잔고/보유종목은 `inquire-balance`라
   KIS 앱 매수가 자동 반영**.
-- **B/C 10초 폴링** — 잔고(`/trade/balance`)·매매내역(`/trade/trades?date=`)을 부분 템플릿
-  (`partials/trade_balance.html`·`trade_trades.html`)으로 분리, HTMX `hx-trigger="every 10s"`로 자기 갱신.
+- **B/C 비동기 로드 + 10초 폴링** — 잔고(`/trade/balance`)·매매내역(`/trade/trades?date=`)을 부분 템플릿
+  (`partials/...`)으로 분리. 진입 시 trade_page는 **계좌(A)·장상태(E)만 서버 렌더**하고 B/C는 `loading` 자리표시
+  → HTMX `hx-trigger="load, every 10s"`로 비동기 로드 + 갱신(진입 시 KIS 잔고+체결조회 동기 대기 제거).
+  날짜 **화살표/선택은 `#trade-trades`만 부분 교체**(`hx-target` outerHTML) — 전체 페이지 리로드(브라우저 탭 로딩) 없음.
 - **D 제어 표면** — `/trade/toggle`(켤 때 실전은 무장 가드 통과 필수), `/trade/arm`(무장/한도/HTS ID
   저장). 섹션별 try/except로 브로커 실패가 페이지를 깨지 않음. 테스트: `tests/test_trade.py`, `test_live.py`.
 

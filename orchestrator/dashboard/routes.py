@@ -573,10 +573,15 @@ def register_dashboard(
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
 
-    def _trades_view(sel_date: str) -> dict:
-        """매매내역 컨텍스트 — 브로커 체결조회(KIS 앱/자동매매 무관) 우선, 미지원/실패 시 자체 거래로그.
-        화살표는 달력 전일/익일(체결조회는 임의 날짜 조회 가능)."""
+    def _date_nav(sel_date: str) -> tuple[str, str]:
+        """달력 전일/익일(체결조회는 임의 날짜 조회 가능). (prev, next)."""
         from datetime import date as _date, timedelta
+        y, m, d = sel_date.split("-")
+        cur = _date(int(y), int(m), int(d))
+        return (cur - timedelta(days=1)).isoformat(), (cur + timedelta(days=1)).isoformat()
+
+    def _trades_view(sel_date: str) -> dict:
+        """매매내역 컨텍스트 — 브로커 체결조회(KIS 앱/자동매매 무관) 우선, 미지원/실패 시 자체 거래로그."""
         broker, _err = get_broker()
         rows = None
         if broker is not None and hasattr(broker, "trades"):
@@ -586,36 +591,32 @@ def register_dashboard(
                 rows = None
         if rows is None:
             rows = trade_store.list_trades(sel_date)
-        y, m, d = sel_date.split("-")
-        cur = _date(int(y), int(m), int(d))
+        prev_date, next_date = _date_nav(sel_date)
         return {
             "trades": rows, "sel_date": sel_date,
-            "prev_date": (cur - timedelta(days=1)).isoformat(),
-            "next_date": (cur + timedelta(days=1)).isoformat(),
+            "prev_date": prev_date, "next_date": next_date,
             "daily_pnl": sum((t.get("realized_pnl") or 0) for t in rows),
             "has_pnl": any(t.get("realized_pnl") is not None for t in rows),
         }
 
     @app.get("/trade", response_class=HTMLResponse)
     def trade_page(request: Request):
-        # 섹션별 실패가 페이지 전체를 깨지 않게 각각 try/except로 감싼다(브로커 미설정/네트워크 등).
+        # 진입을 빠르게: 계좌(A)·장상태(E)만 서버에서 채우고, 잔고(B)·매매내역(C)은 비동기 로드한다
+        # (아래 partial이 hx-trigger="load"로 가져옴 — 진입 시 'KIS 잔고+체결조회' 동기 대기를 없앤다).
         live = config.get_live_config()
         broker, broker_err = get_broker()
-        account, balance, market = None, None, None
+        account, market = None, None
         errors = {"account": None, "balance": None, "market": None}
         if broker is None:
             errors = {k: broker_err for k in errors}
         else:
             try: account = broker.account_info()
             except Exception as e: errors["account"] = f"{type(e).__name__}: {e}"
-            try: balance = broker.balance()
-            except Exception as e: errors["balance"] = f"{type(e).__name__}: {e}"
             try: market = broker.market_status()
             except Exception as e: errors["market"] = f"{type(e).__name__}: {e}"
 
-        # C. 매매 내역 — 날짜 선택 + 화살표. 브로커 체결조회(KIS 실거래) 우선, 없으면 자체 거래로그.
         sel_date = request.query_params.get("date") or _seoul_today()
-        tv = _trades_view(sel_date)
+        prev_date, next_date = _date_nav(sel_date)
 
         # 자동매매 실행 상태 라벨(E와 결합): 꺼짐 / 장중 실행 / 장마감 대기.
         if not live["enabled"]:
@@ -626,10 +627,12 @@ def register_dashboard(
             run_state = "idle"  # 켜져 있으나 장마감/휴장 → 대기
 
         return templates.TemplateResponse(request, "trade.html", {
-            "live": live, "account": account, "balance": balance, "market": market,
+            "live": live, "account": account, "market": market,
             "errors": errors, "broker_ok": broker is not None,
-            **tv, "run_state": run_state,
-            "format_won": format_won,
+            "loading": True,  # B/C는 '불러오는 중' 자리표시 → hx로 채움
+            "balance": None, "trades": [], "sel_date": sel_date,
+            "prev_date": prev_date, "next_date": next_date, "daily_pnl": 0, "has_pnl": False,
+            "run_state": run_state, "format_won": format_won,
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })

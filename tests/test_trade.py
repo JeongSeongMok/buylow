@@ -161,10 +161,18 @@ def client(tmp_path, isolated_config):
 def test_trade_page_renders(client):
     r = client.get("/trade")
     assert r.status_code == 200
-    assert "자동매매" in r.text and "삼성전자" in r.text  # B 잔고 표
-    assert "장중" in r.text                              # E 장상태 배지
+    assert "자동매매" in r.text                          # D 토글
+    assert "장중" in r.text                              # E 장상태(서버 렌더)
     assert "모의투자" in r.text                          # A 환경 배지(모의일 때만)
-    assert "안전 설정" not in r.text                     # 안전설정 UI는 제거됨
+    # 잔고·매매내역은 진입 시 비동기 로드 — 자리표시 + hx 트리거
+    assert "불러오는 중" in r.text
+    assert 'hx-get="/trade/balance"' in r.text and "load, every 10s" in r.text
+
+
+def test_trade_page_balance_is_lazy(client):
+    # 진입 시 잔고 데이터(삼성전자)는 서버 렌더에 없고, /trade/balance 비동기로만 온다.
+    assert "삼성전자" not in client.get("/trade").text
+    assert "삼성전자" in client.get("/trade/balance").text
 
 
 def test_trade_page_hides_badge_for_real(tmp_path, isolated_config):
@@ -186,7 +194,7 @@ def test_trade_balance_partial_polls(client):
     r = client.get("/trade/balance")
     assert r.status_code == 200
     assert "삼성전자" in r.text
-    assert 'hx-get="/trade/balance"' in r.text and 'hx-trigger="every 10s"' in r.text
+    assert 'hx-get="/trade/balance"' in r.text and "every 10s" in r.text
 
 
 def test_trade_trades_partial_polls(client):
