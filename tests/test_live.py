@@ -26,6 +26,32 @@ def test_env_is_derived_from_broker():
     assert config.get_live_config()["env"] == "real"
 
 
+def test_custom_index_crud_and_all_indices():
+    # 커스텀 인덱스 저장/조회/삭제 + 내장과 통합.
+    config.save_custom_index("반도체3종", "005930,000660,005380")
+    ci = config.get_custom_indices()
+    assert ci["반도체3종"]["tickers"] == ["005930", "000660", "005380"]
+    # all_indices: 내장 먼저, 커스텀 뒤(★ 라벨, custom 플래그)
+    allx = config.all_indices()
+    keys = [i["key"] for i in allx]
+    assert "KOSPI200" in keys and "반도체3종" in keys
+    custom = next(i for i in allx if i["key"] == "반도체3종")
+    assert custom["custom"] is True and custom["label"].startswith("★")
+    # 삭제
+    assert config.delete_custom_index("반도체3종") is True
+    assert "반도체3종" not in config.get_custom_indices()
+
+
+def test_custom_index_rejects_bad_input():
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        config.save_custom_index("", "005930")          # 이름 없음
+    with _pt.raises(ValueError):
+        config.save_custom_index("그룹", "")             # 종목 없음
+    with _pt.raises(ValueError):
+        config.save_custom_index("KOSPI200", "005930")   # 내장명 충돌
+
+
 def test_clear_broker_secrets_removes_only_that_broker():
     config.save_secrets({"kis_app_key": "RK", "kis_app_secret": "RS", "kis_account_no": "RA",
                          "kis_demo_app_key": "DK", "kis_demo_app_secret": "DS"})

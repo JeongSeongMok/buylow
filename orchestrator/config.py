@@ -256,6 +256,65 @@ def live_arming_ok(cfg: dict | None = None) -> tuple[bool, str]:
     return True, "ok"
 
 
+# ── 커스텀 인덱스(사용자 정의 종목 묶음) ──────────────────────────────────────
+# 내장 인덱스(KOSPI200 등, etl.universe.INDEXES)와 동일하게 백테스트·데이터탭·적재현황에서 쓰도록
+# 통합한다. 내장은 pykrx 지수코드로 구성종목을 조회하지만, 커스텀은 사용자가 묶은 종목을 그대로 쓴다.
+# 저장은 사용자 데이터라 config.local.yaml(gitignore)에 둔다.
+
+def get_custom_indices() -> dict:
+    """커스텀 인덱스 {key: {"label": str, "tickers": [코드...]}}. 없으면 {}."""
+    ci = _load_local().get("custom_indices") or {}
+    return ci if isinstance(ci, dict) else {}
+
+
+def save_custom_index(label: str, tickers) -> str:
+    """커스텀 인덱스 저장(생성/덮어쓰기). key=label. 내장 인덱스명과 충돌하면 거부. 저장한 key 반환."""
+    from etl.universe import INDEX_CODES
+    label = (label or "").strip()
+    if not label:
+        raise ValueError("인덱스 이름을 입력하세요")
+    if label.upper() in INDEX_CODES:
+        raise ValueError(f"'{label}'은(는) 내장 인덱스명과 겹칩니다 — 다른 이름을 쓰세요")
+    codes = [t.strip() for t in (tickers if isinstance(tickers, list) else str(tickers).split(","))]
+    codes = [c for c in codes if c]
+    if not codes:
+        raise ValueError("종목을 하나 이상 추가하세요")
+    # 중복 제거(입력 순서 보존)
+    seen, uniq = set(), []
+    for c in codes:
+        if c not in seen:
+            seen.add(c); uniq.append(c)
+    data = _load_local()
+    ci = data.setdefault("custom_indices", {})
+    ci[label] = {"label": label, "tickers": uniq}
+    _write_local(data)
+    return label
+
+
+def delete_custom_index(key: str) -> bool:
+    """커스텀 인덱스 삭제. 삭제했으면 True."""
+    data = _load_local()
+    ci = data.get("custom_indices") or {}
+    if key in ci:
+        ci.pop(key)
+        data["custom_indices"] = ci
+        _write_local(data)
+        return True
+    return False
+
+
+def all_indices() -> list[dict]:
+    """내장 + 커스텀 인덱스 통합 목록 [{key, label, custom}]. 대시보드 동적 렌더용(SSOT 통합).
+
+    내장(etl.universe.INDEXES)이 먼저, 커스텀이 뒤. 커스텀 라벨은 ★ 접두로 구분 표시.
+    """
+    from etl.universe import list_indices
+    out = [{"key": i["key"], "label": i["label"], "custom": False} for i in list_indices()]
+    for key, v in get_custom_indices().items():
+        out.append({"key": key, "label": "★ " + (v.get("label") or key), "custom": True})
+    return out
+
+
 def get_scheduler_config() -> dict:
     """일일 증분 적재 스케줄 설정. 기본 비활성(사용자가 켜야 자동 적재)."""
     sc = _load_local().get("scheduler") or {}

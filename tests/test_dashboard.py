@@ -79,6 +79,22 @@ def test_backtest_page_renders(client):
     assert "백테스트" in r.text and "실행 이력" in r.text
 
 
+def test_custom_index_end_to_end(client, isolated_config):
+    # 커스텀 인덱스 생성 → 데이터탭 노출 → /universe/index 조회 → 삭제.
+    client.post("/universe/custom", data={"name": "내그룹", "universe": "005930,000660"},
+                follow_redirects=False)
+    assert "내그룹" in isolated_config.get_custom_indices()
+    # 적재 0건이면 loaded 비어 members 그대로 반환 + custom 플래그
+    j = client.get("/universe/index/내그룹").json()
+    assert j.get("custom") is True and set(j["tickers"]) == {"005930", "000660"}
+    # 데이터탭: 분봉적재 버튼 + '내 인덱스' 카드에 노출
+    dl = client.get("/data").text
+    assert "mAddIndex('내그룹'" in dl and "내 인덱스" in dl
+    # 삭제
+    client.post("/universe/custom/delete", data={"key": "내그룹"}, follow_redirects=False)
+    assert "내그룹" not in isolated_config.get_custom_indices()
+
+
 def test_index_selectors_rendered_from_ssot(client):
     # 인덱스 선택은 SSOT(etl.universe.INDEXES)에서 동적 렌더된다(데이터 탭: 분봉적재 버튼 + 적재현황 필터).
     # (백테스트 종목선택 버튼도 동일 패턴이나, 데이터 0건이면 종목 UI를 숨기므로 데이터 탭으로 검증.)

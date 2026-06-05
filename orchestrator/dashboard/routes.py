@@ -287,11 +287,10 @@ def register_dashboard(
     def backtest_page(request: Request):
         from datetime import date, timedelta
         from etl.names import load_names
-        from etl.universe import list_indices
         today = date.today()
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
-            "indices": list_indices(),  # 인덱스 버튼 동적 렌더(SSOT: etl.universe.INDEXES)
+            "indices": config.all_indices(),  # 내장+커스텀 인덱스 버튼 동적 렌더
             "has_strategy": config.get_strategy() is not None,
             "data_loaded": _loaded_count(),
             "default_data_folder": config.get_data_folder(),
@@ -340,10 +339,18 @@ def register_dashboard(
 
     @app.get("/universe/index/{name}")
     def universe_index(name: str):
-        # 인덱스(KOSPI200/KOSDAQ150) 구성종목을 한 번에 추가하기 위한 조회.
-        # 적재된 종목과 교집합만 반환(백테스트 가능한 것만). KRX 로그인이 필요할 수 있음.
+        # 인덱스(내장 KOSPI200/KOSDAQ150 또는 커스텀 종목 그룹) 구성종목을 한 번에 추가하기 위한 조회.
+        # 적재된 종목과 교집합만 반환(백테스트 가능한 것만).
         from etl.universe import INDEX_CODES, index_members_cached
         from etl.catalog import list_price_tickers
+        loaded = set(list_price_tickers(config.get_data_folder()))
+        # 커스텀 인덱스 우선 — 저장된 종목을 그대로 쓴다(pykrx 조회 불필요).
+        custom = config.get_custom_indices()
+        if name in custom:
+            members = custom[name].get("tickers", [])
+            tickers = [t for t in members if t in loaded] if loaded else list(members)
+            return {"index": name, "tickers": tickers, "total": len(members),
+                    "available": len(tickers), "custom": True}
         key = name.upper()
         if key not in INDEX_CODES:
             return {"error": f"지원하지 않는 인덱스: {name}", "tickers": []}
@@ -353,9 +360,24 @@ def register_dashboard(
         except Exception as e:
             return {"error": f"구성종목 조회 실패({type(e).__name__}) — KRX 로그인(설정) 필요할 수 있음",
                     "tickers": []}
-        loaded = set(list_price_tickers(config.get_data_folder()))
         tickers = [t for t in members if t in loaded] if loaded else list(members)
         return {"index": key, "tickers": tickers, "total": len(members), "available": len(tickers)}
+
+    @app.post("/universe/custom")
+    async def universe_custom_create(request: Request):
+        # 커스텀 인덱스(종목 묶음) 생성/덮어쓰기. 데이터 탭 '내 인덱스' 카드에서 호출.
+        form = await request.form()
+        try:
+            config.save_custom_index(form.get("name"), form.get("universe") or "")
+        except ValueError as e:
+            return RedirectResponse(url=f"/data?error={e}", status_code=303)
+        return RedirectResponse(url="/data", status_code=303)
+
+    @app.post("/universe/custom/delete")
+    async def universe_custom_delete(request: Request):
+        form = await request.form()
+        config.delete_custom_index(form.get("key") or "")
+        return RedirectResponse(url="/data", status_code=303)
 
     @app.get("/ui/runs/{run_id}", response_class=HTMLResponse)
     def ui_run_detail(request: Request, run_id: str):
@@ -423,7 +445,6 @@ def register_dashboard(
         # 목록은 '파일 존재 여부'만 본다(glob) — 수천 종목의 일봉/수급을 다 파싱하면
         # 페이지가 멈추므로, 상세 행 수는 종목 상세(/data/{ticker})에서만 계산한다.
         from etl import catalog
-        from etl.universe import list_indices
         data_dir = config.get_data_folder()
         from etl.names import load_names
         names = load_names(data_dir)
@@ -438,7 +459,8 @@ def register_dashboard(
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
-            "indices": list_indices(),  # 분봉적재 버튼 + 적재현황 필터 동적 렌더(SSOT)
+            "indices": config.all_indices(),  # 내장+커스텀 — 분봉적재 버튼 + 적재현황 필터
+            "custom_indices": config.get_custom_indices(),  # '내 인덱스' 카드 목록/삭제용
             "loaded_codes": [t["ticker"] for t in tickers],  # [전체종목] 일괄 칩 추가용(적재된 전 종목)
             "latest_date": catalog.latest_loaded_date(data_dir),
             # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
