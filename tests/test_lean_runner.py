@@ -4,7 +4,9 @@ import os
 
 import pytest
 
-from orchestrator.lean.runner import RunRequest, RunResult, _build_config, _STAT_RE
+from orchestrator.lean.runner import (
+    RunRequest, RunResult, _build_config, _STAT_RE, _statistics_from_result,
+)
 
 
 def test_request_defaults_algorithm_type_to_filename_stem():
@@ -64,6 +66,24 @@ def test_stat_regex_parses_name_and_value(line, name, value):
     assert m is not None
     assert m.group(1).strip() == name
     assert m.group(2).strip() == value
+
+
+def test_statistics_from_result_reads_summary_json(tmp_path):
+    import json
+    p = tmp_path / "x-summary.json"
+    p.write_text(json.dumps({"statistics": {"Net Profit": "-4.926%", "Total Orders": "343"}}),
+                 encoding="utf-8")
+    stats = _statistics_from_result(p)
+    assert stats["Net Profit"] == "-4.926%" and stats["Total Orders"] == "343"
+
+
+def test_statistics_from_result_handles_missing_or_bad(tmp_path):
+    assert _statistics_from_result(None) == {}
+    assert _statistics_from_result(tmp_path / "nope.json") == {}
+    bad = tmp_path / "bad.json"; bad.write_text("not json", encoding="utf-8")
+    assert _statistics_from_result(bad) == {}
+    empty = tmp_path / "e.json"; empty.write_text("{}", encoding="utf-8")
+    assert _statistics_from_result(empty) == {}
 
 
 def test_run_result_success_only_on_zero_exit(tmp_path):

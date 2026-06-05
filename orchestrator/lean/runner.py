@@ -26,6 +26,23 @@ RUNS_DIR = REPO_ROOT / "runs"
 _STAT_RE = re.compile(r"STATISTICS:: (.+?)\s+(\S+)\s*$")
 
 
+def _statistics_from_result(path) -> dict[str, str]:
+    """결과 요약 JSON(summary.json)의 statistics를 읽는다(권위 있는 값).
+
+    왜: stdout의 "STATISTICS::" 스크랩은 알고리즘이 로그를 많이 찍으면(예: 분봉·장기 백테스트의
+    대량 RULEHIT 로그) LEAN 로그 한도에 걸려 마지막 통계 블록이 잘려, 통계가 빈 채로 저장돼
+    대시보드에 순손익·주문수가 '-'로 뜬다. 파일은 한도와 무관하게 항상 기록되므로 1순위로 쓴다.
+    """
+    if not path:
+        return {}
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    stats = data.get("statistics") or data.get("Statistics") or {}
+    return {str(k): str(v) for k, v in stats.items()} if isinstance(stats, dict) else {}
+
+
 @dataclass
 class RunRequest:
     """백테스트 1건의 요청."""
@@ -257,6 +274,11 @@ class LeanRunner:
         # 결과 요약 JSON 위치 (algorithm-id 기반). 못 찾으면 None.
         result_json = next(iter(run_dir.glob("*-summary.json")), None) \
             or next(iter(run_dir.glob(f"{run_id}.json")), None)
+
+        # 통계는 summary.json을 1순위로(권위) — stdout 스크랩은 로그 한도로 잘릴 수 있어 폴백.
+        file_stats = _statistics_from_result(result_json)
+        if file_stats:
+            statistics = file_stats
 
         return RunResult(
             run_id=run_id,
