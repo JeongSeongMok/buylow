@@ -1,14 +1,14 @@
 {# C. 매매 내역 — 진입 시 load로 1회 + 10초 갱신. 날짜 화살표/선택은 이 섹션만 부분 교체(전체 리로드 X). #}
-<section class="card" id="trade-trades"
-         hx-get="/trade/trades?date={{ sel_date }}" hx-trigger="load, every 10s" hx-swap="outerHTML">
+<section class="card" id="trade-trades" hx-ext="morph"
+         hx-get="/trade/trades?date={{ sel_date }}" hx-trigger="load, every 10s" hx-swap="morph">
   <h2>매매 내역 <small class="meta">{% if at %}· 기준 {{ at }}{% else %}· 자동 갱신{% endif %}</small></h2>
   <div class="dates">
     <a class="chip" style="cursor:pointer"
-       hx-get="/trade/trades?date={{ prev_date }}" hx-target="#trade-trades" hx-swap="outerHTML">◀ {{ prev_date }}</a>
+       hx-get="/trade/trades?date={{ prev_date }}" hx-target="#trade-trades" hx-swap="morph">◀ {{ prev_date }}</a>
     <input type="date" name="date" value="{{ sel_date }}"
-           hx-get="/trade/trades" hx-target="#trade-trades" hx-swap="outerHTML" hx-trigger="change">
+           hx-get="/trade/trades" hx-target="#trade-trades" hx-swap="morph" hx-trigger="change">
     <a class="chip" style="cursor:pointer"
-       hx-get="/trade/trades?date={{ next_date }}" hx-target="#trade-trades" hx-swap="outerHTML">{{ next_date }} ▶</a>
+       hx-get="/trade/trades?date={{ next_date }}" hx-target="#trade-trades" hx-swap="morph">{{ next_date }} ▶</a>
   </div>
   {% if loading %}
   <p class="meta"><span class="spinner"></span>매매 내역 불러오는 중…</p>
