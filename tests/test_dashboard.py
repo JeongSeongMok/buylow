@@ -168,6 +168,8 @@ def test_strategy_save_persists_intraday_execution(client, isolated_config):
 def test_strategy_page_shows_timing_controls(client):
     t = client.get("/strategy").text
     assert "리스크 · 체결" in t and 'name="resolution"' in t and 'name="daily_fill"' in t
+    # 일봉+종가의 라이브 체결 괴리 주의문(백테스트=15:30 종가, 라이브=≈15:14 시장가)
+    assert "daily-close-note" in t and "라이브 매매 주의" in t and "15:14" in t
 
 
 def test_settings_page_shows_broker_and_kis_keys(client):

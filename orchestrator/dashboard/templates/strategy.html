@@ -93,11 +93,16 @@
       <div id="daily-opts">
         <p class="meta">선별 <b>전날 종가 1회</b> · 리스크 평가 <b>종가 1회</b> <span class="meta">(일봉 고정)</span></p>
         <label class="subhead-label">체결 시점
-          <select name="daily_fill">
+          <select name="daily_fill" id="daily-fill-sel" onchange="toggleDailyFill()">
             <option value="open" {{ 'selected' if ex.get('daily_fill', 'open') != 'close' }}>다음 거래일 시가</option>
             <option value="close" {{ 'selected' if ex.get('daily_fill', 'open') == 'close' }}>다음 거래일 종가</option>
           </select>
           <small>신호는 당일 종가에 계산되므로 룩어헤드 방지로 체결은 다음 거래일입니다.<br>'종가'는 MarketOnClose 주문으로 다음 거래일 종가에 체결됩니다.</small></label>
+        <p class="notice" id="daily-close-note">⚠️ <b>라이브 매매 주의</b>: 백테스트는 다음 거래일 <b>정확한 종가(15:30)</b>에 체결합니다.
+          하지만 라이브에서는 KIS 어댑터가 종가 단일가(15:20~15:30) 전용 주문을 아직 지원하지 않아,
+          LEAN이 <b>마감 약 15.5분 전(≈15:14)</b>에 <b>일반 시장가</b>로 주문을 냅니다.<br>
+          즉 라이브 체결가는 <b>15:14쯤의 시장가</b>로, 백테스트의 종가와 시점·가격이 다를 수 있습니다(룩어헤드는 없음).
+          백테스트와 라이브를 가장 일치시키려면 <b>'다음 거래일 시가'</b>를 쓰세요.</p>
       </div>
 
       {# ── 해상도=분봉 전용 ── #}
@@ -152,9 +157,15 @@
     document.getElementById('minute-opts').hidden = !minute;
     document.getElementById('daily-opts').hidden = minute;
   }
+  // 일봉+종가 선택 시에만 라이브 종가 체결 주의문을 보인다(백테스트-라이브 괴리 고지).
+  function toggleDailyFill() {
+    const close = document.getElementById('daily-fill-sel').value === 'close';
+    document.getElementById('daily-close-note').hidden = !close;
+  }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
   toggleResolution();
+  toggleDailyFill();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();
 </script>
