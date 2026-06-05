@@ -47,6 +47,10 @@ _BALANCE_TR = {"real": "TTTC8434R", "demo": "VTTC8434R"}
 # 국내휴장일조회 — 개장(거래)일 여부. 실전/모의 공통 TR. (일 1회 호출 권장)
 _HOLIDAY_PATH = "/uapi/domestic-stock/v1/quotations/chk-holiday"
 _HOLIDAY_TR = "CTCA0903R"
+# 주식일별주문체결조회 — 계좌의 체결내역(앱/HTS/자동매매 무관). 3개월 이내(inner) TR.
+# ⚠️ 모의계좌는 호출당 15건, 실전 100건(이후 연속조회). 현재는 첫 페이지만 — 하루 체결이 많으면 일부 누락.
+_CCLD_PATH = "/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+_CCLD_TR = {"real": "TTTC0081R", "demo": "VTTC0081R"}
 
 
 # KIS 레이트리밋 에러코드 — 초당 거래건수 초과. 분봉처럼 호출을 연발하면 즉시 걸린다.
@@ -445,6 +449,45 @@ class KisClient:
             "total_eval": int(round(self._num(o2.get("tot_evlu_amt")))),
             "net_asset": int(round(self._num(o2.get("nass_amt")))),
         }
+
+    def fetch_executions(self, cano: str, acnt_prdt_cd: str, start: date, end: date) -> list[dict]:
+        """주식일별주문체결조회 — [start,end] 체결 내역(KIS 앱/HTS/자동매매 무관). env별 TR 분기.
+
+        반환 dict: {date(YYYYMMDD), time(HHMMSS), ticker, name, buy(bool), qty, price(원), amount(원),
+        reason}. 체결 수량 0(미체결)은 제외. 첫 페이지만(모의 15·실전 100건).
+        """
+        if not cano:
+            raise KisError("계좌번호(CANO)가 필요합니다.")
+        tr = _CCLD_TR.get(self.env, _CCLD_TR["real"])
+        data = self._get(_CCLD_PATH, tr, {
+            "CANO": cano, "ACNT_PRDT_CD": acnt_prdt_cd,
+            "INQR_STRT_DT": start.strftime("%Y%m%d"), "INQR_END_DT": end.strftime("%Y%m%d"),
+            "SLL_BUY_DVSN_CD": "00",  # 전체(매수+매도)
+            "CCLD_DVSN": "01",        # 체결만
+            "INQR_DVSN": "00",        # 역순(최신)
+            "INQR_DVSN_3": "00",
+            "PDNO": "", "ORD_GNO_BRNO": "", "ODNO": "", "INQR_DVSN_1": "",
+            "CTX_AREA_FK100": "", "CTX_AREA_NK100": "", "EXCG_ID_DVSN_CD": "KRX",
+        })
+        out = []
+        for row in (data.get("output1") or []):
+            qty = int(self._num(row.get("tot_ccld_qty")))
+            if qty <= 0:  # 미체결/취소 스킵
+                continue
+            price = self._num(row.get("avg_prvs")) or self._num(row.get("ord_unpr"))
+            amt = self._num(row.get("tot_ccld_amt")) or price * qty
+            out.append({
+                "date": row.get("ord_dt", ""),
+                "time": (row.get("ord_tmd") or "").zfill(6),
+                "ticker": row.get("pdno", ""),
+                "name": row.get("prdt_name", ""),
+                "buy": row.get("sll_buy_dvsn_cd") == "02",  # 02 매수 / 01 매도
+                "qty": qty,
+                "price": int(round(price)),
+                "amount": int(round(amt)),
+                "reason": row.get("ord_dvsn_name") or "KIS 체결",
+            })
+        return out
 
     def check_market_open(self, day: date) -> bool:
         """국내휴장일조회 — 해당일이 개장(거래)일이면 True. (env 무관 공통 TR)"""

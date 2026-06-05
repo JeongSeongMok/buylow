@@ -93,12 +93,17 @@ Every Claude session working in this repo follows these:
   2열 **C** 매매내역(날짜 picker + ◀▶ 인접 거래일 + 일별 실현손익).
 - **브로커 무관 읽기 계층** — `brokers/base.py` `TradingBroker`(KIS∩Toss 교집합: account_info/balance/market_status)
   + `brokers/kis_broker.py` `KisBroker`(KisClient 래핑, Asia/Seoul 시각으로 장중 판정). KIS 읽기 메서드
-  `KisClient.fetch_balance`(보유+예수금)·`check_market_open`(chk_holiday) 추가(real/demo TR 분기).
-- **C는 자체 거래로그** — `orchestrator/persistence/trade_store.py` `TradeStore`(SQLite trades 테이블):
-  record/list_trades(date)/trade_dates/adjacent_date/daily_pnl. **Toss가 종료주문 조회 미지원**이라
-  브로커 API 대신 buylow가 낸 주문·체결을 SoR로 보존(브로커 무관). 라이브 엔진 체결이 여기 적재될 예정.
-- **D 제어 표면** — `/trade/toggle`(켤 때 실전은 무장 가드 통과 필수), `/trade/arm`(무장/환경/한도/HTS ID
-  저장). 섹션별 try/except로 브로커 실패가 페이지를 깨지 않음. 테스트: `tests/test_trade.py`(11), `test_live.py`.
+  `KisClient.fetch_balance`(보유+예수금)·`check_market_open`(chk_holiday)·`fetch_executions`(체결내역,
+  inquire-daily-ccld) 추가(real/demo TR 분기). `KisBroker.trades(date)`가 체결조회를 매매내역 dict로.
+- **C 매매내역 = 브로커 체결조회 우선(KIS 실거래)** — `KisBroker.trades(date)`가 KIS `inquire-daily-ccld`로
+  계좌의 실제 체결(앱·HTS·자동매매 무관)을 보여준다. 체결조회 미지원 브로커(Toss 등)는 buylow 자체
+  거래로그(`TradeStore`, SQLite)로 폴백. 화살표는 달력 ±1일(체결조회는 임의 날짜 조회 가능). 체결조회엔
+  실현손익이 없어 손익 합은 자체 로그가 있을 때만 표시(`has_pnl`). **잔고/보유종목은 `inquire-balance`라
+  KIS 앱 매수가 자동 반영**.
+- **B/C 10초 폴링** — 잔고(`/trade/balance`)·매매내역(`/trade/trades?date=`)을 부분 템플릿
+  (`partials/trade_balance.html`·`trade_trades.html`)으로 분리, HTMX `hx-trigger="every 10s"`로 자기 갱신.
+- **D 제어 표면** — `/trade/toggle`(켤 때 실전은 무장 가드 통과 필수), `/trade/arm`(무장/한도/HTS ID
+  저장). 섹션별 try/except로 브로커 실패가 페이지를 깨지 않음. 테스트: `tests/test_trade.py`, `test_live.py`.
 
 **Not done / gated:**
 - ⛔ **Real-order e2e** — needs a KIS account; verify on **모의투자(demo)** first (procedure in LIVE_KIS.md). Real(real) must stay unarmed until validated. Remaining: live-process supervision/kill-switch (JobManager 확장) — **D 토글은 현재 의도·무장 상태를 저장하고 장상태로 실행여부를 표시**하며, 토글에서 라이브 LEAN 프로세스를 직접 spawn/kill + 라이브 유니버스 선택은 후속. open-order resync on restart, precise fill-fee reporting, 체결통보 HTS-ID 의존.

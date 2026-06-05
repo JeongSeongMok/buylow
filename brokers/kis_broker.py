@@ -64,6 +64,29 @@ class KisBroker:
             "items": b["holdings"],
         }
 
+    def trades(self, date_iso: str) -> list[dict]:
+        """해당 날짜의 KIS 계좌 체결내역(앱/HTS/자동매매 무관). 매매내역 표용 dict 리스트.
+
+        반환: [{ts(ISO), ticker, name, side(BUY|SELL), qty, price, amount, realized_pnl(None), reason}].
+        체결조회엔 실현손익이 없어 realized_pnl은 None(손익 합은 표시 생략).
+        """
+        from datetime import date as _date
+        y, m, d = date_iso.split("-")
+        day = _date(int(y), int(m), int(d))
+        rows = self._client.fetch_executions(self._cano, self._acnt_prdt_cd, day, day)
+        out = []
+        for r in rows:
+            t = r["time"] or "000000"
+            out.append({
+                "ts": f"{date_iso}T{t[:2]}:{t[2:4]}:{t[4:6]}",
+                "ticker": r["ticker"], "name": r["name"],
+                "side": "BUY" if r["buy"] else "SELL",
+                "qty": r["qty"], "price": r["price"], "amount": r["amount"],
+                "realized_pnl": None, "reason": r["reason"],
+            })
+        out.sort(key=lambda x: x["ts"])
+        return out
+
     def market_status(self) -> dict:
         now = self._now()
         today = now.date()

@@ -11,9 +11,11 @@
     {% if next_date %}<a class="chip" href="/trade?date={{ next_date }}">{{ next_date }} ▶</a>
     {% else %}<span class="chip" style="opacity:.4">▶</span>{% endif %}
   </div>
+  {% if has_pnl %}
   <p class="meta">실현손익 합:
     <span class="{{ 'pos' if daily_pnl >= 0 else 'neg' }}">
       {{ '+' if daily_pnl >= 0 else '' }}{{ format_won(daily_pnl) }}</span></p>
+  {% endif %}
   <div class="scrolly">
     <table class="runs">
       <thead><tr><th>시각</th><th>종목</th><th>구분</th><th>수량</th><th>단가</th><th>금액</th><th>손익</th><th>사유</th></tr></thead>
@@ -36,5 +38,6 @@
       </tbody>
     </table>
   </div>
-  <p class="meta">※ 매매 내역은 buylow가 직접 낸 주문·체결 기록입니다(증권사 종료주문 조회는 토스 미지원이라 자체 기록 사용).</p>
+  <p class="meta">※ KIS 계좌의 실제 체결내역입니다(앱·HTS·자동매매 무관). 체결조회라 실현손익은 표시되지 않습니다.
+    (토스 등 체결조회 미지원 증권사는 buylow 자체 주문기록으로 대체됩니다.)</p>
 </section>

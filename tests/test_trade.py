@@ -136,6 +136,10 @@ class FakeBroker:
     def market_status(self):
         return {"open": True, "session": "regular", "is_holiday": False,
                 "env": "demo", "as_of": "2026-06-01 10:00"}
+    def trades(self, date_iso):
+        return [{"ts": f"{date_iso}T10:00:00", "ticker": "005930", "name": "삼성전자",
+                 "side": "BUY", "qty": 10, "price": 71000, "amount": 710000,
+                 "realized_pnl": None, "reason": "KIS 체결"}]
 
 
 @pytest.fixture
@@ -189,6 +193,36 @@ def test_trade_trades_partial_polls(client):
     r = client.get("/trade/trades?date=2026-06-05")
     assert r.status_code == 200
     assert 'hx-get="/trade/trades?date=2026-06-05"' in r.text and 'every 10s' in r.text
+    assert "삼성전자" in r.text  # 브로커 체결조회(trades) 결과 표시
+
+
+def test_fetch_executions_normalizes(tmp_path):
+    payload = {"rt_cd": "0", "output1": [
+        {"ord_dt": "20260605", "ord_tmd": "100530", "pdno": "005930", "prdt_name": "삼성전자",
+         "sll_buy_dvsn_cd": "02", "tot_ccld_qty": "10", "avg_prvs": "71000",
+         "tot_ccld_amt": "710000", "ord_dvsn_name": "시장가"},
+        {"pdno": "000660", "tot_ccld_qty": "0"},  # 미체결 → 제외
+    ], "output2": {}}
+    sess = FakeSession(get_responses=[FakeResp(200, payload)])
+    rows = _client(tmp_path, sess, env="demo").fetch_executions("12345678", "01",
+                                                                date(2026, 6, 5), date(2026, 6, 5))
+    assert len(rows) == 1
+    r0 = rows[0]
+    assert r0["buy"] and r0["ticker"] == "005930" and r0["qty"] == 10 and r0["price"] == 71000
+    assert sess.get_calls[0]["headers"]["tr_id"] == "VTTC0081R"  # 모의 TR
+
+
+def test_kis_broker_trades_maps_executions():
+    class FakeClient:
+        def fetch_executions(self, cano, prdt, start, end):
+            return [{"date": "20260605", "time": "100530", "ticker": "005930", "name": "삼성전자",
+                     "buy": True, "qty": 10, "price": 71000, "amount": 710000, "reason": "시장가"}]
+    from brokers.kis_broker import KisBroker
+    b = KisBroker("k", "s", "12345678-01", env="demo", client=FakeClient())
+    t = b.trades("2026-06-05")
+    assert len(t) == 1
+    assert t[0]["ts"] == "2026-06-05T10:05:30" and t[0]["side"] == "BUY"
+    assert t[0]["realized_pnl"] is None
 
 
 def test_trade_page_graceful_when_broker_missing(tmp_path, isolated_config):

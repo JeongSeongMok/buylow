@@ -47,3 +47,8 @@ class TradingBroker(Protocol):
     def market_status(self) -> dict:
         """{open, session, is_holiday, env, as_of}."""
         ...
+
+    def trades(self, date_iso: str) -> list[dict]:
+        """해당 날짜의 계좌 체결내역(선택 — 지원 브로커만). 미지원이면 buylow 자체 거래로그로 폴백.
+        [{ts,ticker,name,side,qty,price,amount,realized_pnl,reason}]. (KIS는 체결조회로 실거래 반영)"""
+        ...

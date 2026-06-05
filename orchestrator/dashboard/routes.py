@@ -573,6 +573,29 @@ def register_dashboard(
         from zoneinfo import ZoneInfo
         return datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
 
+    def _trades_view(sel_date: str) -> dict:
+        """매매내역 컨텍스트 — 브로커 체결조회(KIS 앱/자동매매 무관) 우선, 미지원/실패 시 자체 거래로그.
+        화살표는 달력 전일/익일(체결조회는 임의 날짜 조회 가능)."""
+        from datetime import date as _date, timedelta
+        broker, _err = get_broker()
+        rows = None
+        if broker is not None and hasattr(broker, "trades"):
+            try:
+                rows = broker.trades(sel_date)
+            except Exception:
+                rows = None
+        if rows is None:
+            rows = trade_store.list_trades(sel_date)
+        y, m, d = sel_date.split("-")
+        cur = _date(int(y), int(m), int(d))
+        return {
+            "trades": rows, "sel_date": sel_date,
+            "prev_date": (cur - timedelta(days=1)).isoformat(),
+            "next_date": (cur + timedelta(days=1)).isoformat(),
+            "daily_pnl": sum((t.get("realized_pnl") or 0) for t in rows),
+            "has_pnl": any(t.get("realized_pnl") is not None for t in rows),
+        }
+
     @app.get("/trade", response_class=HTMLResponse)
     def trade_page(request: Request):
         # 섹션별 실패가 페이지 전체를 깨지 않게 각각 try/except로 감싼다(브로커 미설정/네트워크 등).
@@ -590,12 +613,9 @@ def register_dashboard(
             try: market = broker.market_status()
             except Exception as e: errors["market"] = f"{type(e).__name__}: {e}"
 
-        # C. 매매 내역 — 날짜 선택 + 인접 거래일 화살표(자체 거래로그).
+        # C. 매매 내역 — 날짜 선택 + 화살표. 브로커 체결조회(KIS 실거래) 우선, 없으면 자체 거래로그.
         sel_date = request.query_params.get("date") or _seoul_today()
-        trades = trade_store.list_trades(sel_date)
-        prev_date = trade_store.adjacent_date(sel_date, -1)
-        next_date = trade_store.adjacent_date(sel_date, +1)
-        daily_pnl = trade_store.daily_pnl(sel_date)
+        tv = _trades_view(sel_date)
 
         # 자동매매 실행 상태 라벨(E와 결합): 꺼짐 / 장중 실행 / 장마감 대기.
         if not live["enabled"]:
@@ -608,8 +628,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "trade.html", {
             "live": live, "account": account, "balance": balance, "market": market,
             "errors": errors, "broker_ok": broker is not None,
-            "trades": trades, "sel_date": sel_date, "prev_date": prev_date,
-            "next_date": next_date, "daily_pnl": daily_pnl, "run_state": run_state,
+            **tv, "run_state": run_state,
             "format_won": format_won,
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
@@ -632,13 +651,11 @@ def register_dashboard(
 
     @app.get("/trade/trades", response_class=HTMLResponse)
     def trade_trades(request: Request):
-        # 매매내역 부분 갱신(선택 날짜 기준, 10초 폴링).
+        # 매매내역 부분 갱신(선택 날짜 기준, 10초 폴링). 브로커 체결조회 우선(KIS 실거래).
         sel_date = request.query_params.get("date") or _seoul_today()
-        return templates.TemplateResponse(request, "partials/trade_trades.html", {
-            "trades": trade_store.list_trades(sel_date), "sel_date": sel_date,
-            "prev_date": trade_store.adjacent_date(sel_date, -1),
-            "next_date": trade_store.adjacent_date(sel_date, +1),
-            "daily_pnl": trade_store.daily_pnl(sel_date), "format_won": format_won})
+        ctx = _trades_view(sel_date)
+        ctx["format_won"] = format_won
+        return templates.TemplateResponse(request, "partials/trade_trades.html", ctx)
 
     @app.post("/trade/toggle")
     async def trade_toggle(request: Request):
