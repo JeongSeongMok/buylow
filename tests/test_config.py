@@ -131,6 +131,23 @@ def test_broker_secret_status(tmp_config):
     assert st["kis_app_key"] and not st["kis_app_secret"]
 
 
+def test_scheduler_config_defaults(tmp_config):
+    # 기본: 켜짐, 30분 간격, 분봉 대상 없음
+    cfg = config.get_scheduler_config()
+    assert cfg["enabled"] is True
+    assert cfg["interval_minutes"] == 30
+    assert cfg["minute_universe"] == []
+
+
+def test_scheduler_minute_universe_save(tmp_config):
+    config.save_scheduler_minute_universe(["005930", "000660", "005930", " ", "035720"])
+    # 중복/공백 제거 + 순서 보존
+    assert config.get_scheduler_config()["minute_universe"] == ["005930", "000660", "035720"]
+    # 빈 리스트면 분봉 자동적재 끔
+    config.save_scheduler_minute_universe([])
+    assert config.get_scheduler_config()["minute_universe"] == []
+
+
 def test_apply_krx_credentials(tmp_config, monkeypatch):
     assert config.apply_krx_credentials() is False
     config.save_secrets({"krx_id": "the_id", "krx_pw": "the_pw"})

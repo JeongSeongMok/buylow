@@ -7,7 +7,7 @@
 
 import uvicorn
 
-from ..config import apply_krx_credentials, get_dashboard_port
+from ..config import apply_krx_credentials, get_dashboard_port, get_scheduler_config
 from ..jobs import JobManager
 from ..scheduler import start_scheduler
 from .app import create_app
@@ -21,7 +21,9 @@ def main() -> None:
 
     jobs = JobManager()
     if start_scheduler(jobs) is not None:
-        print("일일 증분 적재 스케줄러 가동")
+        cfg = get_scheduler_config()
+        extra = f", 분봉 {len(cfg['minute_universe'])}종목 포함" if cfg["minute_universe"] else ""
+        print(f"자동 증분 적재 스케줄러 가동 (매 {cfg['interval_minutes']}분{extra})")
 
     uvicorn.run(create_app(jobs=jobs), host="127.0.0.1", port=get_dashboard_port())
 

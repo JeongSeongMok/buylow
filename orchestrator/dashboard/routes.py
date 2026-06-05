@@ -499,7 +499,10 @@ def register_dashboard(
             # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
             "broker": broker,
             "broker_label": config.BROKER_LABELS.get(broker, broker),
+            # 자동 스케줄러 상태 + 분봉 자동적재 대상종목(별도 설정)
+            "scheduler": config.get_scheduler_config(),
             "error": request.query_params.get("error"),
+            "saved": request.query_params.get("saved"),
         })
 
     @app.get("/data/{ticker}", response_class=HTMLResponse)
@@ -557,6 +560,17 @@ def register_dashboard(
         jobs.submit(f"분봉 적재 ({len(tickers)}종목)",
                     lambda job: run_minute_update(job, data_dir, tickers, days))
         return RedirectResponse(url="/jobs", status_code=303)
+
+    @app.post("/data/schedule/minute")
+    async def save_schedule_minute(request: Request):
+        # 자동 스케줄러가 매 주기 분봉을 적재할 대상종목을 저장(분봉 적재 폼과 동일한 선택 UX).
+        # 빈 선택이면 분봉 자동적재를 끄는 의미(일봉만 자동 적재).
+        form = await request.form()
+        tickers, errors = _resolve_minute_tickers(form)
+        if errors and not tickers:
+            return RedirectResponse(url=f"/data?error={errors[0]}", status_code=303)
+        config.save_scheduler_minute_universe(tickers)
+        return RedirectResponse(url="/data?saved=schedule", status_code=303)
 
     @app.get("/jobs", response_class=HTMLResponse)
     def jobs_page(request: Request):

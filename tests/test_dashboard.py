@@ -197,6 +197,23 @@ def test_minute_ingest_requires_tickers(client):
     assert r.status_code == 303 and "error" in r.headers["location"]
 
 
+def test_data_page_shows_auto_schedule(client):
+    t = client.get("/data").text
+    # 자동 적재 스케줄 카드 + 분봉 자동적재 저장 버튼
+    assert "자동 적재 스케줄" in t and "자동적재 대상으로 저장" in t
+
+
+def test_save_schedule_minute_universe(client, isolated_config):
+    r = client.post("/data/schedule/minute", data={"universe": "005930, 000660"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and "saved=schedule" in r.headers["location"]
+    assert isolated_config.get_scheduler_config()["minute_universe"] == ["005930", "000660"]
+    # 빈 선택은 분봉 자동적재를 끄는 의미(저장됨)
+    r = client.post("/data/schedule/minute", data={"universe": ""}, follow_redirects=False)
+    assert r.status_code == 303
+    assert isolated_config.get_scheduler_config()["minute_universe"] == []
+
+
 def _form(pairs):
     from starlette.datastructures import FormData
     return FormData(pairs)

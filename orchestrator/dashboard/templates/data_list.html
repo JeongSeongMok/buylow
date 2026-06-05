@@ -2,9 +2,24 @@
 {% block main_class %}wide{% endblock %}
 {% block content %}
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if saved == 'schedule' %}<p class="notice">자동 적재 대상 분봉 종목을 저장했습니다.</p>{% endif %}
 
 <div class="cols2">
 <div>  {# 왼쪽: 적재 액션 (데이터 최신화 + 누적 분봉 적재) #}
+<section class="card">
+  <h2>자동 적재 스케줄 <small>(서버 가동 중)</small></h2>
+  {% if scheduler.enabled %}
+  <p class="meta">서버가 켜져 있는 동안 <b>매 {{ scheduler.interval_minutes }}분</b>마다
+    일봉(OHLCV·수급·펀더, pykrx)을 증분 적재합니다(이미 채워졌으면 금방 끝납니다).
+    {% if scheduler.minute_universe %}
+    분봉도 <b>{{ scheduler.minute_universe|length }}종목</b> 함께 적재합니다.
+    {% else %}
+    분봉은 자동 적재하지 않습니다 — 아래 분봉 카드에서 대상종목을 골라 <b>자동적재 대상으로 저장</b>하세요.
+    {% endif %}</p>
+  {% else %}
+  <p class="notice">자동 적재가 꺼져 있습니다 — <code>config.local.yaml</code>의 <code>scheduler.enabled</code>로 켤 수 있습니다.</p>
+  {% endif %}
+</section>
 <section class="card">
   <div class="actionbar">
     <h2>데이터 <small>{{ count }}종목 · 최신 {{ latest_date or "-" }}</small></h2>
@@ -24,11 +39,14 @@
   <div class="actionbar">
     <h2>누적 분봉 적재 <small>(장중 타이밍 백테스트용)</small></h2>
     <span class="grow"></span>
-    <button type="submit" form="minute-form">분봉 적재</button>
+    <button type="submit" form="minute-form" formaction="/data/schedule/minute"
+            class="ghost" title="선택 종목을 자동 적재 스케줄 대상으로 저장">자동적재 대상으로 저장</button>
+    <button type="submit" form="minute-form">지금 적재</button>
   </div>
   <p class="meta">선택한 종목의 분봉을 최근 구간만큼 받아 디스크에 저장합니다(이미 받은 날짜는 건너뜀).<br>
     분봉이 있는 날은 백테스트가 장중 타점 전략을 쓰고, 없는 날은 시가 기준으로 진행합니다.<br>
     과거 분봉은 <b>최대 약 1년</b>만 보관되어 그 이전은 받을 수 없습니다.</p>
+  <p class="meta"><b>지금 적재</b>는 1회 적재, <b>자동적재 대상으로 저장</b>은 위 자동 스케줄러가 매 주기 받을 종목으로 저장합니다(아래 선택이 현재 자동 대상으로 초기화됨).</p>
   <p class="meta">분봉은 증권사 API로 받습니다 — 현재 <b>{{ broker_label }}</b>.
     <a href="/settings">설정</a> 탭에서 증권사를 바꾸거나 키를 입력하세요.</p>
   <form method="post" action="/data/minute" id="minute-form">
@@ -68,7 +86,7 @@
 <script>
   const M_NAMES = {{ names|tojson }};
   const M_LOADED = {{ loaded_codes|tojson }};   // 적재된 전 종목(전체종목 일괄 추가용)
-  let mTickers = [];
+  let mTickers = {{ scheduler.minute_universe|tojson }};   // 현재 자동적재 대상으로 초기화
   const M_LIMIT = 60;
   function mLabel(c) { return M_NAMES[c] ? (M_NAMES[c] + ' ' + c) : c; }
   function mSync() {

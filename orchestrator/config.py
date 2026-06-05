@@ -335,13 +335,31 @@ def all_indices() -> list[dict]:
 
 
 def get_scheduler_config() -> dict:
-    """일일 증분 적재 스케줄 설정. 기본 비활성(사용자가 켜야 자동 적재)."""
+    """자동 적재 스케줄 설정. 기본 켜짐 — 서버 가동 중 일정 간격으로 '데이터 최신화'(pykrx 일봉)를
+    반복한다. 채워져 있으면 증분이라 금방 끝나므로 짧은 간격으로 계속 돌려도 부담이 적다.
+    `minute_universe`가 있으면 같은 스케줄에서 그 종목들의 분봉도 증분 적재한다(없으면 분봉은 생략)."""
     sc = _load_local().get("scheduler") or {}
+    uni = sc.get("minute_universe") or []
     return {
-        "enabled": bool(sc.get("enabled", False)),
+        "enabled": bool(sc.get("enabled", True)),
+        "interval_minutes": int(sc.get("interval_minutes", 30)),  # 연속 반복 간격
+        "minute_universe": [str(t).strip() for t in uni if str(t).strip()],
+        # 하위호환(과거 일일 cron 설정) — 더 이상 트리거엔 안 쓰지만 읽기 보존
         "market": sc.get("market", "KOSPI200"),
-        "hour": int(sc.get("hour", 18)),  # 평일 장마감 후 (KST)
+        "hour": int(sc.get("hour", 18)),
     }
+
+
+def save_scheduler_minute_universe(tickers: list[str]) -> None:
+    """자동 적재 스케줄러가 분봉을 적재할 대상종목 저장(중복 제거, 순서 보존). 빈 리스트면 분봉 생략."""
+    seen, uniq = set(), []
+    for t in tickers:
+        t = str(t).strip()
+        if t and t not in seen:
+            seen.add(t); uniq.append(t)
+    data = _load_local()
+    data.setdefault("scheduler", {})["minute_universe"] = uniq
+    _write_local(data)
 
 
 def get_broker() -> str:
