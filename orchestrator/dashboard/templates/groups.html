@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if saved %}<p class="ok">저장되었습니다.</p>{% endif %}
+
+<section class="card">  {# 커스텀 인덱스(사용자 정의 종목 묶음) 관리 #}
+  <div class="actionbar">
+    <h2>내 인덱스 <small>(커스텀 종목 그룹)</small></h2>
+    <span class="grow"></span>
+    <button type="submit" form="custom-form">그룹 저장</button>
+  </div>
+  <p class="meta">원하는 종목을 묶어 이름을 붙이면, <b>백테스트·분봉적재·적재현황</b>에서 KOSPI200처럼
+    <b>★이름</b>으로 한 번에 골라 쓸 수 있습니다(같은 이름으로 저장하면 덮어쓰기).</p>
+  <form method="post" action="/universe/custom" id="custom-form">
+    <label>인덱스 이름 <input type="text" name="name" placeholder="예: 반도체3종" required></label>
+    <div id="c-universe-box">
+      <label>종목 추가</label>
+      <div class="add-row search-wrap">
+        <input type="text" id="c-ticker-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();cAddTyped();}">
+        <button type="button" class="ghost" onclick="cAddTyped()">추가</button>
+        <div id="c-search-results" class="search-results" hidden></div>
+      </div>
+      <p class="meta spaced">묶은 종목 <span id="c-chip-count"></span>
+        <button type="button" class="ghost clear-btn" onclick="cClear()">전체비우기</button></p>
+      <div id="c-chips"></div>
+      <input type="hidden" name="universe" id="c-universe-hidden" value="">
+    </div>
+  </form>
+
+  {% if custom_indices %}
+  <h3 class="subhead">저장된 그룹</h3>
+  <table class="runs">
+    <thead><tr><th>이름</th><th>종목수</th><th></th></tr></thead>
+    <tbody>
+      {% for key, v in custom_indices.items() %}
+      <tr>
+        <td>★ {{ v.label }}</td>
+        <td>{{ v.tickers|length }}종목</td>
+        <td><form method="post" action="/universe/custom/delete" style="margin:0"
+              onsubmit="return confirm('\'{{ v.label }}\' 그룹을 삭제할까요?')">
+            <input type="hidden" name="key" value="{{ key }}">
+            <button type="submit" class="ghost">삭제</button></form></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="meta">아직 저장된 그룹이 없습니다. 위에서 종목을 묶어 이름을 붙여 저장하세요.</p>
+  {% endif %}
+</section>
+
+<script>
+  const C_NAMES = {{ names|tojson }};   // 코드→이름(검색·칩 표시)
+  let cTickers = [];
+  function cLabel(c) { return C_NAMES[c] ? (C_NAMES[c] + ' ' + c) : c; }
+  function cSync() {
+    const box = document.getElementById('c-chips'); box.innerHTML = '';
+    cTickers.forEach((t, i) => {
+      const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = cLabel(t);
+      const x = document.createElement('a'); x.href = '#'; x.textContent = '×';
+      x.onclick = (e) => { e.preventDefault(); cTickers.splice(i, 1); cSync(); };
+      chip.appendChild(x); box.appendChild(chip);
+    });
+    document.getElementById('c-chip-count').textContent = `(${cTickers.length})`;
+    document.getElementById('c-universe-hidden').value = cTickers.join(',');
+  }
+  function cAdd(code) { if (code && !cTickers.includes(code)) cTickers.push(code); cSync(); }
+  function cClear() { cTickers = []; cSync(); }
+  const cIn = document.getElementById('c-ticker-search');
+  const cRes = document.getElementById('c-search-results');
+  cIn.addEventListener('input', () => {
+    const q = cIn.value.trim().toLowerCase(); cRes.innerHTML = '';
+    if (!q) { cRes.hidden = true; return; }
+    let n = 0;
+    for (const code in C_NAMES) {
+      if (code.includes(q) || C_NAMES[code].toLowerCase().includes(q)) {
+        const d = document.createElement('div'); d.textContent = C_NAMES[code];
+        const s = document.createElement('small'); s.textContent = code; d.appendChild(s);
+        d.onclick = () => { cAdd(code); cIn.value = ''; cRes.hidden = true; };
+        cRes.appendChild(d); if (++n >= 30) break;
+      }
+    }
+    cRes.hidden = (n === 0);
+  });
+  function cAddTyped() {
+    const v = cIn.value.trim(); if (!v) return;
+    if (/^\d{6}$/.test(v)) { cAdd(v); }
+    else { const q = v.toLowerCase(); for (const c in C_NAMES) { if (C_NAMES[c].toLowerCase().includes(q)) { cAdd(c); break; } } }
+    cIn.value = ''; cRes.hidden = true;
+  }
+  document.addEventListener('click', (e) => { if (!cRes.contains(e.target) && e.target !== cIn) cRes.hidden = true; });
+  cSync();
+</script>
+{% endblock %}

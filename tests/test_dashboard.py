@@ -80,16 +80,19 @@ def test_backtest_page_renders(client):
 
 
 def test_custom_index_end_to_end(client, isolated_config):
-    # 커스텀 인덱스 생성 → 데이터탭 노출 → /universe/index 조회 → 삭제.
+    # 커스텀 인덱스 생성('그룹' 탭) → 데이터탭에서 '사용' → /universe/index 조회 → 삭제.
     client.post("/universe/custom", data={"name": "내그룹", "universe": "005930,000660"},
                 follow_redirects=False)
     assert "내그룹" in isolated_config.get_custom_indices()
     # 적재 0건이면 loaded 비어 members 그대로 반환 + custom 플래그
     j = client.get("/universe/index/내그룹").json()
     assert j.get("custom") is True and set(j["tickers"]) == {"005930", "000660"}
-    # 데이터탭: 분봉적재 버튼 + '내 인덱스' 카드에 노출
+    # 관리는 '그룹' 탭(/groups): 카드 + 저장된 목록
+    gp = client.get("/groups").text
+    assert "내 인덱스" in gp and "★ 내그룹" in gp
+    # 데이터탭은 '사용'만 — 분봉적재 버튼에 노출되지만 관리 카드는 없음
     dl = client.get("/data").text
-    assert "mAddIndex('내그룹'" in dl and "내 인덱스" in dl
+    assert "mAddIndex('내그룹'" in dl and "내 인덱스" not in dl
     # 삭제
     client.post("/universe/custom/delete", data={"key": "내그룹"}, follow_redirects=False)
     assert "내그룹" not in isolated_config.get_custom_indices()

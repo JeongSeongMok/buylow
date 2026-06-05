@@ -363,21 +363,32 @@ def register_dashboard(
         tickers = [t for t in members if t in loaded] if loaded else list(members)
         return {"index": key, "tickers": tickers, "total": len(members), "available": len(tickers)}
 
+    @app.get("/groups", response_class=HTMLResponse)
+    def groups_page(request: Request):
+        # 커스텀 인덱스(종목 묶음) 관리 전용 탭. 데이터/백테스트는 결과를 '사용'만 하고 관리는 여기서.
+        from etl.names import load_names
+        return templates.TemplateResponse(request, "groups.html", {
+            "names": load_names(config.get_data_folder()),  # 종목 검색/칩 표시용
+            "custom_indices": config.get_custom_indices(),
+            "saved": request.query_params.get("saved"),
+            "error": request.query_params.get("error"),
+        })
+
     @app.post("/universe/custom")
     async def universe_custom_create(request: Request):
-        # 커스텀 인덱스(종목 묶음) 생성/덮어쓰기. 데이터 탭 '내 인덱스' 카드에서 호출.
+        # 커스텀 인덱스(종목 묶음) 생성/덮어쓰기. '그룹' 탭에서 호출.
         form = await request.form()
         try:
             config.save_custom_index(form.get("name"), form.get("universe") or "")
         except ValueError as e:
-            return RedirectResponse(url=f"/data?error={e}", status_code=303)
-        return RedirectResponse(url="/data", status_code=303)
+            return RedirectResponse(url=f"/groups?error={e}", status_code=303)
+        return RedirectResponse(url="/groups?saved=1", status_code=303)
 
     @app.post("/universe/custom/delete")
     async def universe_custom_delete(request: Request):
         form = await request.form()
         config.delete_custom_index(form.get("key") or "")
-        return RedirectResponse(url="/data", status_code=303)
+        return RedirectResponse(url="/groups", status_code=303)
 
     @app.get("/ui/runs/{run_id}", response_class=HTMLResponse)
     def ui_run_detail(request: Request, run_id: str):
@@ -459,8 +470,7 @@ def register_dashboard(
         return templates.TemplateResponse(request, "data_list.html", {
             "tickers": tickers, "count": len(tickers), "data_dir": data_dir,
             "names": names,  # 분봉 적재 종목 검색/칩 UX용 (백테스트와 동일)
-            "indices": config.all_indices(),  # 내장+커스텀 — 분봉적재 버튼 + 적재현황 필터
-            "custom_indices": config.get_custom_indices(),  # '내 인덱스' 카드 목록/삭제용
+            "indices": config.all_indices(),  # 내장+커스텀 — 분봉적재 버튼 + 적재현황 필터(사용만)
             "loaded_codes": [t["ticker"] for t in tickers],  # [전체종목] 일괄 칩 추가용(적재된 전 종목)
             "latest_date": catalog.latest_loaded_date(data_dir),
             # 분봉 적재는 증권사 API를 쓰므로(데이터 최신화는 pykrx·KRX로 증권사 무관) 활성 증권사를 표시.
