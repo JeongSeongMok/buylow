@@ -531,6 +531,7 @@ def register_dashboard(
             "strategy": strategy,
             "groups": groups,
             "execution_styles": signals_catalog.EXECUTION_STYLES,
+            "eval_cadences": signals_catalog.EVAL_CADENCES,
             "param_value": signals_catalog.param_value,
             "risk": config.risk_form_values(),
             "data_loaded": _loaded_count(),

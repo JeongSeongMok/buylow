@@ -6,6 +6,7 @@ from orchestrator.execution import (
     TimingConfig, IMMEDIATE, PULLBACK, TWAP,
     minutes_since_open, is_last_bar, slice_index, decide_submit,
     should_daily_gate_eval,
+    parse_eval_times, due_by_interval, due_by_times,
 )
 
 
@@ -15,6 +16,32 @@ def test_should_daily_gate_eval():
     assert should_daily_gate_eval(15, 29, d1, None)        # 마감 분봉 → 평가
     assert not should_daily_gate_eval(15, 30, d1, d1)      # 같은 날 이미 평가 → 중복 방지
     assert should_daily_gate_eval(15, 29, d2, d1)          # 다음 날 마감 → 평가
+
+
+def test_parse_eval_times():
+    # "HH:MM" → 자정기준 분, 정렬·중복제거, 잘못된 항목 무시
+    assert parse_eval_times(["09:30", "10:05", "09:30"]) == (9 * 60 + 30, 10 * 60 + 5)
+    assert parse_eval_times(["bad", "25:00", "12:01", ""]) == (12 * 60 + 1,)
+    assert parse_eval_times(None) == ()
+
+
+def test_due_by_interval():
+    # 당일 첫 평가(None)는 항상 True, 이후엔 interval 이상 경과해야 True
+    assert due_by_interval(0, 30, None) is True
+    assert due_by_interval(10, 30, 0) is False        # 10분밖에 안 지남
+    assert due_by_interval(30, 30, 0) is True         # 정확히 30분
+    assert due_by_interval(65, 30, 30) is True        # 35분 경과(누적차 ≥ 30)
+    assert due_by_interval(31, 30, 30) is False       # 1분 경과
+
+
+def test_due_by_times():
+    times = parse_eval_times(["09:30", "12:01"])
+    fired = set()
+    assert due_by_times(9 * 60 + 30, times, fired) is True    # 지정 시각
+    assert due_by_times(9 * 60 + 31, times, fired) is False   # 비지정
+    fired.add(9 * 60 + 30)
+    assert due_by_times(9 * 60 + 30, times, fired) is False   # 당일 이미 평가
+    assert due_by_times(12 * 60 + 1, times, fired) is True    # 다른 지정 시각
 
 
 # ── 시간 헬퍼 ──────────────────────────────────────────────────────────────

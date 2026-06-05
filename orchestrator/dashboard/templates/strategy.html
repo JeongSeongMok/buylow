@@ -108,7 +108,24 @@
       {# ── 해상도=분봉 전용 ── #}
       <div id="minute-opts">
         <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요.<br>분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
-        <p class="meta">선별 <b>장중 매분</b> · 리스크 평가 <b>매분</b> · 체결 <b>TWAP</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 매 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
+        <p class="meta">선별 <b>장중</b> · 리스크 평가 <b>매분</b> · 체결 <b>TWAP</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
+
+        {# 선별(판단) 주기 — 데이터는 분봉이지만 '판단'만 솎아 과매매·수수료를 줄인다. 리스크는 매분 유지. #}
+        {% set cad = ex.get('eval_cadence', 'every') %}
+        <label class="subhead-label">선별 주기
+          <select name="exec_eval_cadence" id="cadence-sel" onchange="toggleCadence()">
+            {% for key, label in eval_cadences %}
+            <option value="{{ key }}" {{ 'selected' if cad == key }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <small>얼마나 자주 매수/청산을 다시 판단할지. 매분 재판단은 과매매·수수료가 큽니다(손절·익절은 주기와 무관하게 항상 매분 감시).</small></label>
+        <label id="cadence-interval" data-cad="interval">N(분) <input type="text" name="exec_eval_interval_min" value="{{ ex.get('eval_interval_min', 30) }}" size="6">
+          <small>예: 30 → 장 시작 후 30분마다 재판단(하루 ~13회).</small></label>
+        <label id="cadence-times" data-cad="times">시각 목록
+          <input type="text" name="exec_eval_times" value="{{ ex.get('eval_times', [])|join(', ') }}"
+                 placeholder="09:30, 10:05, 12:01">
+          <small>지정한 시각(KST)에만 재판단. 쉼표로 구분. 잘못된 항목은 무시됩니다.</small></label>
+
         <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
           <small>정규장(390분)을 몇 등분해 수량을 나눠 체결할지.<br>6분할이면 65분마다 1/6씩 — 클수록 더 잘게(매끄럽게) 분산, 작을수록 큰 덩어리로 듬성듬성.</small></label>
         <details class="help">
@@ -162,10 +179,16 @@
     const close = document.getElementById('daily-fill-sel').value === 'close';
     document.getElementById('daily-close-note').hidden = !close;
   }
+  // 선별 주기 모드에 따라 N분/시각목록 입력칸을 보인다(every면 둘 다 숨김).
+  function toggleCadence() {
+    const cad = document.getElementById('cadence-sel').value;
+    document.querySelectorAll('[data-cad]').forEach(el => { el.hidden = el.dataset.cad !== cad; });
+  }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
   toggleResolution();
   toggleDailyFill();
+  toggleCadence();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();
 </script>

@@ -171,7 +171,16 @@ EXECUTION_STYLES = [
 _STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
 DEFAULT_EXECUTION = {"style": "twap", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
                      "slices": 6, "force_by_close": True, "risk_eval": "daily",
-                     "select_eval": "close", "daily_fill": "open"}
+                     "select_eval": "close", "daily_fill": "open",
+                     "eval_cadence": "every", "eval_interval_min": 30, "eval_times": []}
+
+# 분봉 선별(판단) 주기 모드 — 1분마다 / N분 간격 / 특정 시각
+EVAL_CADENCES = [
+    ("every", "매 분봉 (1분마다)"),
+    ("interval", "N분 간격"),
+    ("times", "특정 시각"),
+]
+_CADENCE_KEYS = {k for k, _ in EVAL_CADENCES}
 
 
 def execution_from_form(form) -> tuple[str, dict]:
@@ -198,6 +207,17 @@ def execution_from_form(form) -> tuple[str, dict]:
         select_eval, risk_eval = "close", "daily"
         style = "twap"  # 일봉은 장중 방식 무의미(체결은 daily_fill로)
 
+    # 분봉 선별 주기(every|interval|times). 데이터는 분봉이지만 '판단'만 솎아 과매매를 줄인다.
+    # 리스크 평가는 이 주기와 무관하게 매분 유지(risk_eval=bar) — 급락 대응 안전.
+    from .execution import parse_eval_times, SELECT_CADENCES
+    cadence = form.get("exec_eval_cadence", "every")
+    if cadence not in SELECT_CADENCES:
+        cadence = "every"
+    # 검증·정렬·중복제거 후 "HH:MM" 문자열로 보존(폼 왕복이 깔끔). 런타임은 다시 분으로 파싱.
+    _mins = parse_eval_times(
+        [s for s in (form.get("exec_eval_times") or "").replace(" ", "").split(",") if s])
+    eval_times = [f"{m // 60:02d}:{m % 60:02d}" for m in _mins]
+
     execution = {
         "style": style,
         "entry_drop_pct": num("exec_entry_drop_pct", 1.0, float),
@@ -210,6 +230,10 @@ def execution_from_form(form) -> tuple[str, dict]:
         "select_eval": select_eval,
         # 일봉 체결 시점: 'open'(다음 거래일 시가) | 'close'(다음 거래일 종가, MarketOnClose).
         "daily_fill": "close" if form.get("daily_fill") == "close" else "open",
+        # 분봉 선별 주기: every(매분) | interval(N분) | times(특정시각, "HH:MM" 분-of-day 리스트)
+        "eval_cadence": cadence,
+        "eval_interval_min": max(1, num("exec_eval_interval_min", 30, int)),
+        "eval_times": eval_times,
     }
     return resolution, execution
 

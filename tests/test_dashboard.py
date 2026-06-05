@@ -170,6 +170,9 @@ def test_strategy_page_shows_timing_controls(client):
     assert "리스크 · 체결" in t and 'name="resolution"' in t and 'name="daily_fill"' in t
     # 일봉+종가의 라이브 체결 괴리 주의문(백테스트=15:30 종가, 라이브=≈15:14 시장가)
     assert "daily-close-note" in t and "라이브 매매 주의" in t and "15:14" in t
+    # 분봉 선별 주기(every/interval/times) 컨트롤
+    assert 'name="exec_eval_cadence"' in t and 'name="exec_eval_interval_min"' in t \
+        and 'name="exec_eval_times"' in t
 
 
 def test_settings_page_shows_broker_and_kis_keys(client):

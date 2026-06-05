@@ -75,6 +75,41 @@ def should_daily_gate_eval(hh: int, mm: int, current_day, last_eval_day) -> bool
     return is_last_bar(hh, mm) and current_day != last_eval_day
 
 
+# ── 장중 선별(판단) 주기 ──────────────────────────────────────────────────
+# 분봉 해상도는 기본 매 분봉 재선별이라 과매매·수수료가 커진다. 선별 주기를 데이터 해상도와
+# 분리해(데이터는 분봉 유지), 'every'(매분)/'interval'(N분)/'times'(특정시각)로 게이트한다.
+# 리스크 평가(손절·익절)는 이 게이트와 무관하게 매 분봉 유지한다(급락 대응 안전).
+SELECT_EVERY = "every"        # 매 분봉(현행)
+SELECT_INTERVAL = "interval"  # N분 간격
+SELECT_TIMES = "times"        # 지정 시각 목록
+SELECT_CADENCES = (SELECT_EVERY, SELECT_INTERVAL, SELECT_TIMES)
+
+
+def parse_eval_times(times) -> tuple[int, ...]:
+    """['09:30','10:05'] → 자정 기준 분(minute-of-day) 정렬 튜플. 잘못된 항목은 무시."""
+    out: list[int] = []
+    for t in times or []:
+        try:
+            hh, mm = str(t).strip().split(":")
+            v = int(hh) * 60 + int(mm)
+        except (ValueError, AttributeError):
+            continue
+        if 0 <= v < 24 * 60 and v not in out:
+            out.append(v)
+    return tuple(sorted(out))
+
+
+def due_by_interval(elapsed_min: int, interval_min: int, last_eval_min) -> bool:
+    """N분 간격 선별 게이트: 당일 첫 평가(last_eval_min is None)거나, 직전 평가 후
+    interval_min 이상 경과했으면 True. (분봉 타임스탬프가 ±1 흔들려도 빠지지 않게 modulo 대신 누적차)"""
+    return last_eval_min is None or (elapsed_min - int(last_eval_min)) >= max(1, int(interval_min))
+
+
+def due_by_times(abs_min: int, eval_times_min, fired) -> bool:
+    """특정시각 선별 게이트: 현재 분(자정기준)이 지정 시각이고 당일 아직 안 쐈으면 True."""
+    return abs_min in eval_times_min and abs_min not in fired
+
+
 def slice_index(elapsed_min: int, slices: int) -> int:
     """경과 분 → 0-기반 분할 인덱스(0..slices-1). TWAP 누적 스케줄 계산용."""
     slices = max(1, int(slices))

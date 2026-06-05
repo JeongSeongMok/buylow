@@ -90,6 +90,29 @@ def test_execution_from_form_minute_forces_intraday_bar_twap():
     assert ex["slices"] == 8 and ex["force_by_close"] is True
 
 
+def test_execution_from_form_eval_cadence_default_every():
+    _, ex = sc.execution_from_form({"resolution": "minute"})
+    assert ex["eval_cadence"] == "every"
+
+
+def test_execution_from_form_eval_cadence_interval():
+    _, ex = sc.execution_from_form({"resolution": "minute",
+                                    "exec_eval_cadence": "interval", "exec_eval_interval_min": "30"})
+    assert ex["eval_cadence"] == "interval" and ex["eval_interval_min"] == 30
+
+
+def test_execution_from_form_eval_cadence_times_normalized():
+    # 시각은 검증·정렬·중복제거 후 "HH:MM" 문자열로 보존(폼 왕복). 잘못된 항목 무시.
+    _, ex = sc.execution_from_form({"resolution": "minute", "exec_eval_cadence": "times",
+                                    "exec_eval_times": "10:05, 09:30, bad, 09:30"})
+    assert ex["eval_cadence"] == "times" and ex["eval_times"] == ["09:30", "10:05"]
+
+
+def test_execution_from_form_bad_cadence_falls_back_every():
+    _, ex = sc.execution_from_form({"resolution": "minute", "exec_eval_cadence": "weird"})
+    assert ex["eval_cadence"] == "every"
+
+
 def test_execution_from_form_minute_style_always_twap():
     # 폼에 어떤 exec_style이 와도(과거 저장/조작) 분봉은 TWAP 고정. 분할 수는 최소 1.
     _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "pullback"})

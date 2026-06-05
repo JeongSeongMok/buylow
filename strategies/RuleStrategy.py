@@ -21,7 +21,8 @@ from intraday_execution import IntradayExecutionModel
 
 class RuleAlpha(AlphaModel):
     def __init__(self, signals_config: dict, rule: str, period_days: int = 5,
-                 max_positions: int = 0, minute_res: bool = False, select_eval: str = "close"):
+                 max_positions: int = 0, minute_res: bool = False, select_eval: str = "close",
+                 eval_cadence: str = "every", eval_interval_min: int = 30, eval_times=None):
         self.signals_config = signals_config          # 라벨 -> {type, params}
         self.ast = parse_rule(rule)
         self.used = signal_labels(self.ast)            # 식에 실제 쓰인 라벨만 평가
@@ -32,6 +33,13 @@ class RuleAlpha(AlphaModel):
         self.minute_res = minute_res          # 분봉 구독(update가 매 분봉 호출)
         # 선별 주기: 'intraday'면 매 분봉 진행 중 일봉(현재가) 포함 재평가, 아니면 전날 종가 1회.
         self.select_intraday = minute_res and select_eval == "intraday"
+        # 장중 선별 '판단' 주기(데이터는 분봉 유지, 판단만 솎음). 리스크는 이와 무관하게 매분 평가.
+        from orchestrator.execution import parse_eval_times, SELECT_CADENCES
+        self.eval_cadence = eval_cadence if eval_cadence in SELECT_CADENCES else "every"
+        self.eval_interval_min = max(1, int(eval_interval_min))
+        self.eval_times_min = set(parse_eval_times(eval_times))
+        self._last_eval_elapsed = None        # interval 모드: 직전 선별의 장시작후 경과분
+        self._fired_times = set()             # times 모드: 당일 이미 선별한 분(자정기준)
         self._decided_day = None
         self._day = None
         self._exited_today = {}               # symbol -> date (당일 청산 → 재진입 금지 쿨다운)
@@ -55,9 +63,14 @@ class RuleAlpha(AlphaModel):
         today = algorithm.time.date()
         if self.minute_res:
             if self.select_intraday:
-                if today != self._day:        # 새 거래일: 쿨다운 초기화
+                if today != self._day:        # 새 거래일: 쿨다운·선별주기 상태 초기화
                     self._day = today
                     self._exited_today.clear()
+                    self._last_eval_elapsed = None
+                    self._fired_times.clear()
+                # 선별 주기 게이트(리스크는 매분 유지 — 여기선 '선별'만 솎는다).
+                if not self._due_to_select(algorithm.time):
+                    return []
             else:
                 # 전날 종가 1회 선별: 하루 첫 분봉만 평가(이후 분봉은 기존 인사이트 유지).
                 if today == self._decided_day:
@@ -85,6 +98,24 @@ class RuleAlpha(AlphaModel):
         for s in ups:
             self._log_hit(algorithm, s, "BUY", reason.get(s, ""))
         return [Insight.price(s, self.hold, InsightDirection.UP) for s in ups] + exits
+
+    def _due_to_select(self, t):
+        # 이번 분봉에 장중 선별을 재평가할지(every/interval/times). 평가 시점이면 상태를 갱신한다.
+        from orchestrator.execution import (minutes_since_open, due_by_interval,
+                                            due_by_times, SELECT_INTERVAL, SELECT_TIMES)
+        if self.eval_cadence == SELECT_INTERVAL:
+            elapsed = minutes_since_open(t.hour, t.minute)
+            if not due_by_interval(elapsed, self.eval_interval_min, self._last_eval_elapsed):
+                return False
+            self._last_eval_elapsed = elapsed
+            return True
+        if self.eval_cadence == SELECT_TIMES:
+            abs_min = t.hour * 60 + t.minute
+            if not due_by_times(abs_min, self.eval_times_min, self._fired_times):
+                return False
+            self._fired_times.add(abs_min)
+            return True
+        return True  # every: 매 분봉
 
     def _log_hit(self, algorithm, symbol, side, labels):
         # 트리거 사유를 로그로 남겨 결과 페이지(거래 내역)가 파싱해 표시한다.
@@ -147,4 +178,7 @@ class RuleStrategy(KrxFrameworkAlgorithm):
                                  int(spec.get("period_days", 5)),
                                  int(spec.get("max_positions", 0)),
                                  minute_res=intraday,
-                                 select_eval=ex_spec.get("select_eval", "close")))
+                                 select_eval=ex_spec.get("select_eval", "close"),
+                                 eval_cadence=ex_spec.get("eval_cadence", "every"),
+                                 eval_interval_min=int(ex_spec.get("eval_interval_min", 30)),
+                                 eval_times=ex_spec.get("eval_times")))
