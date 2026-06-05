@@ -313,11 +313,22 @@ def update_all_market(data_dir: str | Path = DEFAULT_DATA_DIR, *, on_progress=No
         # 수급(per-ticker) — 자기 갭만큼. 거래일 없는 구간이면 생략(불필요한 호출 방지).
         f_start = gap_start("flow")
         if f_start <= end and _trading_days(f_start, end):
-            enabled = True
-            tickers = list_universe("ALL", end)
-            progress(f"수급 최신화: {len(tickers)}종목 ({f_start}~)")
-            flow_ok, flow_fail = _ingest_flow_per_ticker(tickers, f_start, end, data_dir,
-                                                         merge=True, on_progress=on_progress)
+            # 미발행 가드: 오늘(장중)·미집계 구간은 수급이 아직 안 나와 전 종목이 '데이터 없음'으로
+            # 실패한다(2806종목 헛돎). 대표 종목(삼성전자)으로 구간 발행 여부를 먼저 확인해,
+            # 비면 통째로 건너뛴다 — 장 마감 후 다시 돌리면 그때 적재된다.
+            from etl.flow import fetch_flow
+            try:
+                probe = _quiet(fetch_flow, "005930", f_start, end)
+            except Exception:
+                probe = ["?"]  # 조회 자체가 막히면 미발행으로 단정하지 않고 정상 경로로 진행
+            if not probe:
+                progress(f"수급: {f_start}~{end} 아직 미집계(장중·미발행) — 건너뜀(장 마감 후 재시도)")
+            else:
+                enabled = True
+                tickers = list_universe("ALL", end)
+                progress(f"수급 최신화: {len(tickers)}종목 ({f_start}~)")
+                flow_ok, flow_fail = _ingest_flow_per_ticker(tickers, f_start, end, data_dir,
+                                                             merge=True, on_progress=on_progress)
         else:
             progress("수급 신규 거래일 없음 — 생략")
 

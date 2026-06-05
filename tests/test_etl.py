@@ -75,6 +75,37 @@ def test_ingest_empty_raises(tmp_path):
         krx.ingest("005930", date(2023, 1, 1), date(2023, 1, 2), tmp_path, FakeSource([]))
 
 
+def test_update_skips_flow_when_unpublished(tmp_path, monkeypatch):
+    # 오늘(장중) 수급 미집계 → 대표 종목 probe가 비면 수급을 통째로 건너뛴다(2806종목 헛돎 방지).
+    from datetime import date, timedelta
+    from etl import universe
+    import etl.catalog as catalog, etl.flow as flowmod, etl.fundamental as fund
+    import orchestrator.config as cfg
+    today = date.today()
+    monkeypatch.setattr(cfg, "apply_krx_credentials", lambda: True)
+    monkeypatch.setattr(universe, "ingest_universe", lambda *a, **k: {"ingested": 0, "trading_days": 0})
+    monkeypatch.setattr(fund, "ingest_fundamental_universe", lambda *a, **k: {"tickers": 0})
+    monkeypatch.setattr(universe, "_trading_days", lambda s, e: 1)
+    monkeypatch.setattr(universe, "list_universe", lambda *a, **k: ["005930"])
+    # flow만 어제까지 적재(→ 오늘부터 갭), 나머지는 최신(갭 없음)
+    monkeypatch.setattr(catalog, "latest_loaded_date",
+                        lambda d, kind: (today - timedelta(days=1)).isoformat() if kind == "flow"
+                        else today.isoformat())
+    calls = []
+    monkeypatch.setattr(universe, "_ingest_flow_per_ticker",
+                        lambda *a, **k: (calls.append(1), (0, 0))[1])
+
+    # probe 빈(미집계) → 수급 per-ticker 호출 안 함
+    monkeypatch.setattr(flowmod, "fetch_flow", lambda *a, **k: [])
+    info = universe.update_all_market(tmp_path)
+    assert calls == [] and info["flow_ok"] == 0 and info["flow_fail"] == 0
+
+    # probe 있음(발행) → 수급 진행
+    monkeypatch.setattr(flowmod, "fetch_flow", lambda *a, **k: ["x"])
+    universe.update_all_market(tmp_path)
+    assert calls == [1]
+
+
 @pytest.mark.integration
 def test_pykrx_real_fetch():
     """실제 pykrx OHLCV 조회 (무인증). 네트워크 필요 → 기본 실행 제외."""
