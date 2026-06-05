@@ -1,4 +1,8 @@
 <div id="trades-page">
+  {% if truncated %}
+  <p class="notice">⚠️ LEAN이 결과 파일에 최근 <b>{{ "{:,}".format(orders_in_result) }}</b>건의 주문만 저장합니다 —
+    이 백테스트의 전체 주문 <b>{{ "{:,}".format(stat_total) }}</b>건 중 일부만 표시됩니다(통계·수익률은 전체 기준).</p>
+  {% endif %}
   <div class="actionbar">
     {% if total %}
     <span class="meta">{{ "{:,}".format(start1) }}–{{ "{:,}".format(end1) }} / 총 {{ "{:,}".format(total) }}건 (최신순)</span>

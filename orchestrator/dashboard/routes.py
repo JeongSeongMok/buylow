@@ -116,6 +116,16 @@ def format_won(amount) -> str:
     return f"{sign}{' '.join(parts) or '0'}원"
 
 
+def _to_int(v):
+    """'33,948' / '33948' / 33948 → 33948. 실패 시 None."""
+    if v is None:
+        return None
+    try:
+        return int(float(str(v).replace(",", "").strip()))
+    except ValueError:
+        return None
+
+
 def _num(stats: dict, key: str):
     """통계 문자열에서 숫자만 추출(%, KRW, $, 콤마 제거). 실패 시 None."""
     v = stats.get(key)
@@ -154,18 +164,14 @@ def parse_rule_reasons(run_dir) -> dict:
     return reasons
 
 
-def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
-    """LEAN 결과 JSON에서 체결 주문 내역을 사람이 보기 좋게 추출(거래 히스토리용).
+def _load_result_orders(result_json) -> list[dict]:
+    """결과 JSON에서 주문 dict 목록을 읽는다(요약본이면 주문이 든 전체본으로 교체). 실패 시 [].
 
-    '사유'는 리스크 태그(손절/익절) > RuleAlpha 로그의 트리거 시그널 > 일반 라벨 순으로 채운다.
-    names(코드→이름)가 있으면 종목명도 채운다.
-    """
-    reasons = reasons or {}
-    names = names or {}
+    ⚠️ LEAN은 결과 파일에 주문을 최근 일부(관측상 ~100건)만 직렬화한다 — 대량 백테스트의 전체
+    주문은 어떤 출력 파일에도 들어있지 않다(거래내역이 통계의 주문수보다 적게 보이는 원인)."""
     if not result_json:
         return []
     p = Path(result_json)
-    # 저장된 경로는 보통 '-summary.json'(주문 미포함 요약본) → 주문이 든 전체 결과 파일로 교체
     if p.name.endswith("-summary.json"):
         p = p.with_name(p.name.replace("-summary.json", ".json"))
     if not p.exists():
@@ -175,8 +181,17 @@ def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
     except Exception:
         return []
     orders = data.get("orders") or {}
+    return list(orders.values()) if isinstance(orders, dict) else list(orders)
+
+
+def _rows_from_orders(orders, reasons=None, names=None) -> list[dict]:
+    """주문 dict 목록 → 거래내역 행(체결된 것만, 시간 오름차순).
+
+    '사유'는 리스크 태그(손절/익절) > RuleAlpha 로그의 트리거 시그널 > 일반 라벨 순. names로 종목명."""
+    reasons = reasons or {}
+    names = names or {}
     rows = []
-    for o in (orders.values() if isinstance(orders, dict) else orders):
+    for o in orders:
         if o.get("status") != 3:  # 3 = Filled (체결된 것만)
             continue
         qty = o.get("quantity", 0) or 0
@@ -200,6 +215,11 @@ def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
     return rows
 
 
+def parse_orders(result_json, reasons=None, names=None) -> list[dict]:
+    """LEAN 결과 JSON에서 체결 주문 내역을 추출(거래 히스토리용)."""
+    return _rows_from_orders(_load_result_orders(result_json), reasons, names)
+
+
 # ── 거래내역 캐시 + 페이지네이션 ──────────────────────────────────────────
 # 분봉 백테스트는 거래가 6만+ 건이 되기도 한다. 그때마다 결과 JSON(수십~수백 MB)을 통째로
 # json.loads 하면 상세 페이지 진입이 매우 느리다. 그래서 한 번만 파싱해 거래내역을 슬림한
@@ -214,23 +234,43 @@ def _trades_cache_path(record: dict) -> Path | None:
     return Path(rj).parent / "trades.jsonl" if rj else None
 
 
+def _trades_meta_path(cache: Path) -> Path:
+    return cache.parent / "trades.meta.json"
+
+
 def _ensure_trades_cache(record: dict, reasons=None, names=None) -> Path | None:
-    """trades.jsonl 캐시를 보장(없으면 결과 JSON을 1회 파싱해 최신순으로 기록)."""
+    """trades.jsonl 캐시를 보장(없으면 결과 JSON을 1회 파싱해 최신순으로 기록).
+    결과 파일에 직렬화된 주문 수(orders_in_result)도 사이드카(trades.meta.json)에 적어,
+    화면이 LEAN의 주문 truncation(통계상 주문수보다 적게 저장)을 정직하게 고지하게 한다."""
     cache = _trades_cache_path(record)
     if cache is None:
         return None
     if cache.exists():
         return cache
-    rows = parse_orders(record.get("result_json"), reasons, names)  # 1회 풀 파싱
+    raw = _load_result_orders(record.get("result_json"))  # 1회 풀 파싱
+    rows = _rows_from_orders(raw, reasons, names)
     rows.reverse()  # 최신순(시간 내림차순) 저장 → offset=0이 가장 최근
     try:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with open(cache, "w", encoding="utf-8") as f:
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        _trades_meta_path(cache).write_text(
+            json.dumps({"orders_in_result": len(raw)}), encoding="utf-8")
     except OSError:
         return None
     return cache
+
+
+def _trades_orders_in_result(record: dict):
+    """캐시 사이드카에서 '결과 파일에 든 주문 수'를 읽는다(없으면 None)."""
+    cache = _trades_cache_path(record)
+    if cache is None:
+        return None
+    try:
+        return json.loads(_trades_meta_path(cache).read_text(encoding="utf-8")).get("orders_in_result")
+    except (OSError, ValueError):
+        return None
 
 
 def load_trades_page(record: dict, offset: int, limit: int,
@@ -497,11 +537,17 @@ def register_dashboard(
         reasons = parse_rule_reasons(record.get("run_dir"))
         names = load_names(config.get_data_folder())
         rows, total = load_trades_page(record, offset, limit, reasons, names)
+        # LEAN truncation 정직 고지: 통계상 총 주문수보다 결과 파일에 든 주문 수가 적으면,
+        # 보이는 거래내역이 '일부'임을 알린다(silent cap 금지).
+        stat_total = _to_int((record.get("statistics") or {}).get("Total Orders"))
+        orders_in_result = _trades_orders_in_result(record)
+        truncated = bool(stat_total and orders_in_result is not None and orders_in_result < stat_total)
         return templates.TemplateResponse(request, "partials/trades_table.html", {
             "run": record, "trades": rows, "total": total, "offset": offset, "limit": limit,
             "next_offset": offset + limit, "prev_offset": max(0, offset - limit),
             "has_next": offset + limit < total, "has_prev": offset > 0,
-            "start1": (offset + 1) if total else 0, "end1": min(offset + limit, total)})
+            "start1": (offset + 1) if total else 0, "end1": min(offset + limit, total),
+            "truncated": truncated, "stat_total": stat_total, "orders_in_result": orders_in_result})
 
     @app.post("/ui/runs/clear")
     def ui_runs_clear(request: Request):

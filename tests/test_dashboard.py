@@ -394,6 +394,30 @@ def test_run_trades_pagination(tmp_path, monkeypatch):
     assert r2.text.count("<tr>") == 1 + 50
 
 
+def test_run_trades_shows_truncation_notice(tmp_path, monkeypatch):
+    # LEAN이 결과 파일에 주문을 일부만 저장하면(통계 Total Orders > 파일 주문수) 정직하게 고지.
+    import json
+    from orchestrator import config
+    monkeypatch.setattr(config, "CONFIG_LOCAL", tmp_path / "config.local.yaml")
+    monkeypatch.setenv("LEAN_DATA_DIR", str(tmp_path / "data"))
+    rundir = tmp_path / "runs" / "trunc"
+    rundir.mkdir(parents=True)
+    orders = {str(i): {"status": 3, "quantity": 1, "price": 100, "value": 100,
+                       "lastFillTime": "2026-01-05T00:00:00Z", "symbol": {"value": "005930"}}
+              for i in range(100)}  # 결과 파일엔 100건만
+    (rundir / "trunc.json").write_text(json.dumps({"orders": orders}), encoding="utf-8")
+    store = RunStore(tmp_path / "s.db")
+    store.save_run({"run_id": "trunc", "strategy": "s.py", "algorithm_type": "S",
+                    "data_folder": "/data", "parameters": {}, "exit_code": 0, "success": True,
+                    "statistics": {"Total Orders": "5000"},  # 통계상 전체 5000건
+                    "run_dir": str(rundir), "log_path": str(rundir / "run.log"),
+                    "result_json": str(rundir / "trunc.json")})
+    c = TestClient(create_app(runner=FakeRunner(), store=store))
+    t = c.get("/ui/runs/trunc/trades?offset=0&limit=100").text
+    assert "일부만 표시" in t and "5,000" in t and "100" in t
+    assert (rundir / "trades.meta.json").exists()
+
+
 def test_run_detail_loads_trades_lazily(client):
     # 상세 페이지는 거래를 인라인으로 싣지 않고 HTMX로 가져온다(대량 거래 성능).
     _save_default_strategy(client)
