@@ -54,10 +54,32 @@ def run_and_store(runner: LeanRunner, store: RunStore, req: RunRequest, on_start
     return store.save_run(_result_to_record(req, result))
 
 
+def _default_get_broker():
+    """기본 매매 조회 브로커(활성 증권사). 테스트는 create_app(get_broker=...)로 가짜를 주입."""
+    from brokers.kis_broker import get_trading_broker
+    return get_trading_broker()
+
+
 def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
                jobs: JobManager | None = None, trade_store: TradeStore | None = None,
-               get_broker=None) -> FastAPI:
-    app = FastAPI(title="buylow", version="0.0.1")
+               get_broker=None, broker_cache=None) -> FastAPI:
+    # 활성 증권사 기준 잔고·당일 체결을 백그라운드로 주기 갱신해 메모리 캐시(매매 탭 즉시 표시).
+    _get_broker = get_broker or _default_get_broker
+    if broker_cache is None:
+        from ..broker_cache import BrokerCache
+        broker_cache = BrokerCache(_get_broker)
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _lifespan(_app):
+        broker_cache.start()  # 서버 가동 동안 백그라운드 캐시 갱신
+        try:
+            yield
+        finally:
+            broker_cache.stop()
+
+    app = FastAPI(title="buylow", version="0.0.1", lifespan=_lifespan)
     # runner는 lazy: 주입되지 않았으면 첫 실행 때 생성(런처 빌드 비용을 startup에서 회피)
     state: dict[str, Any] = {"runner": runner, "store": store or RunStore(),
                              "jobs": jobs or JobManager(),
@@ -106,7 +128,8 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
         run_and_store=run_and_store,
         jobs=state["jobs"],
         trade_store=state["trade_store"],
-        get_broker=get_broker,  # 테스트는 가짜 브로커 주입; 없으면 기본 KIS 브로커
+        get_broker=_get_broker,  # 테스트는 가짜 브로커 주입; 없으면 기본 KIS 브로커
+        broker_cache=broker_cache,
     )
 
     return app

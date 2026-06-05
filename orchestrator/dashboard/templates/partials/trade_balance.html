@@ -1,7 +1,7 @@
 {# B. 예수금 + 보유종목 — 진입 시 load로 1회 + 10초마다 HTMX 갱신(/trade/balance). #}
 <section class="card" id="trade-balance"
          hx-get="/trade/balance" hx-trigger="load, every 10s" hx-swap="outerHTML">
-  <h2>잔고 <small class="meta">· 자동 갱신</small></h2>
+  <h2>잔고 <small class="meta">{% if at %}· 기준 {{ at }}{% else %}· 자동 갱신{% endif %}</small></h2>
   {% if loading %}
   <p class="meta"><span class="spinner"></span>잔고 불러오는 중…</p>
   {% elif balance %}

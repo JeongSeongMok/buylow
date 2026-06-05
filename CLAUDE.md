@@ -100,10 +100,12 @@ Every Claude session working in this repo follows these:
   거래로그(`TradeStore`, SQLite)로 폴백. 화살표는 달력 ±1일(체결조회는 임의 날짜 조회 가능). 체결조회엔
   실현손익이 없어 손익 합은 자체 로그가 있을 때만 표시(`has_pnl`). **잔고/보유종목은 `inquire-balance`라
   KIS 앱 매수가 자동 반영**.
-- **B/C 비동기 로드 + 10초 폴링** — 잔고(`/trade/balance`)·매매내역(`/trade/trades?date=`)을 부분 템플릿
-  (`partials/...`)으로 분리. 진입 시 trade_page는 **계좌(A)·장상태(E)만 서버 렌더**하고 B/C는 `loading` 자리표시
-  → HTMX `hx-trigger="load, every 10s"`로 비동기 로드 + 갱신(진입 시 KIS 잔고+체결조회 동기 대기 제거).
-  날짜 **화살표/선택은 `#trade-trades`만 부분 교체**(`hx-target` outerHTML) — 전체 페이지 리로드(브라우저 탭 로딩) 없음.
+- **B/C 백그라운드 캐시 + 비동기 로드** — KIS 잔고·체결조회가 느려 화면이 직접 기다리지 않는다.
+  **`orchestrator/broker_cache.py` `BrokerCache`**: 서버 가동 동안(FastAPI `lifespan`) 백그라운드 스레드가
+  10초마다 **활성 증권사의 잔고 + 당일 체결을 메모리 캐시**. 라우트(`/trade/balance`·`/trade/trades`)는 캐시를
+  즉시 반환(KIS 왕복 없음). 캐시 미스(첫 진입·과거 날짜)는 동기 1회로 메우고, 증권사/키 변경 시 `invalidate()`.
+  화면: 진입 시 A/E만 서버 렌더 + B/C는 `loading` 자리표시 → HTMX `hx-trigger="load, every 10s"`로 캐시 표시.
+  날짜 **화살표/선택은 `#trade-trades`만 부분 교체**(전체 리로드/브라우저 탭 로딩 없음). 헤더에 캐시 기준시각 표시.
 - **D 제어 표면** — `/trade/toggle`(켤 때 실전은 무장 가드 통과 필수), `/trade/arm`(무장/한도/HTS ID
   저장). 섹션별 try/except로 브로커 실패가 페이지를 깨지 않음. 테스트: `tests/test_trade.py`, `test_live.py`.
 

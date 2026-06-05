@@ -1,7 +1,7 @@
 {# C. 매매 내역 — 진입 시 load로 1회 + 10초 갱신. 날짜 화살표/선택은 이 섹션만 부분 교체(전체 리로드 X). #}
 <section class="card" id="trade-trades"
          hx-get="/trade/trades?date={{ sel_date }}" hx-trigger="load, every 10s" hx-swap="outerHTML">
-  <h2>매매 내역 <small class="meta">· 자동 갱신</small></h2>
+  <h2>매매 내역 <small class="meta">{% if at %}· 기준 {{ at }}{% else %}· 자동 갱신{% endif %}</small></h2>
   <div class="dates">
     <a class="chip" style="cursor:pointer"
        hx-get="/trade/trades?date={{ prev_date }}" hx-target="#trade-trades" hx-swap="outerHTML">◀ {{ prev_date }}</a>

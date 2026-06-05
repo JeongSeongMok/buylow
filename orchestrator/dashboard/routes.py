@@ -257,14 +257,18 @@ def register_dashboard(
     jobs: Any,
     trade_store: Any = None,
     get_broker: Callable[[], tuple] | None = None,
+    broker_cache: Any = None,
 ) -> None:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-    # 매매 탭 의존성 — 주입 안 되면 기본(SQLite TradeStore + KIS 조회 브로커).
+    # 매매 탭 의존성 — 주입 안 되면 기본(SQLite TradeStore + KIS 조회 브로커 + 메모리 캐시).
     if trade_store is None:
         from ..persistence import TradeStore
         trade_store = TradeStore()
     if get_broker is None:
         from brokers.kis_broker import get_trading_broker as get_broker
+    if broker_cache is None:
+        from ..broker_cache import BrokerCache
+        broker_cache = BrokerCache(get_broker)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     def submit_backtest(name: str, req: RunRequest):
@@ -581,20 +585,15 @@ def register_dashboard(
         return (cur - timedelta(days=1)).isoformat(), (cur + timedelta(days=1)).isoformat()
 
     def _trades_view(sel_date: str) -> dict:
-        """매매내역 컨텍스트 — 브로커 체결조회(KIS 앱/자동매매 무관) 우선, 미지원/실패 시 자체 거래로그."""
-        broker, _err = get_broker()
-        rows = None
-        if broker is not None and hasattr(broker, "trades"):
-            try:
-                rows = broker.trades(sel_date)
-            except Exception:
-                rows = None
+        """매매내역 컨텍스트 — 메모리 캐시(백그라운드 갱신) 우선, 캐시 미스/브로커 없음 시 자체 거래로그."""
+        rows, at = broker_cache.get_trades(sel_date)
         if rows is None:
             rows = trade_store.list_trades(sel_date)
+            at = None
         prev_date, next_date = _date_nav(sel_date)
         return {
             "trades": rows, "sel_date": sel_date,
-            "prev_date": prev_date, "next_date": next_date,
+            "prev_date": prev_date, "next_date": next_date, "at": at,
             "daily_pnl": sum((t.get("realized_pnl") or 0) for t in rows),
             "has_pnl": any(t.get("realized_pnl") is not None for t in rows),
         }
@@ -639,22 +638,14 @@ def register_dashboard(
 
     @app.get("/trade/balance", response_class=HTMLResponse)
     def trade_balance(request: Request):
-        # 잔고/보유종목 부분 갱신(매매 탭 10초 폴링). 브로커 실패 시에도 섹션은 유지.
-        broker, broker_err = get_broker()
-        balance, errors = None, {"balance": None}
-        if broker is None:
-            errors["balance"] = broker_err
-        else:
-            try:
-                balance = broker.balance()
-            except Exception as e:
-                errors["balance"] = f"{type(e).__name__}: {e}"
+        # 잔고/보유종목 부분 — 메모리 캐시(백그라운드 갱신)에서 즉시 반환(KIS 왕복 없음).
+        balance, err, at = broker_cache.get_balance()
         return templates.TemplateResponse(request, "partials/trade_balance.html", {
-            "balance": balance, "errors": errors, "format_won": format_won})
+            "balance": balance, "errors": {"balance": err}, "at": at, "format_won": format_won})
 
     @app.get("/trade/trades", response_class=HTMLResponse)
     def trade_trades(request: Request):
-        # 매매내역 부분 갱신(선택 날짜 기준, 10초 폴링). 브로커 체결조회 우선(KIS 실거래).
+        # 매매내역 부분 — 캐시 우선(당일은 백그라운드 갱신, 과거는 요청 시 캐시).
         sel_date = request.query_params.get("date") or _seoul_today()
         ctx = _trades_view(sel_date)
         ctx["format_won"] = format_won
@@ -713,6 +704,7 @@ def register_dashboard(
         if broker in config.BROKERS:
             config.set_broker(broker)
         config.save_secrets({k: str(v) for k, v in form.items()})
+        broker_cache.invalidate()  # 키/증권사 변경 → 캐시 무효(다음 조회가 새로 채움)
         return RedirectResponse(url="/settings?saved=1", status_code=303)
 
     @app.post("/settings/broker")
@@ -722,12 +714,14 @@ def register_dashboard(
         b = form.get("broker")
         if b in config.BROKERS:
             config.set_broker(b)
+            broker_cache.invalidate()  # 새 활성 증권사 데이터로 즉시 교체
         return RedirectResponse(url="/settings", status_code=303)
 
     @app.post("/settings/clear")
     def settings_clear():
         # 활성 증권사의 저장된 키를 삭제(실수 입력 정리·증권사 전환 시).
         config.clear_broker_secrets(config.get_broker())
+        broker_cache.invalidate()
         return RedirectResponse(url="/settings", status_code=303)
 
     @app.post("/settings/test/krx")
