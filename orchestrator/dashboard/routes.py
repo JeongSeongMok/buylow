@@ -403,9 +403,19 @@ def register_dashboard(
         from etl.names import load_names
         reasons = parse_rule_reasons(record.get("run_dir"))
         names = load_names(config.get_data_folder())
+        # 신호 진단(추정) — 왜 매수/매도가 적었는지 경향(매수신호 발생률 + 차단 신호).
+        # 실패해도(데이터 없음 등) 페이지엔 영향 없음(diag=None이면 섹션 미표시).
+        diag = None
+        try:
+            rs = (record.get("parameters") or {}).get("rule_spec")
+            spec = json.loads(rs) if rs else {}
+            from ..signal_diag import analyze_run
+            diag = analyze_run(spec, config.get_data_folder())
+        except Exception:
+            diag = None
         return templates.TemplateResponse(request, "run_detail.html", {
             "run": record, "summary": friendly_stats(record.get("statistics") or {}),
-            "trades": parse_orders(record.get("result_json"), reasons, names)})
+            "trades": parse_orders(record.get("result_json"), reasons, names), "diag": diag})
 
     # ── ① 전략 설정 탭 ───────────────────────────────────────────────
     @app.get("/strategy", response_class=HTMLResponse)
