@@ -85,11 +85,11 @@ def test_execution_from_form_close_is_daily():
 
 
 def test_execution_from_form_minute_timings_derive():
-    # 특정시각/TWAP/눌림목 → 분봉, 선별=항상 close(전날), 리스크=매분(bar).
+    # 특정시각/TWAP/눌림목 → 분봉, 선별=항상 close(전날), 리스크=항상 daily(종가 1회 — churn 방지).
     for tm in ("time", "twap", "pullback"):
         res, ex = sc.execution_from_form({"exec_timing": tm})
         assert res == "minute", tm
-        assert ex["select_eval"] == "close" and ex["risk_eval"] == "bar"
+        assert ex["select_eval"] == "close" and ex["risk_eval"] == "daily"
         assert ex["style"] == tm
 
 

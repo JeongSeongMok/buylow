@@ -105,8 +105,9 @@ class RuleStrategy(KrxFrameworkAlgorithm):
         # 체결 타이밍이 해상도를 결정: 특정시각/TWAP/눌림목 → 분봉, 시가/종가 → 일봉.
         # (resolution 필드는 설정 모델이 타이밍에서 도출해 넣어줌. 방어적으로 재확인.)
         intraday = str(spec.get("resolution", "daily")).lower() == "minute"
-        # 리스크 평가 주기: 분봉 체결이면 매분, 일봉 체결이면 일별(체결 데이터 따라 자동).
-        risk_eval_daily = (not intraday) or ex.get("risk_eval", "bar") == "daily"
+        # 리스크 판단은 항상 완성된 일봉(종가) 1회 — 선별과 같은 철학. 분봉 체결이어도 장중 매분
+        # 평가는 안 한다(노이즈에 손절·트레일링이 계속 발동→과매매). 분봉이면 DailyGated로 마감 1회.
+        risk_eval_daily = ex.get("risk_eval", "daily") != "bar"
         self.setup_krx_framework(Resolution.MINUTE if intraday else Resolution.DAILY,
                                  risk_eval_daily=risk_eval_daily)
 

@@ -115,7 +115,8 @@
         <small>지정 시점에 못 채운 잔량을 마지막 분봉(≈종가)에 시장가로 마무리(미체결 방지).</small></label>
 
       <h3 class="subhead">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
-      <p class="meta">손절·익절·트레일링은 <b>시가/종가 체결이면 일별(종가) 평가, 분봉 체결이면 매분 감시</b>로 자동 적용됩니다.</p>
+      <p class="meta">손절·익절·트레일링은 <b>완성된 일봉(종가) 기준 하루 1회</b> 판단하고, 청산은 위 체결 타이밍으로 실행됩니다.
+        (장중 매분 평가는 노이즈에 계속 발동해 과매매를 일으키므로 쓰지 않습니다.)</p>
       <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
         <small>매수가 대비 이만큼 떨어지면 매도</small></label>
       <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">

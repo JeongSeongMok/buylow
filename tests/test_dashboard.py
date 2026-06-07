@@ -199,11 +199,11 @@ def test_strategy_save_persists_timing_execution(client, isolated_config):
                  "exec_force_by_close": "on"})
     assert client.post("/strategy", data=data).status_code == 200
     strat = isolated_config.get_strategy()
-    # 특정시각 → 분봉 해상도, 선별은 항상 close(전날), 리스크 매분, style=time.
+    # 특정시각 → 분봉 해상도, 선별·리스크 모두 종가 1회(close/daily), style=time.
     assert strat["resolution"] == "minute"
     ex = strat["execution"]
     assert ex["timing"] == "time" and ex["style"] == "time" and ex["at_min"] == 13 * 60 + 30
-    assert ex["select_eval"] == "close" and ex["risk_eval"] == "bar"
+    assert ex["select_eval"] == "close" and ex["risk_eval"] == "daily"
     assert ex["force_by_close"] is True
 
 

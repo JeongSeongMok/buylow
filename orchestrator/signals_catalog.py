@@ -221,8 +221,11 @@ def execution_from_form(form) -> tuple[str, dict]:
         "exit_rebound_pct": num("exec_exit_rebound_pct", 1.0, float),
         "force_by_close": bool(form.get("exec_force_by_close")),
         # ── 파생값(RuleStrategy/실행모델이 읽음) ──
-        "select_eval": "close",                       # 선별은 항상 전날 1회
-        "risk_eval": "bar" if is_minute else "daily",  # 체결 데이터 따라 자동
+        "select_eval": "close",   # 선별은 항상 전날 1회
+        # 리스크도 완성된 일봉(종가) 기준 1회로 통일 — 선별과 같은 철학. 분봉 매분 평가는 장중
+        # 노이즈에 손절·트레일링이 계속 발동해 과매매(회전율 78%↑)를 일으키므로 쓰지 않는다.
+        # 손절/익절 '판단'은 종가 1회, 그 '청산 체결'은 아래 타이밍이 처리한다.
+        "risk_eval": "daily",
         "daily_fill": timing if timing in ("open", "close") else "open",
         "style": style,
     }
