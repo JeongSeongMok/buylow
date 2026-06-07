@@ -231,10 +231,7 @@
     allOn = !allOn;
     document.getElementById('universe-all').value = allOn ? '1' : '';
     document.getElementById('all-btn').classList.toggle('active', allOn);
-    const box = document.getElementById('universe-box');
-    box.classList.toggle('disabled', allOn);
-    sIn.disabled = allOn;
-    box.querySelectorAll('button').forEach(b => { if (b.id !== 'all-btn') b.disabled = allOn; });
+    // 전체종목 ON이어도 나머지 종목/인덱스/검색을 비활성화하지 않는다(사용자 요청).
     saveState();
   }
   restoreState();  // localStorage → 폼 복원(없으면 서버 기본값 유지)
