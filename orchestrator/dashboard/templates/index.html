@@ -21,17 +21,17 @@
 
       <label>기간
         <span class="dates">
-          <input type="date" name="start" id="start" value="{{ start_default }}">
+          <input type="date" name="start" id="start" value="{{ start_default }}" onchange="clearQuickActive()">
           <span class="meta">~</span>
-          <input type="date" name="end" id="end" value="{{ end_default }}">
+          <input type="date" name="end" id="end" value="{{ end_default }}" onchange="clearQuickActive()">
         </span>
       </label>
-      <div class="quick">시작일 빠른 설정:
-        <button type="button" class="ghost" onclick="setStart('1w')">1주 전</button>
-        <button type="button" class="ghost" onclick="setStart('1m')">1달 전</button>
-        <button type="button" class="ghost" onclick="setStart('3m')">3달 전</button>
-        <button type="button" class="ghost" onclick="setStart('6m')">6달 전</button>
-        <button type="button" class="ghost" onclick="setStart('1y')">1년 전</button>
+      <div class="quick" id="quick-period">시작일 빠른 설정:
+        <button type="button" class="ghost" onclick="setStart('1w', this)">1주 전</button>
+        <button type="button" class="ghost" onclick="setStart('1m', this)">1달 전</button>
+        <button type="button" class="ghost" onclick="setStart('3m', this)">3달 전</button>
+        <button type="button" class="ghost" onclick="setStart('6m', this)">6달 전</button>
+        <button type="button" class="ghost" onclick="setStart('1y', this)">1년 전</button>
       </div>
       <hr>
 
@@ -42,7 +42,7 @@
                   title="적재된 전 종목 대상 · 보유 최대 {{ max_positions }}">전체종목</button>
           {# 인덱스 버튼은 SSOT(etl.universe.INDEXES)에서 동적 렌더 — 추가는 거기 한 줄만 #}
           {% for idx in indices %}
-          <button type="button" class="ghost" onclick="addIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+          <button type="button" class="ghost idx-btn" onclick="addIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
           {% endfor %}
           <span class="meta" id="index-status"></span>
         </div>
@@ -80,7 +80,10 @@
 {% if has_strategy %}
 <script>
   const NAMES = {{ names|tojson }};
-  function setStart(kind) {
+  function clearQuickActive() {  // 수동으로 날짜를 바꾸면 빠른설정 활성 해제
+    document.querySelectorAll('#quick-period button').forEach(b => b.classList.remove('active'));
+  }
+  function setStart(kind, btn) {
     const d = new Date();
     if (kind === '1w') d.setDate(d.getDate() - 7);
     else if (kind === '1m') d.setMonth(d.getMonth() - 1);
@@ -88,6 +91,8 @@
     else if (kind === '6m') d.setMonth(d.getMonth() - 6);
     else if (kind === '1y') d.setFullYear(d.getFullYear() - 1);
     document.getElementById('start').value = d.toISOString().slice(0, 10);
+    clearQuickActive();
+    if (btn) btn.classList.add('active');  // 누른 버튼만 활성화(단일 선택)
   }
 
   const CHIP_LIMIT = 60;
@@ -150,7 +155,11 @@
   sIn.addEventListener('input', doSearch);
   document.addEventListener('click', (e) => { if (!sRes.contains(e.target) && e.target !== sIn) sRes.hidden = true; });
 
-  function clearTickers() { tickers = []; syncTickers(); }
+  function clearTickers() {
+    tickers = []; syncTickers();
+    // 전체비우기 → 눌렀던 인덱스/관심종목 버튼 활성 해제
+    document.querySelectorAll('#universe-box .idx-btn').forEach(b => b.classList.remove('active'));
+  }
   async function addIndex(name, btn) {
     // 인덱스 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
     const status = document.getElementById('index-status');
@@ -165,6 +174,7 @@
       data.tickers.forEach(t => { if (!tickers.includes(t)) { tickers.push(t); added++; } });
       syncTickers();
       status.textContent = `${name} ${data.tickers.length}종목 추가 (신규 ${added})`;
+      if (btn) btn.classList.add('active');  // 추가한 인덱스/관심종목 버튼 활성화(전체비우기 전까지)
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
     finally { btns.forEach(b => b.disabled = false); }
   }

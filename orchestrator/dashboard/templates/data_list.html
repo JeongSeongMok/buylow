@@ -66,7 +66,7 @@
                 title="적재된 전 종목을 칩으로 추가">전체종목</button>
         {# 인덱스 버튼은 SSOT(etl.universe.INDEXES)에서 동적 렌더 #}
         {% for idx in indices %}
-        <button type="button" class="ghost" onclick="mAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+        <button type="button" class="ghost idx-btn" onclick="mAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
         {% endfor %}
         <span class="meta" id="m-index-status"></span>
       </div>
@@ -127,7 +127,10 @@
     else { const q = v.toLowerCase(); for (const c in M_NAMES) { if (M_NAMES[c].toLowerCase().includes(q)) { mAdd(c); break; } } }
     mIn.value = ''; mRes.hidden = true;
   }
-  function mClear() { mTickers = []; mSync(); }
+  function mClear() {
+    mTickers = []; mSync();
+    document.querySelectorAll('#m-universe-box .idx-btn').forEach(b => b.classList.remove('active'));
+  }
   function mAddAll(btn) {
     // 적재된 전 종목을 칩으로 추가(분봉 일괄 적재용). 수천 종목일 수 있어 건수를 표시한다.
     let added = 0;
@@ -149,6 +152,7 @@
       d.tickers.forEach(t => { if (!mTickers.includes(t)) { mTickers.push(t); added++; } });
       mSync();
       status.textContent = `${name} ${d.tickers.length}종목 추가 (신규 ${added})`;
+      if (btn) btn.classList.add('active');
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
     finally { btns.forEach(b => b.disabled = false); }
   }

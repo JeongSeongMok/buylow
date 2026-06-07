@@ -30,9 +30,9 @@
   </div>
   <p class="meta">자동매매가 매매할 종목입니다. 인덱스·그룹 버튼이나 검색으로 추가하세요(저장 후 자동매매를 켜면 이 종목들을 전략대로 매매).</p>
   <form method="post" action="/trade/universe" id="live-universe-form">
-    <div class="add-row">
+    <div class="add-row" id="u-index-row">
       {% for idx in indices %}
-      <button type="button" class="ghost" onclick="uAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+      <button type="button" class="ghost idx-btn" onclick="uAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
       {% endfor %}
       <span class="meta" id="u-index-status"></span>
     </div>
@@ -110,7 +110,10 @@
     document.getElementById('u-hidden').value = uTickers.join(',');
   }
   function uAdd(code) { if (code && !uTickers.includes(code)) uTickers.push(code); uSync(); }
-  function uClear() { uTickers = []; uSync(); }
+  function uClear() {
+    uTickers = []; uSync();
+    document.querySelectorAll('#u-index-row .idx-btn').forEach(b => b.classList.remove('active'));
+  }
   async function uAddIndex(name, btn) {
     const status = document.getElementById('u-index-status');
     const btns = btn.parentElement.querySelectorAll('button');
@@ -123,6 +126,7 @@
       d.tickers.forEach(t => { if (!uTickers.includes(t)) { uTickers.push(t); added++; } });
       uSync();
       status.textContent = `${name} ${d.tickers.length}종목 추가 (신규 ${added})`;
+      if (btn) btn.classList.add('active');
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
     finally { btns.forEach(b => b.disabled = false); }
   }
