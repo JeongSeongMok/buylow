@@ -56,8 +56,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
 /* 넓은 페이지(전략설정·결과): 화면 폭의 85% */
 main.wide { max-width: 85vw; }
 
-/* 2컬럼 레이아웃 (좁으면 1컬럼) */
+/* 2컬럼 레이아웃 (좁으면 1컬럼) — 두 컬럼 폭을 항상 1:1로 고정. */
 .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
+/* 그리드 아이템 기본 min-width=auto(=내용폭)라, 안 줄어드는 내용(인덱스 버튼 줄 등)이 컬럼을
+   밀어 폭이 틀어진다. min-width:0으로 줄어들게 해 두 컬럼이 항상 동일 폭을 유지하게 한다. */
+.cols2 > * { min-width: 0; }
 @media (max-width: 860px) { .cols2 { grid-template-columns: 1fr; } }
 
 /* 내용 크기에 맞춰 두 컬럼을 묶어 가운데 정렬(결과 페이지: 요약이 비지 않게) */
@@ -188,9 +191,12 @@ label.spaced { margin-top: 1rem; }
 .dates { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.25rem; }
 .dates input[type=date] { width: auto; display: inline-block; margin-top: 0; }
 .quick { color: var(--muted); font-size: 0.82rem; margin-bottom: 0.8rem; display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
-.add-row { display: flex; gap: 0.4rem; align-items: center; margin: 0.25rem 0 0.5rem; }
+/* 인덱스/빠른추가 버튼이 많아지면 가로로 넘치지 않고 다음 줄로 감싼다(컬럼 폭 유지). */
+.add-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.25rem 0 0.5rem; }
 .add-row input { width: auto; display: inline-block; margin-top: 0; }
-.chip { display: inline-flex; align-items: center; gap: 0.35rem; background: #0f1419; border: 1px solid var(--border);
+/* 버튼 라벨·인덱스명·상태문구는 카드 안에서 한 줄로(라벨 중간 줄바꿈 방지 — 줄바꿈은 항목 사이에서만). */
+.add-row button.ghost, .add-row > .meta { white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; background: #0f1419; border: 1px solid var(--border);
         border-radius: 12px; padding: 0.15rem 0.6rem; margin: 0.15rem 0.25rem 0.15rem 0; font-size: 0.82rem; }
 .chip a { color: var(--muted); text-decoration: none; }
 .chip a:hover { color: #e57373; }
