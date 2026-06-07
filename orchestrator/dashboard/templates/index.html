@@ -27,11 +27,11 @@
         </span>
       </label>
       <div class="quick" id="quick-period">시작일 빠른 설정:
-        <button type="button" class="ghost" onclick="setStart('1w', this)">1주 전</button>
-        <button type="button" class="ghost" onclick="setStart('1m', this)">1달 전</button>
-        <button type="button" class="ghost" onclick="setStart('3m', this)">3달 전</button>
-        <button type="button" class="ghost" onclick="setStart('6m', this)">6달 전</button>
-        <button type="button" class="ghost" onclick="setStart('1y', this)">1년 전</button>
+        <button type="button" class="ghost" data-kind="1w" onclick="setStart('1w', this)">1주 전</button>
+        <button type="button" class="ghost" data-kind="1m" onclick="setStart('1m', this)">1달 전</button>
+        <button type="button" class="ghost" data-kind="3m" onclick="setStart('3m', this)">3달 전</button>
+        <button type="button" class="ghost" data-kind="6m" onclick="setStart('6m', this)">6달 전</button>
+        <button type="button" class="ghost" data-kind="1y" onclick="setStart('1y', this)">1년 전</button>
       </div>
       <hr>
 
@@ -42,7 +42,7 @@
                   title="적재된 전 종목 대상 · 보유 최대 {{ max_positions }}">전체종목</button>
           {# 인덱스 버튼은 SSOT(etl.universe.INDEXES)에서 동적 렌더 — 추가는 거기 한 줄만 #}
           {% for idx in indices %}
-          <button type="button" class="ghost idx-btn" onclick="addIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+          <button type="button" class="ghost idx-btn" data-idx="{{ idx.key }}" onclick="addIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
           {% endfor %}
           <span class="meta" id="index-status"></span>
         </div>
@@ -80,8 +80,37 @@
 {% if has_strategy %}
 <script>
   const NAMES = {{ names|tojson }};
+  // 폼 상태(기간·유니버스·활성 인덱스·빠른설정)를 localStorage에 저장해 탭 이동 후에도 유지.
+  const LS_KEY = 'buylow.bt.form';
+  function saveState() {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        start: document.getElementById('start').value,
+        end: document.getElementById('end').value,
+        tickers: tickers, all: allOn, indexSets: indexSets,
+        quick: (document.querySelector('#quick-period button.active') || {}).dataset?.kind || null,
+      }));
+    } catch (e) {}
+  }
+  function restoreState() {
+    let s; try { s = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) {}
+    if (!s) return;
+    if (s.start) document.getElementById('start').value = s.start;
+    if (s.end) document.getElementById('end').value = s.end;
+    if (Array.isArray(s.tickers)) tickers = s.tickers;
+    if (s.indexSets) Object.assign(indexSets, s.indexSets);
+    document.querySelectorAll('#universe-box .idx-btn').forEach(b => {
+      if (indexSets[b.dataset.idx]) b.classList.add('active');
+    });
+    if (s.quick) {
+      const qb = document.querySelector('#quick-period button[data-kind="' + s.quick + '"]');
+      if (qb) qb.classList.add('active');
+    }
+    if (s.all) toggleAll();  // 전체종목 모드 복원
+  }
   function clearQuickActive() {  // 수동으로 날짜를 바꾸면 빠른설정 활성 해제
     document.querySelectorAll('#quick-period button').forEach(b => b.classList.remove('active'));
+    saveState();
   }
   function setStart(kind, btn) {
     const d = new Date();
@@ -91,8 +120,9 @@
     else if (kind === '6m') d.setMonth(d.getMonth() - 6);
     else if (kind === '1y') d.setFullYear(d.getFullYear() - 1);
     document.getElementById('start').value = d.toISOString().slice(0, 10);
-    clearQuickActive();
+    document.querySelectorAll('#quick-period button').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');  // 누른 버튼만 활성화(단일 선택)
+    saveState();
   }
 
   const CHIP_LIMIT = 60;
@@ -118,6 +148,7 @@
     }
     document.getElementById('chip-count').textContent = `(${tickers.length})`;
     document.getElementById('universe-hidden').value = tickers.join(',');
+    saveState();
   }
   function addCode(code) { if (code && !tickers.includes(code)) tickers.push(code); syncTickers(); }
 
@@ -186,10 +217,10 @@
       if (data.error) { alert(data.error); status.textContent = ''; return; }
       let added = 0;
       data.tickers.forEach(t => { if (!tickers.includes(t)) { tickers.push(t); added++; } });
-      syncTickers();
-      indexSets[name] = data.tickers;
-      status.textContent = `${name} ${data.tickers.length}종목 추가 (신규 ${added})`;
+      indexSets[name] = data.tickers;  // syncTickers(saveState) 전에 기록해야 활성 인덱스가 저장됨
       if (btn) btn.classList.add('active');  // 활성화(다시 누르면 해제·제거)
+      syncTickers();
+      status.textContent = `${name} ${data.tickers.length}종목 추가 (신규 ${added})`;
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
     finally { btns.forEach(b => b.disabled = false); }
   }
@@ -204,7 +235,9 @@
     box.classList.toggle('disabled', allOn);
     sIn.disabled = allOn;
     box.querySelectorAll('button').forEach(b => { if (b.id !== 'all-btn') b.disabled = allOn; });
+    saveState();
   }
+  restoreState();  // localStorage → 폼 복원(없으면 서버 기본값 유지)
   syncTickers();
 </script>
 {% endif %}
