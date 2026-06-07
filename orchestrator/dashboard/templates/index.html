@@ -155,14 +155,28 @@
   sIn.addEventListener('input', doSearch);
   document.addEventListener('click', (e) => { if (!sRes.contains(e.target) && e.target !== sIn) sRes.hidden = true; });
 
+  const indexSets = {};  // 활성 인덱스 key -> 그 구성종목[] (토글 해제 시 빼기 위해 보관)
   function clearTickers() {
     tickers = []; syncTickers();
+    for (const k in indexSets) delete indexSets[k];
     // 전체비우기 → 눌렀던 인덱스/관심종목 버튼 활성 해제
     document.querySelectorAll('#universe-box .idx-btn').forEach(b => b.classList.remove('active'));
   }
   async function addIndex(name, btn) {
-    // 인덱스 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
     const status = document.getElementById('index-status');
+    // 이미 활성 → 토글 해제: 이 인덱스 종목 제거(단, 다른 활성 인덱스에도 든 종목은 유지)
+    if (btn && btn.classList.contains('active')) {
+      const mine = indexSets[name] || [];
+      delete indexSets[name];
+      const keep = new Set();
+      Object.values(indexSets).forEach(arr => arr.forEach(t => keep.add(t)));
+      tickers = tickers.filter(t => keep.has(t) || !mine.includes(t));
+      syncTickers();
+      btn.classList.remove('active');
+      status.textContent = `${name} 해제`;
+      return;
+    }
+    // 인덱스 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
     const btns = btn.parentElement.querySelectorAll('button');
     btns.forEach(b => b.disabled = true);
     status.innerHTML = '<span class="spinner"></span>' + name + ' 구성종목 불러오는 중…';
@@ -173,8 +187,9 @@
       let added = 0;
       data.tickers.forEach(t => { if (!tickers.includes(t)) { tickers.push(t); added++; } });
       syncTickers();
+      indexSets[name] = data.tickers;
       status.textContent = `${name} ${data.tickers.length}종목 추가 (신규 ${added})`;
-      if (btn) btn.classList.add('active');  // 추가한 인덱스/관심종목 버튼 활성화(전체비우기 전까지)
+      if (btn) btn.classList.add('active');  // 활성화(다시 누르면 해제·제거)
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
     finally { btns.forEach(b => b.disabled = false); }
   }

@@ -127,8 +127,10 @@
     else { const q = v.toLowerCase(); for (const c in M_NAMES) { if (M_NAMES[c].toLowerCase().includes(q)) { mAdd(c); break; } } }
     mIn.value = ''; mRes.hidden = true;
   }
+  const mIndexSets = {};  // 활성 인덱스 key -> 구성종목[](토글 해제 시 빼기)
   function mClear() {
     mTickers = []; mSync();
+    for (const k in mIndexSets) delete mIndexSets[k];
     document.querySelectorAll('#m-universe-box .idx-btn').forEach(b => b.classList.remove('active'));
   }
   function mAddAll(btn) {
@@ -140,8 +142,14 @@
       `전체종목 ${M_LOADED.length}종목 추가 (신규 ${added})`;
   }
   async function mAddIndex(name, btn) {
-    // 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
     const status = document.getElementById('m-index-status');
+    if (btn && btn.classList.contains('active')) {  // 토글 해제: 이 인덱스 종목 빼기(다른 활성 인덱스 종목은 유지)
+      const mine = mIndexSets[name] || []; delete mIndexSets[name];
+      const keep = new Set(); Object.values(mIndexSets).forEach(a => a.forEach(t => keep.add(t)));
+      mTickers = mTickers.filter(t => keep.has(t) || !mine.includes(t));
+      mSync(); btn.classList.remove('active'); status.textContent = `${name} 해제`; return;
+    }
+    // 구성종목 조회는 네트워크 왕복이라 즉시 안 끝남 → 버튼 비활성 + 진행 표시(오류로 오인 방지)
     const btns = btn.parentElement.querySelectorAll('button');
     btns.forEach(b => b.disabled = true);
     status.innerHTML = '<span class="spinner"></span>' + name + ' 구성종목 불러오는 중…';
@@ -151,6 +159,7 @@
       let added = 0;
       d.tickers.forEach(t => { if (!mTickers.includes(t)) { mTickers.push(t); added++; } });
       mSync();
+      mIndexSets[name] = d.tickers;
       status.textContent = `${name} ${d.tickers.length}종목 추가 (신규 ${added})`;
       if (btn) btn.classList.add('active');
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }

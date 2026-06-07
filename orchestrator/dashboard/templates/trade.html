@@ -110,12 +110,20 @@
     document.getElementById('u-hidden').value = uTickers.join(',');
   }
   function uAdd(code) { if (code && !uTickers.includes(code)) uTickers.push(code); uSync(); }
+  const uIndexSets = {};  // 활성 인덱스 key -> 구성종목[](토글 해제 시 빼기)
   function uClear() {
     uTickers = []; uSync();
+    for (const k in uIndexSets) delete uIndexSets[k];
     document.querySelectorAll('#u-index-row .idx-btn').forEach(b => b.classList.remove('active'));
   }
   async function uAddIndex(name, btn) {
     const status = document.getElementById('u-index-status');
+    if (btn && btn.classList.contains('active')) {  // 토글 해제: 이 인덱스 종목 빼기(다른 활성 인덱스 종목은 유지)
+      const mine = uIndexSets[name] || []; delete uIndexSets[name];
+      const keep = new Set(); Object.values(uIndexSets).forEach(a => a.forEach(t => keep.add(t)));
+      uTickers = uTickers.filter(t => keep.has(t) || !mine.includes(t));
+      uSync(); btn.classList.remove('active'); status.textContent = `${name} 해제`; return;
+    }
     const btns = btn.parentElement.querySelectorAll('button');
     btns.forEach(b => b.disabled = true);
     status.innerHTML = '<span class="spinner"></span>' + name + ' 구성종목 불러오는 중…';
@@ -125,6 +133,7 @@
       let added = 0;
       d.tickers.forEach(t => { if (!uTickers.includes(t)) { uTickers.push(t); added++; } });
       uSync();
+      uIndexSets[name] = d.tickers;
       status.textContent = `${name} ${d.tickers.length}종목 추가 (신규 ${added})`;
       if (btn) btn.classList.add('active');
     } catch (e) { alert('인덱스 구성종목 조회 실패'); status.textContent = ''; }
