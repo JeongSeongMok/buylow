@@ -447,10 +447,14 @@ def register_dashboard(
         from datetime import date, timedelta
         from etl.names import load_names
         today = date.today()
+        strategy = config.get_strategy()
         return templates.TemplateResponse(request, "index.html", {
             "runs": store.list_runs(),
             "indices": config.all_indices(),  # 내장+커스텀 인덱스 버튼 동적 렌더
-            "has_strategy": config.get_strategy() is not None,
+            "has_strategy": strategy is not None,
+            # 분봉 체결 타이밍이면 클라이언트가 종목수×거래일 한도를 미리 검사해 실행 버튼을 막는다.
+            "strategy_minute": str((strategy or {}).get("resolution", "daily")).lower() == "minute",
+            "minute_limit": MINUTE_FEED_MAX_SYMBOL_DAYS,
             "data_loaded": _loaded_count(),
             "default_data_folder": config.get_data_folder(),
             "names": load_names(config.get_data_folder()),  # 종목명 검색·칩 표시용(클라이언트 임베드)
