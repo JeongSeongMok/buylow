@@ -111,6 +111,26 @@ def test_pullback_no_force_when_disabled():
     assert q == 0  # 미체결 그대로
 
 
+# ── TIME(특정시각) ───────────────────────────────────────────────────────────
+def test_time_fills_at_target_time():
+    from orchestrator.execution import TIME
+    cfg = TimingConfig(style=TIME, at_min=13 * 60)  # 13:00 = 자정기준 780분
+    common = dict(remaining=10, total_delta=10, current_price=100,
+                  reference_price=100, last_bar=False)
+    # 13:00 = 장시작(09:00) 후 240분. 그 전이면 대기, 도달하면 전량.
+    assert decide_submit(cfg, elapsed_min=239, **common) == 0    # 12:59
+    assert decide_submit(cfg, elapsed_min=240, **common) == 10   # 13:00 → 전량
+    assert decide_submit(cfg, elapsed_min=300, **common) == 10   # 이후도 전량(놓쳤으면 마저)
+
+
+def test_time_sell_sign_preserved():
+    from orchestrator.execution import TIME
+    cfg = TimingConfig(style=TIME, at_min=15 * 60 + 15)  # 15:15
+    q = decide_submit(cfg, remaining=-7, total_delta=-7, current_price=100,
+                      reference_price=100, elapsed_min=375, last_bar=False)  # 15:15=375분 경과
+    assert q == -7
+
+
 # ── TWAP ───────────────────────────────────────────────────────────────────
 def test_twap_schedules_across_session():
     cfg = TimingConfig(style=TWAP, slices=4, force_by_close=True)

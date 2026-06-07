@@ -70,74 +70,58 @@
     </section>
 
     {% set ex = strategy.get('execution') or {} %}
-    {% set res = strategy.get('resolution') or 'daily' %}
+    {% set tm = ex.get('timing') or ('close' if ex.get('daily_fill') == 'close' else 'open') %}
     <section class="card">
-      <h2>리스크 · 체결 <small>(해상도 기반)</small></h2>
-      <label>해상도
-        <select name="resolution" id="resolution-sel" onchange="toggleResolution()">
-          <option value="daily" {{ 'selected' if res != 'minute' }}>일봉</option>
-          <option value="minute" {{ 'selected' if res == 'minute' }}>분봉</option>
+      <h2>체결 타이밍</h2>
+      <p class="meta"><b>종목 선별은 항상 전날 데이터 기준 하루 1회</b>입니다(장중 재선별 없음). 아래에서는
+        그렇게 고른 종목을 <b>언제·어떻게 체결</b>할지만 정합니다. 타이밍이 해상도·리스크 주기를 자동 결정해요.</p>
+      <label>체결 방식
+        <select name="exec_timing" id="timing-sel" onchange="toggleTiming()">
+          {% for key, label in execution_timings %}
+          <option value="{{ key }}" {{ 'selected' if tm == key }}>{{ label }}</option>
+          {% endfor %}
         </select>
-        <small>일봉: 전날 종가로 선별·평가하고 다음 거래일 시가/종가에 체결.<br>
-          분봉: 장중 매분 선별·평가하고 장중 타이밍으로 체결(분봉 데이터 필요 — 없는 종목/일은 일봉으로 자동 폴백).</small></label>
+        <small>시가/종가 = 다음 거래일 일봉 체결(분봉 데이터 불필요, 리스크는 일별 평가).<br>
+          특정시각/TWAP/눌림목 = 그날 분봉으로 장중 타이밍 체결(분봉 데이터 필요, 리스크는 매분 감시).</small></label>
+
+      {# 종가(일봉) 라이브 괴리 주의 #}
+      <p class="notice" data-tm="close">⚠️ <b>라이브 주의</b>: 백테스트는 다음 거래일 정확한 종가(15:30)지만,
+        라이브는 KIS 어댑터에 종가 단일가 주문이 없어 마감 ~15.5분 전(≈15:14)에 일반 시장가로 나갑니다(룩어헤드는 없음).
+        백테스트=라이브 일치는 '시가'가 가장 안전합니다.</p>
+
+      {# 특정시각 #}
+      <label data-tm="time">체결 시각
+        <input type="text" name="exec_at_time" value="{{ ex.get('at_time', '13:00') }}" placeholder="13:00" size="8">
+        <small>그날 이 시각(KST)에 대상 종목을 전량 체결.</small></label>
+
+      {# TWAP #}
+      <label data-tm="twap">분할 수
+        <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
+        <small>정규장(390분)을 몇 등분해 1/N씩 나눠 체결할지(시장충격 완화). 클수록 잘게 분산.</small></label>
+
+      {# 눌림목/반등 #}
+      <label data-tm="pullback">눌림 진입(%)
+        <input type="text" name="exec_entry_drop_pct" value="{{ ex.get('entry_drop_pct', 1.0) }}" size="6">
+        <small>당일 시초가 대비 이만큼 눌리면 매수.</small></label>
+      <label data-tm="pullback">반등 청산(%)
+        <input type="text" name="exec_exit_rebound_pct" value="{{ ex.get('exit_rebound_pct', 1.0) }}" size="6">
+        <small>당일 시초가 대비 이만큼 반등하면 매도.</small></label>
+
+      {# 분봉 타이밍 공통(time/twap/pullback) — 분봉 데이터 안내 + 미체결 강제체결 #}
+      <p class="notice" data-tm-minute>⚠️ 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>분봉 적재</b>로 먼저 받으세요.
+        없는 종목/날은 시가로 자동 폴백. 분봉 백테스트는 <b>종목수 × 거래일 ≲ 10,000</b> 한도가 있어 큰 유니버스×장기간은 일봉을 쓰세요.</p>
+      <label data-tm-minute><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
+        장 마감 전 미체결 잔량 강제 체결
+        <small>지정 시점에 못 채운 잔량을 마지막 분봉(≈종가)에 시장가로 마무리(미체결 방지).</small></label>
 
       <h3 class="subhead">리스크 관리 <small>(전역 · 비우면 미적용)</small></h3>
+      <p class="meta">손절·익절·트레일링은 <b>시가/종가 체결이면 일별(종가) 평가, 분봉 체결이면 매분 감시</b>로 자동 적용됩니다.</p>
       <label>종목 손절(%) <input type="text" name="stop_loss" value="{{ risk.stop_loss }}" size="6">
         <small>매수가 대비 이만큼 떨어지면 매도</small></label>
       <label>종목 익절(%) <input type="text" name="take_profit" value="{{ risk.take_profit }}" size="6">
         <small>평가이익이 이만큼 나면 매도</small></label>
       <label>트레일링 스탑(%) <input type="text" name="trailing" value="{{ risk.trailing }}" size="6">
         <small>매수 후 고점 대비 이만큼 떨어지면 매도(고점 자동 추적 → 이익 보호)</small></label>
-
-      {# ── 해상도=일봉 전용 ── #}
-      <div id="daily-opts">
-        <p class="meta">선별 <b>전날 종가 1회</b> · 리스크 평가 <b>종가 1회</b> <span class="meta">(일봉 고정)</span></p>
-        <label class="subhead-label">체결 시점
-          <select name="daily_fill" id="daily-fill-sel" onchange="toggleDailyFill()">
-            <option value="open" {{ 'selected' if ex.get('daily_fill', 'open') != 'close' }}>다음 거래일 시가</option>
-            <option value="close" {{ 'selected' if ex.get('daily_fill', 'open') == 'close' }}>다음 거래일 종가</option>
-          </select>
-          <small>신호는 당일 종가에 계산되므로 룩어헤드 방지로 체결은 다음 거래일입니다.<br>'종가'는 MarketOnClose 주문으로 다음 거래일 종가에 체결됩니다.</small></label>
-        <p class="notice" id="daily-close-note">⚠️ <b>라이브 매매 주의</b>: 백테스트는 다음 거래일 <b>정확한 종가(15:30)</b>에 체결합니다.
-          하지만 라이브에서는 KIS 어댑터가 종가 단일가(15:20~15:30) 전용 주문을 아직 지원하지 않아,
-          LEAN이 <b>마감 약 15.5분 전(≈15:14)</b>에 <b>일반 시장가</b>로 주문을 냅니다.<br>
-          즉 라이브 체결가는 <b>15:14쯤의 시장가</b>로, 백테스트의 종가와 시점·가격이 다를 수 있습니다(룩어헤드는 없음).
-          백테스트와 라이브를 가장 일치시키려면 <b>'다음 거래일 시가'</b>를 쓰세요.</p>
-      </div>
-
-      {# ── 해상도=분봉 전용 ── #}
-      <div id="minute-opts">
-        <p class="notice" id="minute-note">⚠️ 분봉 백테스트에는 분봉 데이터가 필요합니다 — <a href="/data">데이터</a> 탭의 <b>누적 분봉 적재</b>로 먼저 받으세요.<br>분봉이 없는 종목/날짜는 일봉(시가 기준)으로 자동 처리됩니다.</p>
-        <p class="meta">선별 <b>장중</b> · 리스크 평가 <b>매분</b> · 체결 <b>TWAP</b> <span class="meta">(분봉 고정)</span>.<br>가격계열 신호(EMA·MACD·RSI·MOM·BB)는 분봉 현재가로 재평가(수급·가치는 전날값), 당일 청산 종목은 당일 재진입하지 않습니다(휩쏘 방지).</p>
-
-        {# 선별(판단) 주기 — 데이터는 분봉이지만 '판단'만 솎아 과매매·수수료를 줄인다. 리스크는 매분 유지. #}
-        {% set cad = ex.get('eval_cadence', 'every') %}
-        <label class="subhead-label">선별 주기
-          <select name="exec_eval_cadence" id="cadence-sel" onchange="toggleCadence()">
-            {% for key, label in eval_cadences %}
-            <option value="{{ key }}" {{ 'selected' if cad == key }}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <small>얼마나 자주 매수/청산을 다시 판단할지. 매분 재판단은 과매매·수수료가 큽니다(손절·익절은 주기와 무관하게 항상 매분 감시).</small></label>
-        <label id="cadence-interval" data-cad="interval">N(분) <input type="text" name="exec_eval_interval_min" value="{{ ex.get('eval_interval_min', 30) }}" size="6">
-          <small>예: 30 → 장 시작 후 30분마다 재판단(하루 ~13회).</small></label>
-        <label id="cadence-times" data-cad="times">시각 목록
-          <input type="text" name="exec_eval_times" value="{{ ex.get('eval_times', [])|join(', ') }}"
-                 placeholder="09:30, 10:05, 12:01">
-          <small>지정한 시각(KST)에만 재판단. 쉼표로 구분. 잘못된 항목은 무시됩니다.</small></label>
-
-        <label>분할 수 <input type="text" name="exec_slices" value="{{ ex.get('slices', 6) }}" size="6">
-          <small>정규장(390분)을 몇 등분해 수량을 나눠 체결할지.<br>6분할이면 65분마다 1/6씩 — 클수록 더 잘게(매끄럽게) 분산, 작을수록 큰 덩어리로 듬성듬성.</small></label>
-        <details class="help">
-          <summary class="meta">TWAP 란?</summary>
-          <ul class="help-list">
-            <li><b>TWAP</b> (Time-Weighted Average Price, 시간가중평균가) — 하루 목표 수량을 정규장을 <b>분할 수</b>만큼 등분한 시간 구간마다 1/N씩 나눠 체결.<br>한 번에 몰아 체결할 때의 체결가 쏠림·시장충격을 줄입니다.</li>
-          </ul>
-        </details>
-        <label><input type="checkbox" name="exec_force_by_close" {{ 'checked' if ex.get('force_by_close', True) }}>
-          장 마감 전 미체결 잔량 강제 체결
-          <small>마지막 분봉(≈종가)까지 못 채운 잔량을 시장가로 전량 마무리(미체결 방지).</small></label>
-      </div>
     </section>
     </div>
   </div>
@@ -168,27 +152,16 @@
     document.getElementById('groups').appendChild(node);
     checkDirty();
   }
-  // 해상도가 일봉/분봉 전용 옵션 묶음을 가른다(나머지는 해상도에서 자동 결정).
-  function toggleResolution() {
-    const minute = document.getElementById('resolution-sel').value === 'minute';
-    document.getElementById('minute-opts').hidden = !minute;
-    document.getElementById('daily-opts').hidden = minute;
-  }
-  // 일봉+종가 선택 시에만 라이브 종가 체결 주의문을 보인다(백테스트-라이브 괴리 고지).
-  function toggleDailyFill() {
-    const close = document.getElementById('daily-fill-sel').value === 'close';
-    document.getElementById('daily-close-note').hidden = !close;
-  }
-  // 선별 주기 모드에 따라 N분/시각목록 입력칸을 보인다(every면 둘 다 숨김).
-  function toggleCadence() {
-    const cad = document.getElementById('cadence-sel').value;
-    document.querySelectorAll('[data-cad]').forEach(el => { el.hidden = el.dataset.cad !== cad; });
+  // 체결 타이밍에 따라 전용 입력만 보인다. data-tm=타이밍별, data-tm-minute=분봉 타이밍 공통.
+  const MINUTE_TM = new Set(['time', 'twap', 'pullback']);
+  function toggleTiming() {
+    const tm = document.getElementById('timing-sel').value;
+    document.querySelectorAll('[data-tm]').forEach(el => { el.hidden = el.dataset.tm !== tm; });
+    document.querySelectorAll('[data-tm-minute]').forEach(el => { el.hidden = !MINUTE_TM.has(tm); });
   }
   _form.addEventListener('input', checkDirty);
   _form.addEventListener('change', checkDirty);
-  toggleResolution();
-  toggleDailyFill();
-  toggleCadence();
+  toggleTiming();
   _initial = _serialize();  // 초기 상태 스냅샷 → 변경 시에만 저장 활성화
   checkDirty();
 </script>

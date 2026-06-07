@@ -17,11 +17,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 # 체결 스타일
-IMMEDIATE = "immediate"  # 즉시 전량 (시초가 우르르 — 비교 기준선)
-PULLBACK = "pullback"    # 눌림목 대기 진입 / 반등 청산 (기본)
+IMMEDIATE = "immediate"  # 즉시 전량 (시초가 우르르 — 비교 기준선·폴백)
+PULLBACK = "pullback"    # 눌림목 대기 진입 / 반등 청산
 TWAP = "twap"            # 시간 분할(시간가중평균가). 거래량가중(VWAP)은 미구현 — 현 규모에선 TWAP로 충분
+TIME = "time"            # 특정 시각(예 13:00)에 전량 체결
 
-STYLES = (IMMEDIATE, PULLBACK, TWAP)
+STYLES = (IMMEDIATE, PULLBACK, TWAP, TIME)
 
 # KRX 정규장(분 단위, 자정 기준). 09:00~15:30 = 390분.
 KRX_OPEN_MIN = 9 * 60          # 540
@@ -38,11 +39,12 @@ class TimingConfig:
     exit_rebound_pct: float = 1.0   # 청산: 기준가 대비 N% 반등하면 매도
     slices: int = 6                 # TWAP 분할 수(정규장을 N등분)
     force_by_close: bool = True     # 트리거 미발생 시에도 장 마감 분봉에 잔량 전량 체결(미체결 방지)
+    at_min: int = 0                 # TIME 스타일 체결 시각(자정기준 분, 예 13:00=780)
 
     def normalized(self) -> "TimingConfig":
         s = self.style if self.style in STYLES else PULLBACK
         return TimingConfig(s, float(self.entry_drop_pct), float(self.exit_rebound_pct),
-                            max(1, int(self.slices)), bool(self.force_by_close))
+                            max(1, int(self.slices)), bool(self.force_by_close), int(self.at_min))
 
     def for_availability(self, available: bool) -> "TimingConfig":
         """그 (종목,일)에 분봉이 없으면 장중 타점이 불가하므로 '시가 즉시(IMMEDIATE)'로 폴백.
@@ -53,7 +55,7 @@ class TimingConfig:
             return self.normalized()
         n = self.normalized()
         return TimingConfig(IMMEDIATE, n.entry_drop_pct, n.exit_rebound_pct,
-                            n.slices, n.force_by_close)
+                            n.slices, n.force_by_close, n.at_min)
 
 
 def minutes_since_open(hh: int, mm: int) -> int:
@@ -158,6 +160,12 @@ def decide_submit(
         else:              # 청산: 기준가 대비 충분히 반등했을 때
             triggered = current_price >= reference_price * (1 + cfg.exit_rebound_pct / 100.0)
         return remaining if triggered else 0
+
+    if cfg.style == TIME:
+        # 목표 시각(at_min)에 도달하면 전량 체결, 그 전엔 대기. (그 분봉이 없어 지나치면
+        # 이후 첫 분봉에 체결 — force_by_close가 마감 잔량을 마저 잡는다.)
+        target_elapsed = max(0, min(SESSION_MIN, cfg.at_min - KRX_OPEN_MIN))
+        return remaining if elapsed_min >= target_elapsed else 0
 
     if cfg.style == TWAP:
         if total_delta == 0:

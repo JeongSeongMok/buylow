@@ -161,79 +161,70 @@ def groups_from_form(form) -> list[list[str]]:
     return groups
 
 
-# ── 장중 체결 타이밍(②층) — 해상도 + 실행모델 파라미터 ───────────────────────
-# '일봉'은 다음 시가 즉시 체결(현행). '분봉'은 일봉으로 선별하고 장중 분봉으로 타이밍을 잡는다.
-EXECUTION_STYLES = [
-    ("pullback", "눌림목 진입 / 반등 청산"),
-    ("twap", "TWAP 시간 분할"),
-    ("immediate", "시초가 즉시"),
+# ── 체결 타이밍(②층) ─────────────────────────────────────────────────────────
+# 핵심 설계: 종목 선별은 항상 '전날 데이터 1회'로 고정(장중 재선별 없음). 그 위에 '언제/어떻게
+# 체결할지'(타이밍)만 고른다. 타이밍이 해상도·리스크주기를 자동 결정한다:
+#   - 시가/종가  → 일봉 데이터로 충분(분봉 구독 X) → 리스크=일별. 다음 거래일 시가/종가 체결.
+#   - 특정시각/TWAP/눌림목 → 그날 매매할 종목만 분봉 구독 → 리스크=매분. 장중 타이밍 체결.
+EXECUTION_TIMINGS = [
+    ("open", "시가 — 다음 거래일 시가"),
+    ("close", "종가 — 다음 거래일 종가(~15:15)"),
+    ("time", "특정시각 — 그 시각에 체결"),
+    ("twap", "TWAP — 장중 N분할 체결"),
+    ("pullback", "눌림목 — 눌림 진입 / 반등 청산"),
 ]
-_STYLE_KEYS = {k for k, _ in EXECUTION_STYLES}
-DEFAULT_EXECUTION = {"style": "twap", "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0,
-                     "slices": 6, "force_by_close": True, "risk_eval": "daily",
-                     "select_eval": "close", "daily_fill": "open",
-                     "eval_cadence": "every", "eval_interval_min": 30, "eval_times": []}
+_TIMING_KEYS = {k for k, _ in EXECUTION_TIMINGS}
+_MINUTE_TIMINGS = {"time", "twap", "pullback"}  # 분봉 데이터가 필요한 타이밍
 
-# 분봉 선별(판단) 주기 모드 — 1분마다 / N분 간격 / 특정 시각
-EVAL_CADENCES = [
-    ("every", "매 분봉 (1분마다)"),
-    ("interval", "N분 간격"),
-    ("times", "특정 시각"),
-]
-_CADENCE_KEYS = {k for k, _ in EVAL_CADENCES}
+DEFAULT_EXECUTION = {"timing": "open", "at_time": "13:00", "slices": 6,
+                     "entry_drop_pct": 1.0, "exit_rebound_pct": 1.0, "force_by_close": True,
+                     # 아래는 타이밍에서 파생(RuleStrategy가 읽는 값) — 저장 시 함께 기록.
+                     "select_eval": "close", "risk_eval": "daily", "daily_fill": "open",
+                     "style": "twap", "at_min": 0}
 
 
 def execution_from_form(form) -> tuple[str, dict]:
-    """폼에서 해상도('daily'|'minute')와 체결/리스크 파라미터를 추출.
+    """폼에서 '체결 타이밍'을 읽어 (resolution, execution)을 만든다.
 
-    해상도가 나머지를 결정한다(사용자가 일일이 고르지 않게):
-      - 일봉: 선별=전날 종가 1회(close), 리스크 평가=종가 1회(daily),
-              체결=다음 거래일 시가/종가(daily_fill: open|close).
-      - 분봉: 선별=장중 매분(intraday), 리스크 평가=매분(bar),
-              체결=눌림목/TWAP(style)+파라미터. 분봉 없는 종목/일은 시가 즉시로 자동 폴백.
+    선별은 항상 전날 1회(select_eval=close). 타이밍이 나머지를 결정:
+      timing ∈ {open, close, time, twap, pullback}
+      - open/close → resolution=daily, risk=daily, daily_fill로 체결.
+      - time/twap/pullback → resolution=minute, risk=bar, IntradayExecution 스타일로 체결
+        (분봉은 그날 매매 대상·보유 종목만 구독 — 규모 한도 완화).
     """
-    resolution = "minute" if form.get("resolution") == "minute" else "daily"
-
     def num(key, default, cast):
         try:
             return cast(form.get(key, ""))
         except (TypeError, ValueError):
             return default
 
-    if resolution == "minute":
-        # 분봉 매수 체결은 TWAP 고정 — 장중 매분 선별과 가격 반응이 겹치지 않는 방식(눌림목 제외).
-        select_eval, risk_eval, style = "intraday", "bar", "twap"
-    else:
-        select_eval, risk_eval = "close", "daily"
-        style = "twap"  # 일봉은 장중 방식 무의미(체결은 daily_fill로)
+    timing = form.get("exec_timing", "open")
+    if timing not in _TIMING_KEYS:
+        timing = "open"
+    is_minute = timing in _MINUTE_TIMINGS
+    resolution = "minute" if is_minute else "daily"
 
-    # 분봉 선별 주기(every|interval|times). 데이터는 분봉이지만 '판단'만 솎아 과매매를 줄인다.
-    # 리스크 평가는 이 주기와 무관하게 매분 유지(risk_eval=bar) — 급락 대응 안전.
-    from .execution import parse_eval_times, SELECT_CADENCES
-    cadence = form.get("exec_eval_cadence", "every")
-    if cadence not in SELECT_CADENCES:
-        cadence = "every"
-    # 검증·정렬·중복제거 후 "HH:MM" 문자열로 보존(폼 왕복이 깔끔). 런타임은 다시 분으로 파싱.
-    _mins = parse_eval_times(
-        [s for s in (form.get("exec_eval_times") or "").replace(" ", "").split(",") if s])
-    eval_times = [f"{m // 60:02d}:{m % 60:02d}" for m in _mins]
+    # 특정시각 정규화("HH:MM" → 분-of-day). 잘못된 값은 13:00.
+    from .execution import parse_eval_times
+    _m = parse_eval_times([(form.get("exec_at_time") or "13:00").strip()])
+    at_min = _m[0] if _m else 13 * 60
+    at_time = f"{at_min // 60:02d}:{at_min % 60:02d}"
+
+    # IntradayExecutionModel 스타일(분봉 타이밍): time/twap/pullback 그대로 매핑.
+    style = timing if is_minute else "twap"
 
     execution = {
-        "style": style,
+        "timing": timing,
+        "at_time": at_time, "at_min": at_min,
+        "slices": max(1, num("exec_slices", 6, int)),
         "entry_drop_pct": num("exec_entry_drop_pct", 1.0, float),
         "exit_rebound_pct": num("exec_exit_rebound_pct", 1.0, float),
-        "slices": max(1, num("exec_slices", 6, int)),
-        # 체크박스: 폼에 키 있으면 True. 템플릿은 기본 체크로 렌더한다.
         "force_by_close": bool(form.get("exec_force_by_close")),
-        # 리스크 평가 주기·선별 주기는 해상도에서 파생(위).
-        "risk_eval": risk_eval,
-        "select_eval": select_eval,
-        # 일봉 체결 시점: 'open'(다음 거래일 시가) | 'close'(다음 거래일 종가, MarketOnClose).
-        "daily_fill": "close" if form.get("daily_fill") == "close" else "open",
-        # 분봉 선별 주기: every(매분) | interval(N분) | times(특정시각, "HH:MM" 분-of-day 리스트)
-        "eval_cadence": cadence,
-        "eval_interval_min": max(1, num("exec_eval_interval_min", 30, int)),
-        "eval_times": eval_times,
+        # ── 파생값(RuleStrategy/실행모델이 읽음) ──
+        "select_eval": "close",                       # 선별은 항상 전날 1회
+        "risk_eval": "bar" if is_minute else "daily",  # 체결 데이터 따라 자동
+        "daily_fill": timing if timing in ("open", "close") else "open",
+        "style": style,
     }
     return resolution, execution
 

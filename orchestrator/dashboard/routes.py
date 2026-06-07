@@ -483,7 +483,9 @@ def register_dashboard(
             "start": form.get("start"), "end": form.get("end"),
             "cash": BACKTEST_CASH,  # 초기자본은 1억으로 고정(입력받지 않음)
             "max_positions": MAX_POSITIONS,  # 동시 보유 상한(균등분할 가능하게)
-            "data_folder": data_folder,  # 분봉 적재 여부 스캔(장중 타점/시가 폴백 판단)용
+            # 절대경로로 — RuleStrategy가 분봉 가용성(list_minute_days)을 LEAN cwd(런처폴더)가 아닌
+            # 실제 데이터 폴더에서 확인하게 한다(상대경로면 빈 결과 → 잘못된 시가 폴백).
+            "data_folder": str(Path(data_folder).resolve()),
         }
         if not spec["universe"]:
             return RedirectResponse(url="/backtest?error=유니버스(종목)를 지정하세요", status_code=303)
@@ -642,8 +644,7 @@ def register_dashboard(
             "catalog": signals_catalog.CATALOG,
             "strategy": strategy,
             "groups": groups,
-            "execution_styles": signals_catalog.EXECUTION_STYLES,
-            "eval_cadences": signals_catalog.EVAL_CADENCES,
+            "execution_timings": signals_catalog.EXECUTION_TIMINGS,
             "param_value": signals_catalog.param_value,
             "risk": config.risk_form_values(),
             "data_loaded": _loaded_count(),
@@ -928,7 +929,8 @@ def register_dashboard(
             return _fail("KIS 어댑터가 없습니다 — 터미널에서 scripts/build-adapter.sh 로 먼저 빌드하세요.")
 
         # 저장된 전략 + 라이브 유니버스로 라이브 spec(백테스트의 start/end/cash는 없음 — 라이브는 무한·계좌잔액).
-        spec = {**strategy, "universe": universe, "data_folder": config.get_data_folder()}
+        spec = {**strategy, "universe": universe,
+                "data_folder": str(Path(config.get_data_folder()).resolve())}
         req = RunRequest(
             strategy_path="strategies/RuleStrategy.py",
             data_folder=config.get_data_folder(),

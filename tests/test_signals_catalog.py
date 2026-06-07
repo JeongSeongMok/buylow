@@ -70,55 +70,45 @@ def test_bool_param_unchecked_is_zero():
     assert p["foreign"] == 0 and p["institution"] == 0 and p["individual"] == 0
 
 
-def test_execution_from_form_daily_couples_close_and_open_fill():
-    # 일봉 → 선별·평가 고정(close/daily), 체결은 daily_fill로 결정.
+def test_execution_from_form_open_is_daily():
+    # 기본(시가) → 일봉, 선별=close, 리스크=일별, daily_fill=open.
     res, ex = sc.execution_from_form({})
     assert res == "daily"
-    assert ex["select_eval"] == "close" and ex["risk_eval"] == "daily"
-    assert ex["daily_fill"] == "open"          # 기본 시가
-    res, ex = sc.execution_from_form({"daily_fill": "close"})
-    assert ex["daily_fill"] == "close"          # 다음날 종가(MarketOnClose)
+    assert ex["timing"] == "open" and ex["select_eval"] == "close"
+    assert ex["risk_eval"] == "daily" and ex["daily_fill"] == "open"
 
 
-def test_execution_from_form_minute_forces_intraday_bar_twap():
-    # 분봉 → 선별=장중매분(intraday)·평가=매분(bar)·체결=TWAP 자동 결정. 분할 수만 사용자 지정.
-    res, ex = sc.execution_from_form({
-        "resolution": "minute", "exec_slices": "8", "exec_force_by_close": "on",
-    })
-    assert res == "minute"
-    assert ex["style"] == "twap" and ex["select_eval"] == "intraday" and ex["risk_eval"] == "bar"
-    assert ex["slices"] == 8 and ex["force_by_close"] is True
+def test_execution_from_form_close_is_daily():
+    res, ex = sc.execution_from_form({"exec_timing": "close"})
+    assert res == "daily" and ex["timing"] == "close" and ex["daily_fill"] == "close"
+    assert ex["risk_eval"] == "daily"
 
 
-def test_execution_from_form_eval_cadence_default_every():
-    _, ex = sc.execution_from_form({"resolution": "minute"})
-    assert ex["eval_cadence"] == "every"
+def test_execution_from_form_minute_timings_derive():
+    # 특정시각/TWAP/눌림목 → 분봉, 선별=항상 close(전날), 리스크=매분(bar).
+    for tm in ("time", "twap", "pullback"):
+        res, ex = sc.execution_from_form({"exec_timing": tm})
+        assert res == "minute", tm
+        assert ex["select_eval"] == "close" and ex["risk_eval"] == "bar"
+        assert ex["style"] == tm
 
 
-def test_execution_from_form_eval_cadence_interval():
-    _, ex = sc.execution_from_form({"resolution": "minute",
-                                    "exec_eval_cadence": "interval", "exec_eval_interval_min": "30"})
-    assert ex["eval_cadence"] == "interval" and ex["eval_interval_min"] == 30
+def test_execution_from_form_time_normalizes_at_min():
+    _, ex = sc.execution_from_form({"exec_timing": "time", "exec_at_time": "13:30"})
+    assert ex["at_time"] == "13:30" and ex["at_min"] == 13 * 60 + 30
+    # 잘못된 시각 → 13:00 기본
+    _, ex = sc.execution_from_form({"exec_timing": "time", "exec_at_time": "bad"})
+    assert ex["at_min"] == 13 * 60
 
 
-def test_execution_from_form_eval_cadence_times_normalized():
-    # 시각은 검증·정렬·중복제거 후 "HH:MM" 문자열로 보존(폼 왕복). 잘못된 항목 무시.
-    _, ex = sc.execution_from_form({"resolution": "minute", "exec_eval_cadence": "times",
-                                    "exec_eval_times": "10:05, 09:30, bad, 09:30"})
-    assert ex["eval_cadence"] == "times" and ex["eval_times"] == ["09:30", "10:05"]
+def test_execution_from_form_twap_slices_min_one():
+    _, ex = sc.execution_from_form({"exec_timing": "twap", "exec_slices": "0"})
+    assert ex["slices"] == 1
 
 
-def test_execution_from_form_bad_cadence_falls_back_every():
-    _, ex = sc.execution_from_form({"resolution": "minute", "exec_eval_cadence": "weird"})
-    assert ex["eval_cadence"] == "every"
-
-
-def test_execution_from_form_minute_style_always_twap():
-    # 폼에 어떤 exec_style이 와도(과거 저장/조작) 분봉은 TWAP 고정. 분할 수는 최소 1.
-    _, ex = sc.execution_from_form({"resolution": "minute", "exec_style": "pullback"})
-    assert ex["style"] == "twap"
-    _, ex = sc.execution_from_form({"resolution": "minute", "exec_slices": "0"})
-    assert ex["style"] == "twap" and ex["slices"] == 1
+def test_execution_from_form_bad_timing_falls_back_open():
+    res, ex = sc.execution_from_form({"exec_timing": "weird"})
+    assert res == "daily" and ex["timing"] == "open"
 
 
 def test_descriptions_hide_internal_tokens():

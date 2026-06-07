@@ -1,12 +1,13 @@
 # 규칙 기반 전략 — 사용자가 만든 불리언 식(예: "(EMA AND MACD) OR (RSI AND MOM)")을 실행.
 #
-# 'rule_spec' 파라미터(JSON)를 읽어 signal들을 만들고, 매 시점 종목마다 각 signal의 방향을
-# 평가한 뒤 식을 평가해 최종 방향(UP/DOWN/NONE)으로 Insight를 낸다.
+# 설계(2-층, docs/ARCHITECTURE.md):
+#  ① 선별 = 항상 '전날 데이터 1회'(장중 재선별 없음). 신호 지표는 Resolution.DAILY로 계산.
+#  ② 체결 타이밍 = 시가/종가(일봉) 또는 특정시각/TWAP/눌림목(분봉). 선별과 분리.
 #
 # rule_spec 예:
-# {"signals":{"EMA":{"type":"ema","params":{"fast":12,"slow":26}},
-#             "MACD":{"type":"macd","params":{"fast":12,"slow":26,"signal":9}}},
-#  "rule":"EMA AND MACD",
+# {"signals":{"EMA":{"type":"ema","params":{"fast":12,"slow":26}}},
+#  "rule":"EMA AND MACD", "resolution":"daily"|"minute",
+#  "execution":{"timing":"open"|"close"|"time"|"twap"|"pullback", ...},
 #  "universe":["005930"],"start":"2023-01-02","end":"2023-12-28","cash":10000000}
 import json
 
@@ -20,9 +21,14 @@ from intraday_execution import IntradayExecutionModel
 
 
 class RuleAlpha(AlphaModel):
+    """선별 알파 — 항상 '전날(완성 일봉) 기준'으로 하루 1회 종목을 고른다.
+
+    분봉 구독이어도 선별 시점은 하루 첫 분봉 1회뿐(장중 재선별 없음). 가격계열 신호도 완성된
+    일봉 지표(Resolution.DAILY)를 쓴다 → 장중 노이즈에 흔들리지 않음. 체결 타이밍은 ②층(실행모델).
+    """
+
     def __init__(self, signals_config: dict, rule: str, period_days: int = 5,
-                 max_positions: int = 0, minute_res: bool = False, select_eval: str = "close",
-                 eval_cadence: str = "every", eval_interval_min: int = 30, eval_times=None):
+                 max_positions: int = 0, minute_res: bool = False):
         self.signals_config = signals_config          # 라벨 -> {type, params}
         self.ast = parse_rule(rule)
         self.used = signal_labels(self.ast)            # 식에 실제 쓰인 라벨만 평가
@@ -30,65 +36,39 @@ class RuleAlpha(AlphaModel):
         # 동시 보유 상한. 매수 신호가 자본 대비 너무 많으면 균등분할 시 종목당 배분이 1주 미만이
         # 되어 매매가 안 된다. 전체 종목 스캔은 유지하되, 매수 신호가 이보다 많으면 유동성 상위만 낸다.
         self.max_positions = max_positions
-        self.minute_res = minute_res          # 분봉 구독(update가 매 분봉 호출)
-        # 선별 주기: 'intraday'면 매 분봉 진행 중 일봉(현재가) 포함 재평가, 아니면 전날 종가 1회.
-        self.select_intraday = minute_res and select_eval == "intraday"
-        # 장중 선별 '판단' 주기(데이터는 분봉 유지, 판단만 솎음). 리스크는 이와 무관하게 매분 평가.
-        from orchestrator.execution import parse_eval_times, SELECT_CADENCES
-        self.eval_cadence = eval_cadence if eval_cadence in SELECT_CADENCES else "every"
-        self.eval_interval_min = max(1, int(eval_interval_min))
-        self.eval_times_min = set(parse_eval_times(eval_times))
-        self._last_eval_elapsed = None        # interval 모드: 직전 선별의 장시작후 경과분
-        self._fired_times = set()             # times 모드: 당일 이미 선별한 분(자정기준)
-        self._decided_day = None
-        self._day = None
-        self._exited_today = {}               # symbol -> date (당일 청산 → 재진입 금지 쿨다운)
-        self._evals = {}                       # symbol -> {라벨: 평가기}
+        self.minute_res = minute_res          # 분봉 구독이면 update가 매 분봉 호출됨(선별은 1회로 게이트)
+        self._decided_day = None              # 당일 선별 완료 여부(하루 1회 보장)
+        self._evals = {}                      # symbol -> {라벨: 평가기}
 
     def on_securities_changed(self, algorithm, changes):
         for sec in changes.added_securities:
             if sec.symbol.security_type != SecurityType.EQUITY:
                 continue
-            evals = {}
-            for label in self.used:
-                cfg = self.signals_config[label]
-                # 장중 선별이면 가격계열 신호는 잠정평가(현재가 포함) 모드로 생성.
-                evals[label] = build_signal(cfg["type"], cfg.get("params", {}), algorithm,
-                                            sec.symbol, intraday=self.select_intraday)
-            self._evals[sec.symbol] = evals
+            # 선별은 항상 완성 일봉 기준 → 가격계열 신호도 일봉 지표(intraday=False).
+            self._evals[sec.symbol] = {
+                label: build_signal(self.signals_config[label]["type"],
+                                    self.signals_config[label].get("params", {}),
+                                    algorithm, sec.symbol, intraday=False)
+                for label in self.used}
         for sec in changes.removed_securities:
             self._evals.pop(sec.symbol, None)
 
     def update(self, algorithm, data):
         today = algorithm.time.date()
-        if self.minute_res:
-            if self.select_intraday:
-                if today != self._day:        # 새 거래일: 쿨다운·선별주기 상태 초기화
-                    self._day = today
-                    self._exited_today.clear()
-                    self._last_eval_elapsed = None
-                    self._fired_times.clear()
-                # 선별 주기 게이트(리스크는 매분 유지 — 여기선 '선별'만 솎는다).
-                if not self._due_to_select(algorithm.time):
-                    return []
-            else:
-                # 전날 종가 1회 선별: 하루 첫 분봉만 평가(이후 분봉은 기존 인사이트 유지).
-                if today == self._decided_day:
-                    return []
-                self._decided_day = today
+        # 분봉 구독이어도 선별은 하루 1회(첫 분봉). 이후 분봉은 기존 인사이트 유지(체결은 ②층).
+        if today == self._decided_day:
+            return []
+        self._decided_day = today
+
         ups, exits, reason = [], [], {}
         for symbol, evals in self._evals.items():
             directions = {label: ev.direction() for label, ev in evals.items()}
             result = eval_rule(self.ast, directions)
             if result == UP:
-                if self.select_intraday and self._exited_today.get(symbol) == today:
-                    continue  # 당일 청산 종목은 재진입 금지(휩쏘 방지)
                 ups.append(symbol)
                 reason[symbol] = "+".join(l for l, d in directions.items() if d == UP)
-            elif result == DOWN and algorithm.portfolio[symbol].invested:  # 보유 중일 때만 청산 신호
+            elif result == DOWN and algorithm.portfolio[symbol].invested:  # 보유 중일 때만 청산
                 exits.append(Insight.price(symbol, self.hold, InsightDirection.DOWN))
-                if self.select_intraday:
-                    self._exited_today[symbol] = today
                 self._log_hit(algorithm, symbol, "SELL",
                               "+".join(l for l, d in directions.items() if d == DOWN))
         # 매수 신호가 상한보다 많으면 유동성(당일 거래대금=가격×거래량) 상위만 보유.
@@ -98,24 +78,6 @@ class RuleAlpha(AlphaModel):
         for s in ups:
             self._log_hit(algorithm, s, "BUY", reason.get(s, ""))
         return [Insight.price(s, self.hold, InsightDirection.UP) for s in ups] + exits
-
-    def _due_to_select(self, t):
-        # 이번 분봉에 장중 선별을 재평가할지(every/interval/times). 평가 시점이면 상태를 갱신한다.
-        from orchestrator.execution import (minutes_since_open, due_by_interval,
-                                            due_by_times, SELECT_INTERVAL, SELECT_TIMES)
-        if self.eval_cadence == SELECT_INTERVAL:
-            elapsed = minutes_since_open(t.hour, t.minute)
-            if not due_by_interval(elapsed, self.eval_interval_min, self._last_eval_elapsed):
-                return False
-            self._last_eval_elapsed = elapsed
-            return True
-        if self.eval_cadence == SELECT_TIMES:
-            abs_min = t.hour * 60 + t.minute
-            if not due_by_times(abs_min, self.eval_times_min, self._fired_times):
-                return False
-            self._fired_times.add(abs_min)
-            return True
-        return True  # every: 매 분봉
 
     def _log_hit(self, algorithm, symbol, side, labels):
         # 트리거 사유를 로그로 남겨 결과 페이지(거래 내역)가 파싱해 표시한다.
@@ -132,7 +94,6 @@ class RuleStrategy(KrxFrameworkAlgorithm):
     def initialize(self):
         spec = json.loads(self.get_parameter("rule_spec"))
         # 백테스트는 start/end/cash를 지정하지만, 라이브는 현재 시각부터·계좌 잔액 기준이라 없다.
-        # 따라서 값이 있을 때만 설정한다(라이브에선 set_start/end_date·set_cash를 호출하지 않음).
         if spec.get("start") and spec.get("end"):
             s, e = spec["start"].split("-"), spec["end"].split("-")
             self.set_start_date(int(s[0]), int(s[1]), int(s[2]))
@@ -140,12 +101,12 @@ class RuleStrategy(KrxFrameworkAlgorithm):
         if spec.get("cash"):
             self.set_cash(int(spec["cash"]))
 
-        # 해상도: 'minute'면 일봉 선별 + 장중(분봉) 타이밍 실행, 그 외(기본)는 일봉/다음시가 체결.
-        # 신호 지표는 Resolution.DAILY로 생성되므로, 분봉 구독에서도 선별은 일봉 기준 유지된다.
+        ex = spec.get("execution", {}) or {}
+        # 체결 타이밍이 해상도를 결정: 특정시각/TWAP/눌림목 → 분봉, 시가/종가 → 일봉.
+        # (resolution 필드는 설정 모델이 타이밍에서 도출해 넣어줌. 방어적으로 재확인.)
         intraday = str(spec.get("resolution", "daily")).lower() == "minute"
-        # 분봉인데 리스크는 '일별(종가)'로 평가 선택 시 게이트 적용(일봉은 어차피 일별).
-        ex_spec = spec.get("execution", {}) or {}
-        risk_eval_daily = intraday and ex_spec.get("risk_eval", "bar") == "daily"
+        # 리스크 평가 주기: 분봉 체결이면 매분, 일봉 체결이면 일별(체결 데이터 따라 자동).
+        risk_eval_daily = (not intraday) or ex.get("risk_eval", "bar") == "daily"
         self.setup_krx_framework(Resolution.MINUTE if intraday else Resolution.DAILY,
                                  risk_eval_daily=risk_eval_daily)
 
@@ -155,21 +116,21 @@ class RuleStrategy(KrxFrameworkAlgorithm):
             self.set_benchmark(symbols[0])
 
         if intraday:
-            # 장중 타이밍 실행모델로 교체(기본 ImmediateExecutionModel 대신). 파라미터는 스펙의 execution.
-            ex = spec.get("execution", {}) or {}
+            # ② 장중 체결(특정시각/TWAP/눌림목). style·at_min은 설정 모델이 타이밍에서 매핑.
             cfg = TimingConfig(
-                style=ex.get("style", "pullback"),
+                style=ex.get("style", "twap"),
                 entry_drop_pct=float(ex.get("entry_drop_pct", 1.0)),
                 exit_rebound_pct=float(ex.get("exit_rebound_pct", 1.0)),
                 slices=int(ex.get("slices", 6)),
                 force_by_close=bool(ex.get("force_by_close", True)),
+                at_min=int(ex.get("at_min", 0)),
             )
-            # (종목,일)별 분봉 적재 여부 맵 — 있으면 장중 타점, 없으면 시가 폴백.
+            # (종목,일)별 분봉 적재 여부 — 있으면 장중 타점, 없으면 시가 폴백.
             from etl.lean_format import list_minute_days
             data_dir = spec.get("data_folder", "./data")
             avail = {t: list_minute_days(data_dir, "krx", t) for t in spec["universe"]}
             self.set_execution(IntradayExecutionModel(cfg, available_days=avail))
-        elif ex_spec.get("daily_fill") == "close":
+        elif ex.get("daily_fill") == "close":
             # 일봉 종가 체결: 다음 거래일 MarketOnClose. ('open'은 프레임워크 기본=다음 시가 시장가)
             from daily_execution import DailyExecutionModel
             self.set_execution(DailyExecutionModel(fill="close"))
@@ -177,8 +138,4 @@ class RuleStrategy(KrxFrameworkAlgorithm):
         self.add_alpha(RuleAlpha(spec["signals"], spec["rule"],
                                  int(spec.get("period_days", 5)),
                                  int(spec.get("max_positions", 0)),
-                                 minute_res=intraday,
-                                 select_eval=ex_spec.get("select_eval", "close"),
-                                 eval_cadence=ex_spec.get("eval_cadence", "every"),
-                                 eval_interval_min=int(ex_spec.get("eval_interval_min", 30)),
-                                 eval_times=ex_spec.get("eval_times")))
+                                 minute_res=intraday))

@@ -70,7 +70,7 @@ def _save_minute_strategy(client):
     from orchestrator import signals_catalog
     data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
     data.update({"g0_EMA": "1", "g1_RSI": "1", "period_days": "5",
-                 "resolution": "minute", "exec_slices": "4"})
+                 "exec_timing": "twap", "exec_slices": "4"})  # twap=분봉 타이밍
     return client.post("/strategy", data=data)
 
 
@@ -191,29 +191,30 @@ def test_strategy_save_persists_strategy_and_risk(client, isolated_config):
     assert isolated_config.get_risk_config()["stop_loss"] == 7.0  # 같은 화면에서 리스크도 저장
 
 
-def test_strategy_save_persists_intraday_execution(client, isolated_config):
+def test_strategy_save_persists_timing_execution(client, isolated_config):
     from orchestrator import signals_catalog
     data = {f"{s.label}__{p.key}": str(p.default) for s in signals_catalog.CATALOG for p in s.params}
     data.update({"g0_EMA": "1", "period_days": "5",
-                 "resolution": "minute", "exec_slices": "4",
+                 "exec_timing": "time", "exec_at_time": "13:30",
                  "exec_force_by_close": "on"})
     assert client.post("/strategy", data=data).status_code == 200
     strat = isolated_config.get_strategy()
+    # 특정시각 → 분봉 해상도, 선별은 항상 close(전날), 리스크 매분, style=time.
     assert strat["resolution"] == "minute"
-    # 분봉은 TWAP·장중매분·매분 고정, 사용자는 분할 수만 지정.
-    assert strat["execution"]["style"] == "twap"
-    assert strat["execution"]["select_eval"] == "intraday" and strat["execution"]["risk_eval"] == "bar"
-    assert strat["execution"]["slices"] == 4 and strat["execution"]["force_by_close"] is True
+    ex = strat["execution"]
+    assert ex["timing"] == "time" and ex["style"] == "time" and ex["at_min"] == 13 * 60 + 30
+    assert ex["select_eval"] == "close" and ex["risk_eval"] == "bar"
+    assert ex["force_by_close"] is True
 
 
 def test_strategy_page_shows_timing_controls(client):
     t = client.get("/strategy").text
-    assert "리스크 · 체결" in t and 'name="resolution"' in t and 'name="daily_fill"' in t
-    # 일봉+종가의 라이브 체결 괴리 주의문(백테스트=15:30 종가, 라이브=≈15:14 시장가)
-    assert "daily-close-note" in t and "라이브 매매 주의" in t and "15:14" in t
-    # 분봉 선별 주기(every/interval/times) 컨트롤
-    assert 'name="exec_eval_cadence"' in t and 'name="exec_eval_interval_min"' in t \
-        and 'name="exec_eval_times"' in t
+    assert "체결 타이밍" in t and 'name="exec_timing"' in t
+    # 타이밍별 입력칸
+    assert 'name="exec_at_time"' in t and 'name="exec_slices"' in t \
+        and 'name="exec_entry_drop_pct"' in t
+    # 선별은 항상 전날 1회 안내
+    assert "전날 데이터 기준 하루 1회" in t
 
 
 def test_settings_page_shows_broker_and_kis_keys(client):
