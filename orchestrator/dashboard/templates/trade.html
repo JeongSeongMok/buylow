@@ -87,6 +87,9 @@
   </div>
 </section>
 
+{# 오늘의 선정 — 담을/뺄 종목 미리보기(전략+대상종목+보유 기준). 30초마다 HTMX 갱신. #}
+{% include "partials/trade_selection.html" %}
+
 <div class="cols2">
   {# B 잔고(1열) · C 매매내역(2열) — 각 부분 템플릿이 10초마다 HTMX로 자기 갱신 #}
   {% include "partials/trade_balance.html" %}

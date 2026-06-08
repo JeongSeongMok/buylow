@@ -223,6 +223,41 @@ def test_trade_trades_partial_polls(client):
     assert "삼성전자" in r.text  # 브로커 체결조회(trades) 결과 표시
 
 
+# ── 오늘의 선정(담을/뺄 종목) ────────────────────────────────────────────────
+def test_trade_page_includes_selection_lazyload(client):
+    # 매매 탭에 '오늘의 선정' 카드 + 비동기 로드 트리거가 있고, 진입 시엔 자리표시(계산 중)만.
+    r = client.get("/trade")
+    assert r.status_code == 200
+    assert "오늘의 선정" in r.text
+    assert 'hx-get="/trade/selection"' in r.text and "load, every 30s" in r.text
+    assert "선정 계산 중" in r.text  # 초기 렌더는 placeholder
+
+
+def test_trade_selection_no_strategy(client):
+    # 전략 미저장 → 안내문(섹션은 계산 안 함).
+    r = client.get("/trade/selection")
+    assert r.status_code == 200 and "전략이 없습니다" in r.text
+
+
+def test_trade_selection_renders_buys_and_sells(client, monkeypatch):
+    from orchestrator import config
+    from orchestrator import signal_diag
+    config.save_strategy({"signals": {"EMA": {"type": "ema"}}, "rule": "EMA"})
+    config.save_live_universe(["005930", "000660"])
+    # select_today를 카드 렌더만 검증하도록 고정(데이터 적재 불필요).
+    monkeypatch.setattr(signal_diag, "select_today", lambda *a, **k: {
+        "ref_date": "2026-06-05",
+        "buys": [{"ticker": "000660", "held": False, "reason": "EMA", "date": "2026-06-05"}],
+        "sells": [{"ticker": "005930", "reason": "EMA", "date": "2026-06-05"}],
+        "cut": [], "max_positions": 0, "evaluated": 2, "missing": [], "stale": [], "unmanaged": [],
+    })
+    r = client.get("/trade/selection")
+    assert r.status_code == 200
+    assert "담을 종목" in r.text and "뺄 종목" in r.text
+    assert "기준일 2026-06-05" in r.text
+    assert "000660" in r.text and "005930" in r.text  # 매수·청산 후보 종목코드
+
+
 def test_fetch_executions_normalizes(tmp_path):
     payload = {"rt_cd": "0", "output1": [
         {"ord_dt": "20260605", "ord_tmd": "100530", "pdno": "005930", "prdt_name": "삼성전자",

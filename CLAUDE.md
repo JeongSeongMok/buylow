@@ -97,6 +97,7 @@ Every Claude session working in this repo follows these:
   최상단 **A** 증권사/계좌(마스킹·실전/모의 배지), 그 아래 **D** 자동매매 on/off 큰 토글 + 무장/환경/한도 +
   **E** 장상태 배지(장중/장시작전/장마감/휴장, KST), 1열 **B** 예수금·매수가능·보유종목(매수가/현재가/평가/손익),
   2열 **C** 매매내역(날짜 picker + ◀▶ 인접 거래일 + 일별 실현손익).
+- **오늘의 선정(담을/뺄 종목 미리보기)** — `/trade/selection` 부분(`partials/trade_selection.html`, B/C 위, 30초 HTMX 갱신). 선별은 '전날 종가 1회'(`RuleAlpha`)라 LEAN 없이 재현 가능 → `signal_diag.select_today(spec, data_dir, universe, held)`가 저장 전략 + 라이브 유니버스 + 캐시 잔고 보유종목으로 각 종목을 **자기 최신 일봉 날짜** 기준 1회 평가(`_direction`/`eval_rule` 재사용, analyze_run과 동일한 순수 재현). 반환: buys(rule UP; `held`로 신규/유지 구분) · sells(rule DOWN **이면서 보유** — RuleAlpha '보유 중일 때만 청산'과 동일) · cut(`max_positions` 초과로 유동성 하위 제외) · missing/stale/unmanaged 고지. 라우트는 `broker_cache.get_balance()`의 `items`에서 보유티커를 뽑아 넘김. 초기 렌더는 `loading` placeholder(trade_balance 패턴). 종목명은 라우트가 `names`로 매핑
 - **브로커 무관 읽기 계층** — `brokers/base.py` `TradingBroker`(KIS∩Toss 교집합: account_info/balance/market_status)
   + `brokers/kis_broker.py` `KisBroker`(KisClient 래핑, Asia/Seoul 시각으로 장중 판정). KIS 읽기 메서드
   `KisClient.fetch_balance`(보유+예수금)·`check_market_open`(chk_holiday)·`fetch_executions`(체결내역,

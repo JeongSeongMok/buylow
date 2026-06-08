@@ -92,6 +92,84 @@ def _direction(label: str, signals: dict, closes: list[float],
     return "NONE"
 
 
+def select_today(spec: dict, data_dir: str | Path, universe, held=()) -> dict | None:
+    """라이브 대상종목(universe) + 저장 전략으로 '오늘이라면' 담을/뺄 종목을 미리 계산.
+
+    선별은 '전날(완성 일봉) 기준 1회'이므로(strategies/RuleStrategy.py RuleAlpha) LEAN을 띄우지
+    않고도 적재된 일봉/수급/펀더멘털만으로 그날의 선정을 재현할 수 있다. 각 종목을 **자기 최신
+    일봉 날짜** 기준으로 1회 평가한다(_direction은 analyze_run과 동일한 순수 재현).
+
+    - 담을 종목(buys): rule==UP. 이미 보유 중이면 held=True(신규 편입 vs 유지 구분용).
+    - 뺄 종목(sells): rule==DOWN **이면서 보유 중**(RuleAlpha의 '보유 중일 때만 청산'과 동일).
+    - 보유한도(max_positions)가 있으면 매수 후보를 유동성(종가×거래량) 상위로 자르고, 잘린 건 cut.
+
+    정보 부족(전략·유니버스 없음, 규칙에 쓰인 신호 없음) 시 None.
+    """
+    signals = spec.get("signals") or {}
+    rule = spec.get("rule")
+    universe = list(universe or [])
+    if not (signals and rule and universe):
+        return None
+    ast = parse_rule(rule)
+    used = [L for L in signals if L in signal_labels(ast)]  # 규칙에 실제 쓰인 신호만
+    if not used:
+        return None
+
+    held = set(held)
+    buys: list[dict] = []
+    sells: list[dict] = []
+    missing: list[str] = []   # 적재 일봉이 없어 평가 못 한 종목
+    dates: list[str] = []
+    for tk in universe:
+        prices = read_price_daily(data_dir, tk)
+        if not prices:
+            missing.append(tk)
+            continue
+        flows = read_flow(data_dir, tk)
+        funds = _read_fund(data_dir, tk)
+        closes = [p["close"] for p in prices]
+        dt = prices[-1]["date"]
+        dates.append(dt)
+        dirs = {L: _direction(L, signals, closes, flows, funds, dt) for L in used}
+        result = eval_rule(ast, dirs)
+        if result == "UP":
+            buys.append({
+                "ticker": tk, "held": tk in held, "date": dt,
+                "reason": "+".join(L for L in used if dirs[L] == "UP"),
+                # 유동성 = 종가×거래량 (보유한도 초과 시 상위만 남길 기준; RuleAlpha와 동일).
+                "liquidity": (closes[-1] or 0) * (prices[-1].get("volume") or 0),
+            })
+        elif result == "DOWN" and tk in held:
+            sells.append({
+                "ticker": tk, "date": dt,
+                "reason": "+".join(L for L in used if dirs[L] == "DOWN"),
+            })
+
+    # 보유한도 캡: 매수 후보가 상한보다 많으면 유동성 상위만 담는다(나머지는 cut).
+    max_pos = int(spec.get("max_positions") or 0)
+    cut: list[dict] = []
+    if max_pos and len(buys) > max_pos:
+        buys.sort(key=lambda b: b["liquidity"], reverse=True)
+        cut = buys[max_pos:]
+        buys = buys[:max_pos]
+
+    ref_date = max(dates) if dates else None
+    return {
+        "ref_date": ref_date,
+        "buys": buys, "sells": sells, "cut": cut,
+        "max_positions": max_pos,
+        "evaluated": len(dates),
+        "missing": missing,
+        # 일봉이 기준일보다 오래된(증분 미적재) 종목 — 신호가 낡았을 수 있음을 화면에 고지.
+        "stale": sorted(tk for tk, d in zip(
+            [b["ticker"] for b in buys] + [s["ticker"] for s in sells],
+            [b["date"] for b in buys] + [s["date"] for s in sells])
+            if ref_date and d < ref_date),
+        # 보유 중이나 대상종목에 없는 종목(라이브 알파가 구독·관리하지 않음) — 참고 고지.
+        "unmanaged": sorted(t for t in held if t not in universe),
+    }
+
+
 def analyze_run(spec: dict, data_dir: str | Path, *, cap: int = DEFAULT_CAP) -> dict | None:
     """백테스트 spec + 적재 데이터로 신호 진단 요약. 정보 부족 시 None.
 

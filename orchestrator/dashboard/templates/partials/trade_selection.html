@@ -1,0 +1,74 @@
+{# 오늘의 선정 — 저장 전략 + 라이브 유니버스 + 현재 보유로 담을/뺄 종목 미리보기.
+   선별은 '전날 종가 1회'라 적재 일봉만으로 재현(LEAN 미실행). 30초마다 갱신(보유 반영). #}
+<section class="card" id="trade-selection" hx-ext="morph"
+         hx-get="/trade/selection" hx-trigger="load, every 30s" hx-swap="morph">
+  <h2>오늘의 선정
+    <small class="meta">{% if sel and sel.ref_date %}· 기준일 {{ sel.ref_date }} 종가{% else %}· 전략·대상종목 기준{% endif %}</small>
+  </h2>
+  {% if loading %}
+  <p class="meta"><span class="spinner"></span>선정 계산 중…</p>
+  {% elif not has_strategy %}
+  <p class="notice">전략이 없습니다 — <a href="/strategy">전략 설정</a>에서 먼저 저장하세요.</p>
+  {% elif not has_universe %}
+  <p class="notice">대상 종목이 없습니다 — 위에서 선택해 저장하세요.</p>
+  {% elif not sel %}
+  <p class="meta">선정을 계산할 수 없습니다(적재 일봉 데이터 부족). <a href="/data">데이터</a> 탭에서 대상종목 일봉을 적재하세요.</p>
+  {% else %}
+  <p class="meta">전날(완성 일봉) 종가 기준 1회 선별 — 체결은 자동매매가 전략 타이밍대로(다음 거래일). 보유 여부는 현재 잔고 기준입니다.</p>
+
+  {# 담을 종목(신규 편입) — rule UP & 미보유 #}
+  {% set new_buys = sel.buys | rejectattr('held') | list %}
+  {% set keep = sel.buys | selectattr('held') | list %}
+  <h3 class="subhead">📥 담을 종목 <small class="meta">(신규 편입 {{ new_buys|length }})</small></h3>
+  <div class="scrolly">
+    <table class="runs">
+      <thead><tr><th>종목</th><th>발동 신호</th></tr></thead>
+      <tbody>
+        {% for b in new_buys %}
+        <tr>
+          <td class="pos">{{ names[b.ticker] or b.ticker }}<br><small class="meta">{{ b.ticker }}</small></td>
+          <td><small>{{ b.reason }}</small></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="empty">신규 편입 후보 없음</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if keep %}
+  <p class="meta">유지(보유 중 매수신호 {{ keep|length }}): {% for b in keep %}{{ names[b.ticker] or b.ticker }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+
+  {# 뺄 종목 — rule DOWN & 보유 중 #}
+  <h3 class="subhead">📤 뺄 종목 <small class="meta">(청산 {{ sel.sells|length }})</small></h3>
+  <div class="scrolly">
+    <table class="runs">
+      <thead><tr><th>종목</th><th>발동 신호</th></tr></thead>
+      <tbody>
+        {% for s in sel.sells %}
+        <tr>
+          <td class="neg">{{ names[s.ticker] or s.ticker }}<br><small class="meta">{{ s.ticker }}</small></td>
+          <td><small>{{ s.reason }}</small></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="empty">청산 후보 없음{% if not have_balance %} (보유 조회 전){% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# 참고 고지 — 보유한도 초과로 잘림 / 낡은 데이터 / 관리 대상 외 보유 #}
+  {% if sel.cut %}
+  <p class="meta">⚠️ 보유한도({{ sel.max_positions }}종목) 초과로 제외된 매수 후보 {{ sel.cut|length }}: {% for c in sel.cut %}{{ names[c.ticker] or c.ticker }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+  {% if sel.stale %}
+  <p class="meta">⚠️ 일봉이 기준일보다 오래된 종목 {{ sel.stale|length }} — <a href="/data">데이터</a> 최신화 권장.</p>
+  {% endif %}
+  {% if sel.unmanaged %}
+  <p class="meta">ℹ️ 보유 중이나 대상종목에 없어 자동매매가 관리하지 않는 종목 {{ sel.unmanaged|length }}: {% for t in sel.unmanaged %}{{ names[t] or t }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+  {% if sel.missing %}
+  <p class="meta">대상종목 중 일봉 미적재 {{ sel.missing|length }}종목은 평가에서 제외됨.</p>
+  {% endif %}
+  {% endif %}
+</section>

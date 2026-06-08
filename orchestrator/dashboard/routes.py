@@ -899,6 +899,28 @@ def register_dashboard(
         ctx["format_won"] = format_won
         return templates.TemplateResponse(request, "partials/trade_trades.html", ctx)
 
+    @app.get("/trade/selection", response_class=HTMLResponse)
+    def trade_selection(request: Request):
+        # '오늘의 선정' 부분 — 저장 전략 + 라이브 유니버스 + 현재 보유로 담을/뺄 종목 미리 계산.
+        # 선별은 전날 일봉 1회라 LEAN 없이 적재 데이터만으로 재현(orchestrator/signal_diag.select_today).
+        from etl.names import load_names
+        from ..signal_diag import select_today
+        strategy = config.get_strategy()
+        universe = config.get_live_universe()
+        balance, _err, _at = broker_cache.get_balance()
+        held = [h["ticker"] for h in balance["items"]] if balance else []
+        sel = None
+        if strategy and universe:
+            try:
+                sel = select_today(strategy, config.get_data_folder(), universe, held)
+            except Exception:
+                sel = None  # 데이터 부족 등 — 화면엔 안내만(섹션은 비표시)
+        return templates.TemplateResponse(request, "partials/trade_selection.html", {
+            "sel": sel, "has_strategy": strategy is not None,
+            "has_universe": bool(universe), "have_balance": balance is not None,
+            "names": load_names(config.get_data_folder()),
+        })
+
     @app.post("/trade/toggle")
     async def trade_toggle(request: Request):
         # 자동매매 on/off → LEAN 라이브 프로세스 start/stop(킬 스위치).
