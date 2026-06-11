@@ -872,6 +872,8 @@ def register_dashboard(
             "names": load_names(config.get_data_folder()),
             "has_strategy": config.get_strategy() is not None,
             "format_won": format_won,
+            # 매매도 선별(RuleAlpha)이 적재 일봉을 읽으므로 데이터 없으면 백테스트처럼 먼저 적재해야 한다.
+            "data_loaded": _loaded_count(),
             "saved": request.query_params.get("saved"),
             "error": request.query_params.get("error"),
         })

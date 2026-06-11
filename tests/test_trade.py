@@ -233,6 +233,21 @@ def test_trade_page_includes_selection_lazyload(client):
     assert "선정 계산 중" in r.text  # 초기 렌더는 placeholder
 
 
+def test_trade_page_warns_when_no_data(client):
+    # 적재 일봉이 없으면(선별 RuleAlpha가 일봉을 읽음) 백테스트 탭처럼 데이터 최신화 주의문을 띄운다.
+    r = client.get("/trade")
+    assert r.status_code == 200
+    assert "적재된 과거 데이터가 없습니다" in r.text and "데이터 최신화" in r.text
+
+
+def test_trade_page_no_warning_when_data_loaded(client, monkeypatch):
+    # 적재 종목이 있으면(데이터 최신화 완료) 주의문을 표시하지 않는다.
+    from orchestrator.dashboard import routes
+    monkeypatch.setattr(routes, "_loaded_count", lambda: 42)
+    r = client.get("/trade")
+    assert r.status_code == 200 and "적재된 과거 데이터가 없습니다" not in r.text
+
+
 def test_trade_selection_no_strategy(client):
     # 전략 미저장 → 안내문(섹션은 계산 안 함).
     r = client.get("/trade/selection")

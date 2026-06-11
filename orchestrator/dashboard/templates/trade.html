@@ -6,6 +6,11 @@
 {% if not broker_ok %}
 <p class="notice">⚠️ {{ errors.account }} — <a href="/settings">설정</a> 탭에서 증권사·키·계좌번호를 입력하세요.</p>
 {% endif %}
+{% if data_loaded == 0 %}
+{# 매매의 종목 선별(전날 종가 1회·RuleAlpha)도 적재 일봉을 읽으므로, 백테스트처럼 데이터 적재가 선행돼야 한다. #}
+<p class="notice">⚠️ 적재된 과거 데이터가 없습니다. 자동매매의 <b>종목 선별</b>도 전날 일봉을 읽으므로 —
+  <a href="/data">데이터</a> 탭에서 <b>[데이터 최신화]</b>를 먼저 실행하세요(최소 일봉).</p>
+{% endif %}
 
 {# ── A. 증권사/계좌 (컬럼 구분 없이 최상단) ── #}
 <section class="card">
