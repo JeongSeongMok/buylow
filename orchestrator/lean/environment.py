@@ -45,23 +45,36 @@ class LeanEnvironment:
         return env
 
 
-def _libpython_filename() -> str:
-    """플랫폼별 libpython 3.11 공유 라이브러리 파일명."""
-    if sys.platform == "darwin":
+def _libpython_filename(platform: str = sys.platform) -> str:
+    """플랫폼별 libpython 3.11 공유 라이브러리 파일명. (테스트용으로 platform 인자 주입 가능)"""
+    if platform == "darwin":
         return "libpython3.11.dylib"
-    if sys.platform.startswith("linux"):
+    if platform.startswith("linux"):
         return "libpython3.11.so"
-    # Windows 등은 아직 미검증 — 개발 환경(macOS) 외 지원은 추후 추가.
-    raise RuntimeError(f"지원하지 않는 플랫폼: {sys.platform} (현재 macOS/Linux만 지원)")
+    if platform == "win32":
+        # Windows는 메이저·마이너만 붙은 DLL (예: python311.dll), lib 접두사·점 없음.
+        return "python311.dll"
+    raise RuntimeError(f"지원하지 않는 플랫폼: {platform}")
+
+
+def _dotnet_exe_name(platform: str = sys.platform) -> str:
+    return "dotnet.exe" if platform == "win32" else "dotnet"
+
+
+def _venv_python_relpath(platform: str = sys.platform) -> Path:
+    """venv 안의 python 실행파일 상대경로. Windows는 Scripts\\python.exe, 그 외 bin/python."""
+    if platform == "win32":
+        return Path("Scripts") / "python.exe"
+    return Path("bin") / "python"
 
 
 def _resolve_dotnet() -> tuple[Path, Path]:
     """(dotnet 실행파일, DOTNET_ROOT)를 해석. 기본 위치는 ~/.dotnet."""
     dotnet_root = Path(os.environ.get("DOTNET_ROOT", Path.home() / ".dotnet"))
-    candidate = dotnet_root / "dotnet"
+    candidate = dotnet_root / _dotnet_exe_name()
     if candidate.exists():
         return candidate, dotnet_root
-    # PATH에 있으면 그걸 사용
+    # PATH에 있으면 그걸 사용 (Windows는 winget이 PATH에 dotnet.exe 등록)
     on_path = shutil.which("dotnet")
     if on_path:
         exe = Path(on_path)
@@ -69,24 +82,70 @@ def _resolve_dotnet() -> tuple[Path, Path]:
     raise RuntimeError("dotnet을 찾을 수 없음. .NET 10 SDK 설치 필요 (docs/DEVELOPMENT.md)")
 
 
+def _find_python311() -> list[str]:
+    """Python 3.11 인터프리터 실행 argv를 해석한다.
+
+    OS마다 이름이 달라서('py -3.11'/'python'(Win) vs 'python3.11'(Unix)) 후보를 순서대로
+    시도하고, 실제 버전이 3.11인 첫 후보를 argv 리스트로 반환한다('py -3.11'처럼 2토큰일 수 있음).
+    """
+    if sys.platform == "win32":
+        candidates = [["py", "-3.11"], ["python"], ["python3"], ["python3.11"]]
+    else:
+        candidates = [["python3.11"], ["python3"], ["python"]]
+    for cmd in candidates:
+        exe = shutil.which(cmd[0])
+        if not exe:
+            continue
+        argv = [exe, *cmd[1:]]
+        try:
+            ver = subprocess.run(
+                [*argv, "-c", "import sys;print('%d.%d' % sys.version_info[:2])"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+        except (subprocess.CalledProcessError, OSError):
+            continue
+        if ver == "3.11":
+            return argv
+    hint = {
+        "win32": "winget install Python.Python.3.11 (또는 'py -3.11'이 동작하는지 확인)",
+        "darwin": "brew install python@3.11",
+    }.get(sys.platform, "apt install python3.11")
+    raise RuntimeError(f"Python 3.11을 찾을 수 없음 (예: '{hint}')")
+
+
 def _resolve_pythonnet_pydll() -> Path:
-    """LEAN pythonnet이 로드할 Python 3.11 공유 라이브러리 경로."""
-    py311 = shutil.which("python3.11")
-    if not py311:
-        raise RuntimeError("python3.11을 찾을 수 없음 (예: 'brew install python@3.11')")
+    """LEAN pythonnet이 로드할 Python 3.11 공유 라이브러리 경로.
+
+    libpython 디렉토리는 OS별로 위치가 달라(Unix=LIBDIR, Windows=설치 루트) 해당 3.11
+    인터프리터에 물어본다. 파일명은 _libpython_filename(현재 OS와 동일)으로 합친다.
+    """
+    py_cmd = _find_python311()
+    if sys.platform == "win32":
+        # Windows: python311.dll은 인터프리터(설치 루트, py.exe가 re-exec한 실제 python.exe) 옆.
+        dir_snippet = "import sys,os;print(os.path.dirname(sys.executable))"
+        fallback_snippet = "import sys;print(sys.base_prefix)"
+    else:
+        dir_snippet = "import sysconfig;print(sysconfig.get_config_var('LIBDIR') or '')"
+        fallback_snippet = None
     libdir = subprocess.run(
-        [py311, "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"],
-        capture_output=True, text=True, check=True,
+        [*py_cmd, "-c", dir_snippet], capture_output=True, text=True, check=True,
     ).stdout.strip()
     pydll = Path(libdir) / _libpython_filename()
+    if not pydll.exists() and fallback_snippet:
+        alt_dir = subprocess.run(
+            [*py_cmd, "-c", fallback_snippet], capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        alt = Path(alt_dir) / _libpython_filename()
+        if alt.exists():
+            return alt
     if not pydll.exists():
-        raise RuntimeError(f"libpython3.11을 찾을 수 없음: {pydll}")
+        raise RuntimeError(f"libpython 3.11을 찾을 수 없음: {pydll}")
     return pydll
 
 
 def _ensure_leanpy_venv() -> Path:
     """LEAN Python 연동에 필요한 pandas/numpy를 담은 3.11 venv를 보장하고 site-packages 반환."""
-    venv_python = LEANPY_DIR / "bin" / "python"
+    venv_python = LEANPY_DIR / _venv_python_relpath()
     if not venv_python.exists():
         if not shutil.which("uv"):
             raise RuntimeError("uv를 찾을 수 없음 (https://github.com/astral-sh/uv)")
@@ -96,8 +155,10 @@ def _ensure_leanpy_venv() -> Path:
             ["uv", "pip", "install", "--python", str(venv_python), "pandas", "numpy"],
             check=True,
         )
+    # purelib = site-packages 경로. site.getsitepackages()[0]는 Windows에서 venv 루트를 반환해
+    # (Win은 [prefix, prefix\Lib\site-packages]) 잘못되므로, OS 무관하게 정확한 sysconfig를 쓴다.
     site_packages = subprocess.run(
-        [str(venv_python), "-c", "import site; print(site.getsitepackages()[0])"],
+        [str(venv_python), "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
     return Path(site_packages)

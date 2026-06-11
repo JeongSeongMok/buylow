@@ -73,6 +73,24 @@ LEAN's Python strategies do `from AlgorithmImports import *`, which loads many
 - `PYTHONPATH` → the `.leanpy` site-packages, the `AlgorithmImports.py` directory (shipped
   inside the `QuantConnect.Common` NuGet package's `content/`), and the strategy directory
 
+### Platform support (env resolution)
+
+`orchestrator/lean/environment.py` resolves these paths per-OS so the same engine path runs on
+macOS, Linux, **and Windows**:
+
+- **libpython** — file name differs (`libpython3.11.dylib` / `.so` / `python311.dll`) and so does
+  its location (Unix = `sysconfig LIBDIR`; Windows = the interpreter's install root, not `LIBDIR`
+  which is `None` there). See `_libpython_filename` / `_resolve_pythonnet_pydll`.
+- **Python 3.11 lookup** — Windows exposes it as `py -3.11` / `python`, not `python3.11`, so
+  `_find_python311` tries OS-specific candidates and verifies the version (returns an argv list so
+  the two-token `py -3.11` works).
+- **venv layout** — `Scripts\python.exe` (Windows) vs `bin/python` (Unix); site-packages via
+  `sysconfig.get_path('purelib')` (note: `site.getsitepackages()[0]` returns the venv root on Windows).
+- **dotnet** — `dotnet.exe` vs `dotnet`; otherwise found on PATH.
+
+macOS/Linux are CI-validated; **Windows native is implemented but pending on-device validation**
+(the maintainer dev env is macOS). Pure branch logic is unit-tested in `tests/test_environment.py`.
+
 ## Running via the orchestrator (LEAN Runner)
 
 The orchestrator's `LeanRunner` (`orchestrator/lean/`) is the programmatic equivalent of
