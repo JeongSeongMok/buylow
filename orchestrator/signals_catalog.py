@@ -252,3 +252,23 @@ def param_value(strategy: dict, label: str, key: str):
             if p.key == key:
                 return p.default
         return ""
+
+
+def warmup_daily_bars(signals_config: dict) -> int:
+    """선별 일봉 지표가 첫날부터 is_ready가 되도록 데울 일봉 수.
+
+    선별 신호는 LEAN 일봉 지표(algo.ema(…, Resolution.DAILY) 등)를 쓴다. 라이브는 현재 시각부터
+    시작(Warmup:False)이라 워밍업이 없으면 EMA60·MOM60 등이 영영 is_ready=False → 신호 0건 →
+    주문이 안 나간다(백테스트는 시작 구간이 자연히 데워져 드러나지 않던 문제). 신호별 최대 룩백을
+    구해 여유를 더한 만큼 일봉을 미리 흘려 지표를 데운다. 순수 함수라 단위테스트로 검증.
+    """
+    longest = 0
+    for cfg in (signals_config or {}).values():
+        params = cfg.get("params", {}) or {}
+        if cfg.get("type") == "macd":  # MACD는 slow EMA 위에 signal EMA → 합산이 실제 룩백
+            longest = max(longest, int(params.get("slow", 26)) + int(params.get("signal", 9)))
+        for key in ("slow", "period", "lookback"):  # ema(slow)/rsi·bollinger(period)/momentum(lookback)
+            if key in params:
+                longest = max(longest, int(params[key]))
+    # 지표 '준비'엔 룩백만큼 필요 + 표본 1~2개로 흔들리지 않게 여유(+10), 신호 없으면 최소 30.
+    return max(longest + 10, 30)

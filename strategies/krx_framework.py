@@ -57,8 +57,14 @@ class KrxFrameworkAlgorithm(QCAlgorithm):
         # 무위험금리: LEAN 기본은 미국 금리 CSV(data/alternative/interest-rate/usa)를 찾다 실패.
         # 한국 국고채 근사로 상수(3%) 모델을 써서 미국 데이터 의존을 제거(Sharpe 등 정상 계산).
         self.set_risk_free_interest_rate_model(ConstantRiskFreeRateInterestRateModel(0.03))
-        # krx 시장 등록 + KRW 계좌 (set_cash 전에 통화 지정)
-        Market.add(KRX_MARKET, KRX_MARKET_ID)
+        # krx 시장 등록 + KRW 계좌 (set_cash 전에 통화 지정).
+        # 라이브에선 KIS 어댑터(KisBrokerage 정적 생성자)가 알고리즘 initialize보다 먼저 같은
+        # krx 시장을 등록하므로, 여기서 또 등록하면 "market identifier already in use"로 죽는다.
+        # 백테스트엔 어댑터가 없어 단독 등록이라 문제없었다. 어댑터(C#)와 동일하게 멱등 가드.
+        try:
+            Market.add(KRX_MARKET, KRX_MARKET_ID)
+        except Exception:
+            pass  # 이미 등록됨(라이브: 어댑터가 선등록)
         self.set_account_currency(KRX_CURRENCY)
         self.universe_settings.resolution = resolution
         # 유니버스가 편입하는 모든 종목에 한국 수수료모델 부착 (프레임워크에선 initializer로)

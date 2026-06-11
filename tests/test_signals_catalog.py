@@ -117,3 +117,32 @@ def test_descriptions_hide_internal_tokens():
         assert "UP" not in spec.description
         assert "DOWN" not in spec.description
         assert "NONE" not in spec.description
+
+
+def test_warmup_daily_bars_uses_longest_lookback():
+    # EMA slow(60)가 최대 룩백 → 60 + 여유(10) = 70
+    cfg = {"EMA": {"type": "ema", "params": {"fast": 20, "slow": 60}}}
+    assert sc.warmup_daily_bars(cfg) == 70
+
+
+def test_warmup_daily_bars_macd_sums_slow_and_signal():
+    # MACD는 slow(26)+signal(9)=35가 실제 룩백 → 35+10=45
+    cfg = {"MACD": {"type": "macd", "params": {"fast": 12, "slow": 26, "signal": 9}}}
+    assert sc.warmup_daily_bars(cfg) == 45
+
+
+def test_warmup_daily_bars_floor_when_no_lookback():
+    # 룩백 없는 신호(value)뿐이면 최소 30
+    cfg = {"VAL": {"type": "value", "params": {"per_max": 15.0}}}
+    assert sc.warmup_daily_bars(cfg) == 30
+    assert sc.warmup_daily_bars({}) == 30
+
+
+def test_warmup_daily_bars_max_across_signals():
+    # 여러 신호 중 momentum lookback(120)이 최대 → 130
+    cfg = {
+        "EMA": {"type": "ema", "params": {"slow": 60}},
+        "MOM": {"type": "momentum", "params": {"lookback": 120}},
+        "RSI": {"type": "rsi", "params": {"period": 14}},
+    }
+    assert sc.warmup_daily_bars(cfg) == 130

@@ -18,6 +18,7 @@ from orchestrator.execution import TimingConfig
 from krx_framework import KrxFrameworkAlgorithm
 from signals import build_signal
 from intraday_execution import IntradayExecutionModel
+from orchestrator.signals_catalog import warmup_daily_bars
 
 
 class RuleAlpha(AlphaModel):
@@ -140,3 +141,7 @@ class RuleStrategy(KrxFrameworkAlgorithm):
                                  int(spec.get("period_days", 5)),
                                  int(spec.get("max_positions", 0)),
                                  minute_res=intraday))
+
+        # 선별 일봉 지표 워밍업(라이브 첫날부터 신호가 나오게 — 미설정 시 주문 0건). 디스크 일봉으로
+        # 데우며, 워밍업 중에는 LEAN이 실주문을 보류하므로 안전. 백테스트도 동일하게 적용돼 무해.
+        self.set_warmup(warmup_daily_bars(spec["signals"]), Resolution.DAILY)
