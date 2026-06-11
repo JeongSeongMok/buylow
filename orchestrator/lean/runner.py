@@ -172,10 +172,10 @@ def build_live_config(request: RunRequest, results_dir: Path, algorithm_id: str,
                       *, live: dict, kis: dict, token_cache: str | None = None) -> dict:
     """라이브(live-kis)용 LEAN config(dict) 생성 — 백테스트 _build_config의 라이브 짝.
 
-    같은 전략 .py를 라이브 모드로 돌리되, KIS 어댑터에 필요한 자격증명/환경/안전장치(무장·한도)를
+    같은 전략 .py를 라이브 모드로 돌리되, KIS 어댑터에 필요한 자격증명/환경/선택적 주문한도를
     브로커리지 데이터(kis-* 키)로 주입한다. KisBrokerageFactory.BrokerageData가 이 키들을 읽는다.
 
-    안전: env=real이면 KisBrokerage가 armed=true에서만 실제 전송한다(미무장=드라이런 거부).
+    무장(arming) 개념은 제거됐다 — enabled면 실전·모의 모두 바로 전송한다.
     이 함수는 순수(파일/네트워크 없음)라 단위테스트로 키 주입을 검증한다.
     """
     config = {
@@ -204,13 +204,12 @@ def build_live_config(request: RunRequest, results_dir: Path, algorithm_id: str,
         "maximum-chart-series": 30,
         "parameters": _params_with_risk(request.parameters),
         "python-additional-paths": [],
-        # ── KIS 어댑터 브로커리지 데이터(무장 게이트 포함) ──
+        # ── KIS 어댑터 브로커리지 데이터(선택적 주문한도 포함) ──
         "kis-app-key": kis.get("app_key") or "",
         "kis-app-secret": kis.get("app_secret") or "",
         "kis-account-no": kis.get("account_no") or "",
         "kis-env": live.get("env", "demo"),
         "kis-hts-id": live.get("hts_id", "") or "",
-        "kis-armed": "true" if live.get("armed") else "false",
         "kis-max-order-amount": str(int(live.get("max_order_amount", 0) or 0)),
         "kis-token-cache": token_cache or "",
         "environments": {"live-kis": dict(_LIVE_HANDLERS)},
@@ -299,13 +298,13 @@ class LeanRunner:
     def run_live(self, request: RunRequest, on_start=None, proc_sink=None) -> RunResult:
         """라이브(실주문) 실행 — 백테스트와 같은 전략 .py를 LEAN 라이브 모드로 spawn.
 
-        ⚠️ 실주문 경로. config.live_arming_ok로 안전 가드를 먼저 확인하고, KIS 어댑터 DLL이 런처
+        ⚠️ 실주문 경로. config.live_start_ok로 enabled 여부를 먼저 확인하고, KIS 어댑터 DLL이 런처
         출력폴더에 있는지(scripts/build-adapter.sh로 빌드) 검증한다. 라이브 프로세스는 장시간 살아
         있으며 종료될 때까지 로그를 스트리밍한다. proc_sink(proc)가 주어지면 Popen 직후 호출해
         프로세스 핸들을 넘긴다 — 매니저가 이를 보관했다 킬 스위치로 terminate/kill 할 수 있다.
         """
         from .. import config
-        ok, why = config.live_arming_ok()
+        ok, why = config.live_start_ok()
         if not ok:
             raise RuntimeError(f"라이브 시작 거부: {why}")
 

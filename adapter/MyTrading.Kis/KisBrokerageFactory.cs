@@ -6,7 +6,7 @@
  *
  * BrokerageData 키(=LeanRunner _build_live_config가 채움):
  *   kis-app-key / kis-app-secret / kis-account-no / kis-env(real|demo) /
- *   kis-hts-id(체결통보용, 선택) / kis-armed(true|false) / kis-max-order-amount(원) /
+ *   kis-hts-id(체결통보용, 선택) / kis-max-order-amount(원, 선택 한도) /
  *   kis-token-cache(토큰 디스크캐시 경로, 선택)
  */
 
@@ -31,7 +31,6 @@ namespace MyTrading.Kis
             { "kis-account-no", Config.Get("kis-account-no") },
             { "kis-env", Config.Get("kis-env", "demo") },
             { "kis-hts-id", Config.Get("kis-hts-id") },
-            { "kis-armed", Config.Get("kis-armed", "false") },
             { "kis-max-order-amount", Config.Get("kis-max-order-amount", "0") },
             { "kis-token-cache", Config.Get("kis-token-cache") },
         };
@@ -43,7 +42,6 @@ namespace MyTrading.Kis
             var data = job.BrokerageData;
             string Read(string k, string dflt = "") => data.TryGetValue(k, out var v) && !string.IsNullOrEmpty(v) ? v : dflt;
 
-            var armed = Read("kis-armed", "false").Equals("true", System.StringComparison.OrdinalIgnoreCase);
             decimal.TryParse(Read("kis-max-order-amount", "0"), out var maxAmt);
 
             var brokerage = new KisBrokerage(
@@ -53,7 +51,6 @@ namespace MyTrading.Kis
                 Read("kis-account-no"),
                 Read("kis-env", "demo"),
                 Read("kis-hts-id"),
-                armed,
                 maxAmt,
                 Read("kis-token-cache"));
 

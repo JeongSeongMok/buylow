@@ -3,6 +3,10 @@
  * 이 부분이 e2e 없이 회귀를 잡을 수 있는 핵심이라 우선 커버한다.
  */
 
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using MyTrading.Kis;
 
@@ -86,6 +90,63 @@ namespace MyTrading.Kis.Tests
             var fill = KisWebSocketClient.ParseFillBody(string.Join("^", fields));
             Assert.False(fill.Buy);          // 01 = 매도
             Assert.False(fill.IsFilled);     // 13 != "2"
+        }
+    }
+
+    // 잔고조회 레이트리밋 재시도 + 단기 캐시 — LEAN init이 inquire-balance를 연달아 때려
+    // KIS 초당 한도(rt_cd=1)에 막혀 라이브가 죽던 회귀를 고정한다.
+    public class KisBalanceRetryTests
+    {
+        // 토큰 POST는 토큰을 주고, inquire-balance는 1회차 초당한도(rt_cd=1) → 이후 성공으로 응답.
+        class FakeHandler : HttpMessageHandler
+        {
+            public int BalanceCalls;
+
+            private HttpResponseMessage Respond(HttpRequestMessage request)
+            {
+                var path = request.RequestUri.AbsolutePath;
+                string body;
+                if (path.Contains("tokenP"))
+                    body = "{\"access_token\":\"T\",\"expires_in\":86400}";
+                else if (path.Contains("inquire-balance"))
+                {
+                    BalanceCalls++;
+                    body = BalanceCalls == 1
+                        ? "{\"rt_cd\":\"1\",\"msg1\":\"초당 거래건수를 초과하였습니다.\"}"
+                        : "{\"rt_cd\":\"0\",\"output1\":[],\"output2\":[{\"dnca_tot_amt\":\"1000\",\"prvs_rcdl_excc_amt\":\"900\"}]}";
+                }
+                else body = "{}";
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+            }
+
+            protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken ct)
+                => Respond(request);
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+                => Task.FromResult(Respond(request));
+        }
+
+        private static KisRestClient Client(FakeHandler h) =>
+            new KisRestClient("ak123456", "sk", "demo", null, new HttpClient(h));
+
+        [Fact]
+        public void InquireBalance_retries_on_rate_limit_then_succeeds()
+        {
+            var h = new FakeHandler();
+            var bal = Client(h).InquireBalance("12345678", "01");
+            Assert.Equal(900m, bal.D2Deposit);   // 성공 응답 파싱
+            Assert.Equal(2, h.BalanceCalls);      // 1회 한도초과 + 1회 성공
+        }
+
+        [Fact]
+        public void InquireBalance_caches_within_ttl()
+        {
+            var h = new FakeHandler();
+            var client = Client(h);
+            client.InquireBalance("12345678", "01");   // 한도(1) + 성공(2)
+            var after = h.BalanceCalls;
+            client.InquireBalance("12345678", "01");   // TTL(2초) 내 → 캐시 반환, 추가 호출 없음
+            Assert.Equal(after, h.BalanceCalls);
         }
     }
 }

@@ -4,9 +4,9 @@
  * 역할: LEAN 라이브 엔진이 전략(①선별 + ②타이밍, 백테스트와 동일 코드)이 만든 주문을 이 클래스를 통해
  * KIS로 실제 전송하고, 체결통보/시세를 받아 LEAN에 되먹인다.
  *
- * ★ 안전(무장) 게이트: real(실전) 환경에서는 armed=true가 아니면 주문을 전송하지 않고 거부+경고한다.
- *   또 1건 주문금액이 max_order_amount(원)를 넘으면 거부한다. 실계좌·실제돈 사고를 막기 위한 1차 방벽.
- *   (대시보드 무장 토글 + 한도와 연동되며, 자세한 정책은 docs/LIVE_KIS.md.)
+ * ★ 무장(arming) 게이트는 제거됨: enabled면 실전(real)·모의(demo) 모두 주문을 바로 전송한다.
+ *   유일한 선택적 방벽은 max_order_amount(원>0)로, 1건 주문금액이 한도를 넘으면 거부한다(0=비활성).
+ *   (자세한 정책은 docs/LIVE_KIS.md.)
  *
  * 한 클래스가 IBrokerage와 IDataQueueHandler를 모두 구현 — KIS는 동일 토큰/세션 위에서 주문과 시세가
  * 함께 돌아가므로 묶는 게 자연스럽다(zerodha 등 LEAN 다른 어댑터와 동일 패턴).
@@ -48,7 +48,6 @@ namespace MyTrading.Kis
         private readonly string _acntPrdtCd;
         private readonly string _env;
         private readonly string _htsId;
-        private readonly bool _armed;
         private readonly decimal _maxOrderAmount;
 
         private KisWebSocketClient _ws;
@@ -56,17 +55,21 @@ namespace MyTrading.Kis
         // 부분체결 누적 추적(brokerId=ODNO → 체결수량 합). 풀필/부분 판정용.
         private readonly ConcurrentDictionary<string, int> _filledQty = new ConcurrentDictionary<string, int>();
 
-        public override bool IsConnected => _connected && (_ws == null || _ws.IsConnected);
+        // 연결 판정은 주문 경로(REST) 기준. WS는 실시간 시세/체결통보용으로 Connect()에서 비동기로
+        // 열리며(연결까지 수십~수백 ms) 실패해도 경고만 낸다(주문/잔고는 REST라 가능). LEAN의
+        // BrokerageSetupHandler는 Connect() 직후 IsConnected를 검사하는데, 여기에 _ws.IsConnected를
+        // 묶으면 WS가 아직 안 열려 false → "Unable to connect to brokerage"로 라이브 초기화가 죽는다.
+        // REST 토큰 발급 성공(=_connected)만으로 판정한다.
+        public override bool IsConnected => _connected;
 
         public KisBrokerage(IAlgorithm algorithm, string appKey, string appSecret, string accountNo,
-                            string env, string htsId, bool armed, decimal maxOrderAmount,
+                            string env, string htsId, decimal maxOrderAmount,
                             string tokenCachePath)
             : base("KisBrokerage")
         {
             _algorithm = algorithm;
             _env = string.IsNullOrEmpty(env) ? "demo" : env;
             _htsId = htsId;
-            _armed = armed;
             _maxOrderAmount = maxOrderAmount;
             AccountBaseCurrency = KisConstants.KrwCurrency;
 
@@ -100,7 +103,7 @@ namespace MyTrading.Kis
                     $"KIS 실시간 연결 실패(주문/잔고는 정상): {e.Message}"));
             }
             _connected = true;
-            Log.Trace($"KisBrokerage.Connect(): env={_env} armed={_armed} 계좌={_cano}-{_acntPrdtCd}");
+            Log.Trace($"KisBrokerage.Connect(): env={_env} 계좌={_cano}-{_acntPrdtCd}");
         }
 
         public override void Disconnect()
@@ -119,8 +122,8 @@ namespace MyTrading.Kis
             var price = order.Type == OrderType.Limit && order is LimitOrder lo ? lo.LimitPrice
                         : (order.Price != 0 ? order.Price : _algorithm.Securities[order.Symbol].Price);
 
-            // ── 무장 게이트 (실주문 안전장치) ──
-            if (!ArmCheck(order, price, out var reject))
+            // ── 주문금액 한도 검사 (선택적 안전장치, 한도 0이면 무조건 통과) ──
+            if (!LimitCheck(order, price, out var reject))
             {
                 OnOrderEvent(new OrderEvent(order, DateTime.UtcNow, OrderFee.Zero, reject) { Status = OrderStatus.Invalid });
                 OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Warning, "OrderBlocked", reject));
@@ -153,14 +156,9 @@ namespace MyTrading.Kis
             }
         }
 
-        /// <summary>무장/한도 검사. 통과 시 true. 실전(real)은 armed 필수, 1건 금액은 한도 이하.</summary>
-        private bool ArmCheck(Order order, decimal price, out string reason)
+        /// <summary>주문금액 한도 검사. 통과 시 true. 한도(>0) 초과 시에만 거부(0=비활성). 무장 개념 없음.</summary>
+        private bool LimitCheck(Order order, decimal price, out string reason)
         {
-            if (!_armed)
-            {
-                reason = $"자동매매 미무장 — 주문 차단(드라이런). env={_env}. 대시보드에서 무장 후 사용하세요.";
-                return false;
-            }
             if (_maxOrderAmount > 0)
             {
                 var amount = order.AbsoluteQuantity * (price > 0 ? price : 0m);
@@ -178,11 +176,6 @@ namespace MyTrading.Kis
         {
             var (orgNo, orderNo) = ExtractBrokerIds(order);
             if (string.IsNullOrEmpty(orderNo)) return false;
-            if (!_armed)
-            {
-                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Warning, "OrderBlocked", "미무장 — 정정 차단"));
-                return false;
-            }
             try
             {
                 var price = order is LimitOrder lo ? lo.LimitPrice : order.Price;

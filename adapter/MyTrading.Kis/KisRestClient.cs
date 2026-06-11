@@ -72,6 +72,14 @@ namespace MyTrading.Kis
         private string _token;
         private DateTime _tokenExpiry = DateTime.MinValue;
 
+        // 잔고조회 단기 캐시 — LEAN이 init에서 GetCashBalance()+GetAccountHoldings()를 연달아 호출하며
+        // inquire-balance를 2번 때려 KIS 초당 한도(rt_cd=1 "초당 거래건수 초과")를 넘기던 문제를 막는다.
+        // 한 응답에 예수금+보유가 모두 들어있어 둘이 한 호출을 공유한다(TTL은 짧게 — 잔고 신선도 유지).
+        private readonly object _balanceLock = new object();
+        private KisBalance _balanceCache;
+        private DateTime _balanceCacheAt = DateTime.MinValue;
+        private static readonly TimeSpan BalanceCacheTtl = TimeSpan.FromSeconds(2);
+
         public string Env => _env;
         public bool IsDemo => KisConstants.IsDemo(_env);
 
@@ -287,7 +295,38 @@ namespace MyTrading.Kis
         }
 
         // ── 잔고/예수금 ────────────────────────────────────────────────────
+        /// <summary>잔고조회(예수금+보유). 2초 캐시 + 초당한도(rt_cd=1) 시 백오프 재시도.
+        /// lock으로 동시 호출을 직렬화해 같은 클라이언트가 inquire-balance를 중복 발사하지 않게 한다.</summary>
         public KisBalance InquireBalance(string cano, string acntPrdtCd)
+        {
+            lock (_balanceLock)
+            {
+                if (_balanceCache != null && DateTime.UtcNow - _balanceCacheAt < BalanceCacheTtl)
+                    return _balanceCache;
+                _balanceCache = FetchBalanceWithRetry(cano, acntPrdtCd);
+                _balanceCacheAt = DateTime.UtcNow;
+                return _balanceCache;
+            }
+        }
+
+        private static bool IsRateLimit(string msg) =>
+            !string.IsNullOrEmpty(msg) && (msg.Contains("초당") || msg.Contains("거래건수"));
+
+        private KisBalance FetchBalanceWithRetry(string cano, string acntPrdtCd)
+        {
+            const int maxAttempts = 3;
+            for (var attempt = 1; ; attempt++)
+            {
+                try { return FetchBalance(cano, acntPrdtCd); }
+                catch (KisException e) when (attempt < maxAttempts && IsRateLimit(e.Message))
+                {
+                    Log.Trace($"KisRestClient.InquireBalance: 초당 한도 — {300 * attempt}ms 후 재시도({attempt}/{maxAttempts - 1})");
+                    System.Threading.Thread.Sleep(300 * attempt);  // 0.3s → 0.6s 백오프
+                }
+            }
+        }
+
+        private KisBalance FetchBalance(string cano, string acntPrdtCd)
         {
             var trId = IsDemo ? KisConstants.TrBalanceDemo : KisConstants.TrBalanceReal;
             var balance = new KisBalance();
