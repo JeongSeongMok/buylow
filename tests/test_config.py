@@ -124,7 +124,7 @@ def test_kis_secrets_and_credentials(tmp_config, monkeypatch):
 
 def test_broker_secret_status(tmp_config):
     st = config.broker_secret_status("kis")
-    assert {s["key"] for s in st} == {"kis_app_key", "kis_app_secret", "kis_account_no"}
+    assert {s["key"] for s in st} == {"kis_app_key", "kis_app_secret", "kis_account_no", "kis_hts_id"}
     assert all(not s["set"] for s in st)
     config.save_secrets({"kis_app_key": "AK"})
     st = {s["key"]: s["set"] for s in config.broker_secret_status("kis")}

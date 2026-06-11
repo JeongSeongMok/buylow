@@ -85,6 +85,11 @@
       <span class="meta">장 상태 조회 실패: {{ errors.market }}</span>
     {% endif %}
   </div>
+
+  {% if not live.hts_id %}
+  <p class="notice">⚠️ HTS ID가 없어 체결통보를 구독하지 못합니다 — <b>주문 체결이 자동 반영되지 않고
+    자동매매를 켤 수 없습니다</b>. <a href="/settings">설정 탭</a>에서 HTS ID를 등록하세요.</p>
+  {% endif %}
 </section>
 
 {# 오늘의 선정 — 담을/뺄 종목 미리보기(전략+대상종목+보유 기준). 30초마다 HTMX 갱신. #}

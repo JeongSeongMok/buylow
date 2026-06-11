@@ -72,6 +72,8 @@ BROKER_SECRET_SPECS: dict[str, list[SecretSpec]] = {
                    "한국투자증권 실전 OpenAPI appsecret"),
         SecretSpec("kis_account_no", "BUYLOW_KIS_ACCOUNT_NO", "KIS 계좌번호",
                    "실전 종합계좌번호 (예: 12345678-01)"),
+        SecretSpec("kis_hts_id", "BUYLOW_KIS_HTS_ID", "KIS HTS ID",
+                   "실시간 체결통보 구독에 필요(라이브 체결 자동확인). 라이브 매매 필수"),
     ],
     "kis_demo": [
         SecretSpec("kis_demo_app_key", "BUYLOW_KIS_DEMO_APP_KEY", "KIS 모의 App Key",
@@ -80,6 +82,8 @@ BROKER_SECRET_SPECS: dict[str, list[SecretSpec]] = {
                    "한국투자증권 모의투자 OpenAPI appsecret"),
         SecretSpec("kis_demo_account_no", "BUYLOW_KIS_DEMO_ACCOUNT_NO", "KIS 모의 계좌번호",
                    "모의투자 종합계좌번호 (예: 50012345-01)"),
+        SecretSpec("kis_demo_hts_id", "BUYLOW_KIS_DEMO_HTS_ID", "KIS 모의 HTS ID",
+                   "실시간 체결통보 구독에 필요(라이브 체결 자동확인). 라이브 매매 필수"),
     ],
     # Toss API 개방 시 동일 패턴으로 추가.
     "toss": [],
@@ -90,6 +94,9 @@ _KIS_CRED_KEYS = {
     "kis": ("kis_app_key", "kis_app_secret", "kis_account_no"),
     "kis_demo": ("kis_demo_app_key", "kis_demo_app_secret", "kis_demo_account_no"),
 }
+
+# 증권사 → HTS ID 시크릿 key. 체결통보 구독에 쓰며 실전/모의가 다를 수 있어 따로 둔다.
+_KIS_HTS_KEYS = {"kis": "kis_hts_id", "kis_demo": "kis_demo_hts_id"}
 
 
 def _load_local() -> dict:
@@ -179,12 +186,12 @@ def save_strategy(spec: dict) -> None:
 
 
 # ── 라이브(실주문) 설정 ────────────────────────────────────────────────────
-# 자동매매 on/off + 안전장치(무장·환경·주문한도). 실주문은 LEAN 라이브 + KIS 어댑터(adapter/)가 집행.
-# 안전 원칙(docs/LIVE_KIS.md): real(실전) 환경에서 enabled는 armed=True일 때만 유효하고, 주문 1건은
-# max_order_amount(원) 이하만 허용한다. 기본은 비활성·미무장·모의(demo)로 둬 사고를 막는다.
-# env는 더 이상 live에 저장하지 않는다 — '선택한 증권사'(kis=real, kis_demo=demo)가 결정한다.
-LIVE_KEYS = ("enabled", "armed", "max_order_amount", "hts_id")
-DEFAULT_LIVE = {"enabled": False, "armed": False, "max_order_amount": 0, "hts_id": ""}
+# 자동매매 on/off + 선택적 주문한도. 실주문은 LEAN 라이브 + KIS 어댑터(adapter/)가 집행.
+# 무장(arming) 개념은 제거했다 — enabled=True면 실전(real)·모의(demo) 모두 바로 주문이 전송된다.
+# max_order_amount(원)는 0이면 비활성, >0이면 1건 주문금액 상한(어댑터가 검사)이라 무장과 무관한 선택 안전장치.
+# env는 live에 저장하지 않는다 — '선택한 증권사'(kis=real, kis_demo=demo)가 결정한다.
+LIVE_KEYS = ("enabled", "max_order_amount")
+DEFAULT_LIVE = {"enabled": False, "max_order_amount": 0}
 
 
 def get_live_config() -> dict:
@@ -207,16 +214,15 @@ def get_live_config() -> dict:
         max_amt = 0
     return {
         "enabled": _b("enabled"),
-        "armed": _b("armed"),
         "env": broker_env(),  # 증권사에서 도출(저장 안 함)
         "max_order_amount": max(0, max_amt),
-        "hts_id": os.environ.get("BUYLOW_LIVE_HTS_ID") or lc.get("hts_id") or "",
+        "hts_id": get_kis_hts_id(),  # 설정 탭의 증권사별 시크릿에서(앱키와 동일 관리)
     }
 
 
 def save_live_config(values: dict) -> None:
-    """대시보드 라이브 폼 저장. enabled/armed=불리언, max_order_amount=원, hts_id=문자열.
-    (env는 증권사가 결정하므로 저장하지 않는다 — 들어와도 무시.)"""
+    """대시보드 라이브 폼 저장. enabled=불리언, max_order_amount=원.
+    (env는 증권사가 결정, hts_id는 설정 탭 시크릿 — 여기선 저장하지 않는다.)"""
     data = _load_local()
     live = data.setdefault("live", {})
 
@@ -225,15 +231,11 @@ def save_live_config(values: dict) -> None:
 
     if "enabled" in values:
         live["enabled"] = _truthy(values.get("enabled"))
-    if "armed" in values:
-        live["armed"] = _truthy(values.get("armed"))
     if "max_order_amount" in values:
         try:
             live["max_order_amount"] = max(0, int(float(values.get("max_order_amount") or 0)))
         except (TypeError, ValueError):
             live["max_order_amount"] = 0
-    if "hts_id" in values:
-        live["hts_id"] = str(values.get("hts_id") or "").strip()
     _write_local(data)
 
 
@@ -260,18 +262,16 @@ def set_live_enabled(enabled: bool) -> None:
     save_live_config({"enabled": bool(enabled)})
 
 
-def set_live_armed(armed: bool) -> None:
-    save_live_config({"armed": bool(armed)})
+def live_start_ok(cfg: dict | None = None) -> tuple[bool, str]:
+    """자동매매 시작 가드. (허용여부, 사유). enabled=True면 실전·모의 모두 허용(무장 개념 제거).
 
-
-def live_arming_ok(cfg: dict | None = None) -> tuple[bool, str]:
-    """실주문 안전 가드. (허용여부, 사유). 실전 증권사(env=real)+enabled는 armed 필수.
-    모의투자(kis_demo, env=demo)는 무장 없이도 허용(가짜 돈)."""
+    HTS ID는 필수 — 없으면 체결통보를 구독하지 못해 주문 체결이 LEAN에 자동 반영되지 않아
+    포지션/리스크 추적이 어긋난다(설정 탭에서 증권사별로 등록). 실전·모의 모두 동일 적용."""
     cfg = cfg or get_live_config()
     if not cfg["enabled"]:
         return False, "자동매매가 꺼져 있습니다"
-    if cfg["env"] == "real" and not cfg["armed"]:
-        return False, "실전 자동매매는 무장(arming) 후에만 시작할 수 있습니다(모의투자 증권사로 바꾸거나 무장하세요)"
+    if not cfg.get("hts_id"):
+        return False, "HTS ID가 없습니다 — 설정 탭에서 등록하세요(체결 자동확인에 필수)"
     return True, "ok"
 
 
@@ -403,6 +403,20 @@ def get_kis_credentials(broker: str | None = None) -> dict[str, str | None]:
         "app_secret": by_key.get(sk_key),
         "account_no": by_key.get(acc_key),
     }
+
+
+def get_kis_hts_id(broker: str | None = None) -> str:
+    """선택(또는 지정) 증권사의 HTS ID(체결통보용). 미설정이면 빈 문자열.
+
+    app_key/secret처럼 설정 탭에서 증권사별로 등록하는 시크릿이다(실전/모의 분리). KIS가 아니면
+    실전(kis) 키로 폴백 — 데이터 계층 일관성(get_kis_credentials와 동일 정책)."""
+    broker = broker or get_broker()
+    hts_key = _KIS_HTS_KEYS.get(broker, _KIS_HTS_KEYS["kis"])
+    for specs in BROKER_SECRET_SPECS.values():
+        for s in specs:
+            if s.key == hts_key:
+                return get_secret(s) or ""
+    return ""
 
 
 def broker_secret_status(broker: str | None = None) -> list[dict]:

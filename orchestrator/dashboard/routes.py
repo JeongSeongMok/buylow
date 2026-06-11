@@ -932,10 +932,10 @@ def register_dashboard(
             config.set_live_enabled(False)
             return RedirectResponse(url="/trade?saved=1", status_code=303)
 
-        # 켜기 — 안전 가드(무장) + 전략·유니버스·어댑터 준비 확인.
+        # 켜기 — enabled + 전략·유니버스·어댑터 준비 확인(무장 게이트 없음 — 켜면 바로 매매).
         import json as _json
-        config.set_live_enabled(True)  # arming_ok가 enabled를 보므로 먼저 설정
-        ok, why = config.live_arming_ok()
+        config.set_live_enabled(True)  # live_start_ok가 enabled를 보므로 먼저 설정
+        ok, why = config.live_start_ok()
         strategy = config.get_strategy()
         universe = config.get_live_universe()
         from ..lean.environment import LAUNCHER_OUT
@@ -971,13 +971,10 @@ def register_dashboard(
 
     @app.post("/trade/arm")
     async def trade_arm(request: Request):
-        # 무장/주문한도/HTS ID 저장. (실전/모의 환경은 증권사 선택이 결정 — 여기선 안 받음.)
+        # 선택적 주문금액 한도 저장(무장 개념 제거). HTS ID는 설정 탭 시크릿(앱키와 동일 관리),
+        # 실전/모의 환경은 증권사 선택이 결정.
         form = await request.form()
-        config.save_live_config({
-            "armed": str(form.get("armed", "")).lower() in ("1", "true", "on", "yes"),
-            "max_order_amount": form.get("max_order_amount") or 0,
-            "hts_id": form.get("hts_id") or "",
-        })
+        config.save_live_config({"max_order_amount": form.get("max_order_amount") or 0})
         return RedirectResponse(url="/trade?saved=1", status_code=303)
 
     @app.get("/settings", response_class=HTMLResponse)

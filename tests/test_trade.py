@@ -301,17 +301,22 @@ def _save_demo_strategy(cfg):
                        "period_days": 3, "resolution": "daily", "execution": {}})
 
 
-def test_toggle_blocks_real_when_unarmed(client, isolated_config):
-    # 실전(kis) 미무장 → 켜기 거부(무장 가드), 프로세스 미시작.
+def test_toggle_real_not_blocked_by_arming(client, isolated_config):
+    # 무장 제거 — 실전(kis)도 전략·유니버스 준비되면 모의처럼 시작(어댑터 DLL 있을 때).
     isolated_config.set_broker("kis")
-    r = client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
-    assert r.status_code == 303 and "error" in r.headers["location"]
-    assert isolated_config.get_live_config()["enabled"] is False
-    assert client.live_manager.started is False
+    isolated_config.save_secrets({"kis_hts_id": "H"})  # HTS ID 필수
+    _save_demo_strategy(isolated_config)
+    isolated_config.save_live_universe(["005930"])
+    client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
+    from orchestrator.lean.environment import LAUNCHER_OUT
+    if (LAUNCHER_OUT / "MyTrading.Kis.dll").exists():
+        assert client.live_manager.started and isolated_config.get_live_config()["enabled"]
+    else:
+        assert client.live_manager.started is False  # 어댑터 없으면 차단(무장과 무관)
 
 
 def test_toggle_on_requires_strategy(client, isolated_config):
-    isolated_config.set_broker("kis_demo")  # 모의 → 무장 불필요
+    isolated_config.set_broker("kis_demo")
     r = client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
     assert "error" in r.headers["location"]  # 전략 미저장 → 거부
     assert client.live_manager.started is False
@@ -325,9 +330,20 @@ def test_toggle_on_requires_universe(client, isolated_config):
     assert client.live_manager.started is False
 
 
-def test_toggle_on_starts_when_ready(client, isolated_config):
-    # 모의 + 전략 + 유니버스 준비 → 어댑터 DLL이 있으면 start, 없으면 어댑터 안내(둘 다 가드 정상).
+def test_toggle_on_requires_hts_id(client, isolated_config):
+    # HTS ID 없으면 전략·유니버스 준비돼도 거부(체결 자동확인 필수).
     isolated_config.set_broker("kis_demo")
+    _save_demo_strategy(isolated_config)
+    isolated_config.save_live_universe(["005930"])
+    r = client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
+    assert "error" in r.headers["location"]
+    assert client.live_manager.started is False
+
+
+def test_toggle_on_starts_when_ready(client, isolated_config):
+    # 모의 + 전략 + 유니버스 + HTS ID 준비 → 어댑터 DLL이 있으면 start, 없으면 어댑터 안내(가드 정상).
+    isolated_config.set_broker("kis_demo")
+    isolated_config.save_secrets({"kis_demo_hts_id": "H"})  # HTS ID 필수
     _save_demo_strategy(isolated_config)
     isolated_config.save_live_universe(["005930"])
     client.post("/trade/toggle", data={"enabled": "1"}, follow_redirects=False)
@@ -388,9 +404,16 @@ def test_settings_clear_removes_active_broker_keys(client, isolated_config):
 
 
 def test_arm_saves_safety_settings(client, isolated_config):
-    client.post("/trade/arm", data={"env": "real", "armed": "1",
-                                    "max_order_amount": "300000", "hts_id": "myhts"},
-                follow_redirects=False)
+    # 무장 제거 — /trade/arm은 선택적 주문금액 한도만 저장(HTS ID는 설정 탭 시크릿).
+    client.post("/trade/arm", data={"max_order_amount": "300000"}, follow_redirects=False)
     lc = isolated_config.get_live_config()
-    assert lc["env"] == "real" and lc["armed"] is True
-    assert lc["max_order_amount"] == 300000 and lc["hts_id"] == "myhts"
+    assert "armed" not in lc
+    assert lc["max_order_amount"] == 300000
+
+
+def test_settings_shows_hts_id_slot(client, isolated_config):
+    # 설정 탭에 HTS ID가 증권사 시크릿으로 노출되고, 저장하면 라이브 설정이 도출된다.
+    isolated_config.set_broker("kis")
+    assert any(s["key"] == "kis_hts_id" for s in isolated_config.broker_secret_status("kis"))
+    isolated_config.save_secrets({"kis_hts_id": "MYHTS"})
+    assert isolated_config.get_live_config()["hts_id"] == "MYHTS"
