@@ -2,8 +2,9 @@
 
 > ⚠️ **Real-money path.** This document describes the live-trading engine: a C# `IBrokerage` +
 > `IDataQueueHandler` adapter (`adapter/MyTrading.Kis`) that lets the **same strategy `.py`** run
-> live through LEAN, placing real orders on KIS. Real order submission is gated behind an
-> **arming** switch and a per-order amount cap. End-to-end validation requires a KIS account
+> live through LEAN, placing real orders on KIS. The arming switch has been **removed**: when the
+> 자동매매 toggle is on (`enabled`), both real and demo transmit orders immediately. The only optional
+> guard is a per-order amount cap (0 = off). End-to-end validation requires a KIS account
 > (start with **모의투자/demo**). See [ARCHITECTURE.md](./ARCHITECTURE.md) for the surrounding design.
 
 ## Why this shape
@@ -25,7 +26,7 @@ Only KIS is wired today; Toss follows the same `IBrokerage` shape when its API o
 | `KisWebSocketClient.cs` | approval-key WS: realtime price `H0STCNT0` → feed; fill notice `H0STCNI0`(real)/`H0STCNI9`(demo, AES-CBC) → order events. Pure parsers `ParseTradeBody`/`ParseFillBody` |
 | `KisSymbolMapper.cs` | LEAN `Symbol`(market=krx) ↔ 6-digit code |
 | `KisBrokerageModel.cs` | DefaultMarkets=krx, cash account (leverage 1), `KoreanFeeModel` (0.015% 수수료 + 0.18% 매도세 — matches `market/krx.py`), 지정가/시장가만 허용 |
-| `KisBrokerage.cs` | `Brokerage` + `IDataQueueHandler`. Connect→token+WS; PlaceOrder→order-cash (**arming gate**); Update/Cancel→rvsecncl; GetAccountHoldings/GetCashBalance→inquire-balance; fill-notice→`OnOrderEvents`; Subscribe→WS price |
+| `KisBrokerage.cs` | `Brokerage` + `IDataQueueHandler`. Connect→token+WS; PlaceOrder→order-cash (**optional amount-cap check only**); Update/Cancel→rvsecncl; GetAccountHoldings/GetCashBalance→inquire-balance; fill-notice→`OnOrderEvents`; Subscribe→WS price |
 | `KisBrokerageFactory.cs` | Composer entry. Reads `kis-*` `BrokerageData`, builds `KisBrokerage`, registers it as the data-queue handler |
 
 The DLL is **not referenced by the launcher** (launcher stays unmodified). `scripts/build-adapter.sh`
@@ -68,27 +69,30 @@ Order body keys are UPPERCASE (`CANO, ACNT_PRDT_CD, PDNO, ORD_DVSN, ORD_QTY, ORD
 ```
 
 Brokerage data injected at top level (read by `KisBrokerageFactory.BrokerageData`):
-`kis-app-key, kis-app-secret, kis-account-no, kis-env(real|demo), kis-hts-id, kis-armed(true|false),
+`kis-app-key, kis-app-secret, kis-account-no, kis-env(real|demo), kis-hts-id,
 kis-max-order-amount(원), kis-token-cache`.
 
-## Safety — arming gate
+## Safety — start guard + optional amount cap
 
-Real money demands a hard brake. Two layers, configured in `config.local.yaml` `live:` (dashboard
-later) and enforced in **both** Python and C#:
+The **arming switch was removed** (per user decision): turning on the 자동매매 toggle trades on every
+env, real included. The only safety left:
 
-1. **Orchestrator gate** — `config.live_arming_ok()` refuses to start a live run unless
-   `enabled` is true, and for `env=real` also requires `armed=true`. `LeanRunner.run_live()` checks
-   this before spawning.
-2. **Brokerage gate** — `KisBrokerage.PlaceOrder` refuses to transmit unless `kis-armed=true`
-   (otherwise the order is marked `Invalid` with a "미무장 드라이런" message), and rejects any single
-   order whose value exceeds `kis-max-order-amount` (원, 0 = no cap — set one for real).
+1. **Start guard** — `config.live_start_ok()` refuses to start a live run unless `enabled` is true.
+   `LeanRunner.run_live()` checks this before spawning. (No real/demo distinction — `enabled` is the
+   only switch.)
+2. **Optional amount cap** — `KisBrokerage.PlaceOrder` rejects any single order whose value exceeds
+   `kis-max-order-amount` (원, 0 = no cap). This is the only per-order brake; set one before using real.
 
-Defaults are **disabled, unarmed, demo** — the system never trades by accident.
+Default is **disabled** (`enabled: false`) — the system never trades until you turn it on. ⚠️ But once
+on, **real money transmits with no further confirmation**, so verify on demo first and keep `max_order_amount`
+sane for real.
 
-`live:` config fields (`orchestrator/config.py`): `enabled`, `armed`, `max_order_amount` (원),
-`hts_id` (체결통보 WS 구독용 HTS 아이디; 없으면 실시간 체결확인 생략). **`env`(demo|real)는 저장하지
+`live:` config fields (`orchestrator/config.py`): `enabled`, `max_order_amount` (원).
+**HTS ID는 `live:`가 아니라 설정 탭의 증권사별 시크릿**(`kis_hts_id`/`kis_demo_hts_id`, app_key와 동일
+관리·실전/모의 분리)으로 등록한다 — 체결통보 WS 구독에 필요하며, **없으면 `live_start_ok`가 라이브 시작을
+막는다**(주문 체결이 LEAN에 반영되지 않아 포지션/리스크 추적이 어긋나므로 필수). **`env`(demo|real)는 저장하지
 않고 선택한 증권사로 도출**(`config.broker_env`: `kis`→real, `kis_demo`→demo). 실전/모의 전환은 설정 탭의
-**증권사 선택**(KIS 실전 / KIS 모의투자)으로 하고, 키·계좌도 증권사별로 분리 저장된다
+**증권사 선택**(KIS 실전 / KIS 모의투자)으로 하고, 키·계좌·HTS ID도 증권사별로 분리 저장된다
 (`BROKER_SECRET_SPECS["kis"|"kis_demo"]`). 데이터(시세·분봉)는 env와 무관하게 항상 실전 도메인이다.
 
 ## Build & run
@@ -114,14 +118,13 @@ DOTNET_ROOT=$HOME/.dotnet dotnet test adapter/MyTrading.Kis.Tests
    ```yaml
    broker: kis_demo       # 증권사 선택이 곧 env=demo (모의 서버)
    live:
-     enabled: true
-     armed: true          # 모의는 안전하지만 게이트 동작 확인용으로 켜본다
-     max_order_amount: 1000000
-     hts_id: "<모의 HTS ID>"   # 체결통보 받으려면 필요
+     enabled: true        # 켜면 바로 매매(무장 없음)
+     max_order_amount: 1000000   # 0이면 한도 없음; 안전하게 한도를 둔다
    secrets:
      kis_demo_app_key: "..."
      kis_demo_app_secret: "..."
      kis_demo_account_no: "50012345-01"
+     kis_demo_hts_id: "<모의 HTS ID>"   # 체결통보 구독 필수(없으면 라이브 시작 거부)
    ```
 3. `scripts/build-adapter.sh`로 DLL 배치.
 4. 분봉 데이터가 있는 소수 종목으로 전략(`resolution: minute`)을 저장하고, 라이브를 기동
@@ -132,13 +135,14 @@ DOTNET_ROOT=$HOME/.dotnet dotnet test adapter/MyTrading.Kis.Tests
 ## 한계 / 후속
 
 - **GetOpenOrders**는 빈 목록(새 세션은 미체결 동기화 안 함) — 재시작 시 기존 미체결 복구는 미구현.
-- **체결통보 HTS ID 미설정 시** 실시간 체결확인 불가(주문은 Submitted까지). 체결은 잔고로만 반영.
+- **체결통보 HTS ID는 필수**(설정 탭 시크릿) — 없으면 `live_start_ok`가 라이브 시작을 막는다(실시간
+  체결확인 불가 → 포지션/리스크 추적 어긋남 방지). REST 체결폴링 폴백은 미구현.
 - **수수료**는 OrderEvent에 0으로 보고하고 잔고로 정산 — 정밀 체결수수료 반영은 후속.
 - **킬 스위치/프로세스 감독**(장시간 라이브 프로세스 모니터·재시작)은 JobManager 확장으로 후속.
 - **매매 탭 자동매매 가동(구현됨)**: 매매 탭에서 **대상종목(라이브 유니버스)**을 인덱스·그룹·검색으로 골라
-  저장하고, **자동매매 토글 ON**(`/trade/toggle`)이 가드(무장·전략·유니버스·어댑터 DLL) 통과 시
+  저장하고, **자동매매 토글 ON**(`/trade/toggle`)이 가드(enabled·전략·유니버스·어댑터 DLL; 무장 없음) 통과 시
   `LiveProcessManager.start`(`orchestrator/live_runner.py`)로 LEAN 라이브 프로세스를 spawn,
   **OFF**면 `stop()`으로 종료(킬 스위치). `run_live(proc_sink=...)`가 Popen 핸들을 매니저에 넘긴다.
-  해상도는 저장 전략의 resolution(분봉=1분봉마다). 남은 것: 라이브 프로세스 헬스/재시작 감독, 실전 무장 UI.
+  해상도는 저장 전략의 resolution(분봉=1분봉마다). 남은 것: 라이브 프로세스 헬스/재시작 감독.
 - **Toss**는 동일 `IBrokerage` 형태로 추가; 대시보드엔 KIS∩Toss 교집합 기능만 노출.
-- ⛔ 실전(real) 실주문은 **실계좌 검증 전까지 무장하지 말 것**.
+- ⛔ 실전(real) 실주문은 **실계좌 검증 전까지 토글을 켜지 말 것**(무장 게이트가 없어 켜면 바로 나간다).

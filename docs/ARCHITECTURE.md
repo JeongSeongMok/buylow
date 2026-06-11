@@ -174,10 +174,11 @@ Concern split so onboarding stays keyless where possible:
   `IDataQueueHandler` adapter (`adapter/MyTrading.Kis`, builds to `MyTrading.Kis.dll`) so the *same*
   ① + ② code runs live. `LeanRunner.build_live_config` emits a `live-kis` LEAN environment
   (`live-mode-brokerage: KisBrokerage`, live handlers + `BrokerageSetupHandler`); the adapter maps LEAN
-  orders → KIS order-cash REST and KIS fills/quotes → LEAN events. **Real orders ship only behind an
-  arming gate**: `config.live_arming_ok()` (orchestrator) and `KisBrokerage.PlaceOrder` (brokerage) both
-  refuse to transmit unless armed, with a per-order amount cap; defaults are disabled/unarmed/demo, so
-  nothing trades by accident. Toss follows the same `IBrokerage` shape when its API opens. Full design,
+  orders → KIS order-cash REST and KIS fills/quotes → LEAN events. **There is no arming gate** (removed
+  per user decision): `config.live_start_ok()` (orchestrator) only requires `enabled`, so the
+  toggle transmits on every env, real included. The only optional brake is a per-order amount cap in
+  `KisBrokerage.PlaceOrder` (`max_order_amount`, 0 = off); default is disabled (`enabled: false`) so
+  nothing trades until turned on — but once on, real money ships unconfirmed. Toss follows the same `IBrokerage` shape when its API opens. Full design,
   TR table, and the demo verification procedure: **[LIVE_KIS.md](./LIVE_KIS.md)**.
 
 ### Risk management (global)
@@ -260,7 +261,7 @@ warm-up / indicators. The Toss API can also be a historical data source here.
 2. **`MyTrading.Kis.dll`** (`adapter/MyTrading.Kis`, **built**) — the Korea/KIS live adapter:
    `KisBrokerage` (+ `IDataQueueHandler`), `KisRestClient`/`KisWebSocketClient`, `KisSymbolMapper`,
    `KisBrokerageModel` (`Market.Add("krx", 50)`, KRW, `KoreanFeeModel`), `KisBrokerageFactory`.
-   Real orders gated behind arming. `MyTrading.Toss.dll` follows the same shape when Toss opens.
+   No arming gate — toggle ON trades on every env (optional `max_order_amount` cap only). `MyTrading.Toss.dll` follows the same shape when Toss opens.
    See [LIVE_KIS.md](./LIVE_KIS.md).
 
 ## Directory structure
