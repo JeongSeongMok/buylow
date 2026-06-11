@@ -229,6 +229,11 @@ uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
 # 다른 포트로 열려면:  $env:BUYLOW_DASHBOARD_PORT=9000; .venv\Scripts\python -m orchestrator.api
 ```
 
+> ⚠️ **`uv` 설치 직후 `uv venv .venv`에서 "uv 용어가 cmdlet… 아닙니다" 에러가 나면** PATH가 아직
+> 갱신되지 않은 것입니다. **PowerShell 창을 완전히 닫고 새로 연 뒤** 다시 실행하세요. 창을 닫지 않고
+> 바로 쓰려면 현재 창에서 `$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"` 로 PATH를
+> 추가하면 됩니다. (`.NET`/`python` 명령도 설치 후 같은 이유로 새 터미널이 필요합니다.)
+
 </details>
 
 실행하면 브라우저에서 대시보드(기본 `http://127.0.0.1:8420`, 위에서 바꾼 포트가 있으면 그 포트)에 접속합니다.
