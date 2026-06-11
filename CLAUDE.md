@@ -12,9 +12,10 @@ Every Claude session working in this repo follows these:
 1. **Accumulate instructions and decisions in this file.** When it gets heavy, split topics
    into `docs/` files and link them from here (don't pre-split).
 2. **`README.md` is the user-facing, always-current doc, written in Korean.**
-   Update it whenever a feature lands or the architecture changes. English/Japanese
-   translations may be added later; until then maintain only `README.md` (don't create
-   multiple language versions). (CLAUDE.md = working agreement + decisions; README = user overview.)
+   Update it whenever a feature lands or the architecture changes. **Translations now exist:
+   `README.en.md` (English) + `README.ja.md` (Japanese)** — `README.md` is the source of truth;
+   when you change it, mirror the change into both translations (all three carry the same language
+   switcher line under the title). (CLAUDE.md = working agreement + decisions; README = user overview.)
 3. **Commit per feature**, using [Conventional Commits](https://www.conventionalcommits.org/)
    (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`). **Push directly to `main`** (no PR).
    **Always commit as `JeongSeongMok <tjdahr25@naver.com>`** — verify `git config user.name/user.email`

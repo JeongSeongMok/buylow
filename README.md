@@ -6,7 +6,7 @@
 
 [QuantConnect LEAN](https://github.com/QuantConnect/Lean) 엔진 위에서 동작하며, **동일한 전략 정의가 백테스트와 실거래에서 그대로 실행**됩니다. 모든 데이터·API 키는 내 PC에만 저장됩니다.
 
-<sub>문서는 한국어로 제공됩니다. English / 日本語 번역은 추후 추가 예정입니다.</sub>
+**한국어** · [English](./README.en.md) · [日本語](./README.ja.md)
 
 </div>
 
