@@ -112,6 +112,7 @@ buylow는 내 PC에서만 동작하는 **로컬 웹 대시보드**로 한국 주
 - **계좌 모니터링** — 예수금·매수가능·보유종목(매수가/현재가/손익), 장중/장마감 상태, 매매 내역(KIS 체결조회 기반, 10초마다 자동 갱신).
 - **오늘의 선정** — 저장 전략·대상종목·현재 보유 기준으로 담을/뺄 종목을 미리 보여줍니다(전날 종가 1회 선별을 그대로 재현).
 - 자동매매는 기본 **꺼짐**이며, 켜면 저장한 전략대로 바로 주문을 냅니다. 자세한 라이브 절차는 [docs/LIVE_KIS.md](./docs/LIVE_KIS.md) 참고.
+- ⚠️ **라이브는 KIS 어댑터 DLL 빌드가 한 번 필요합니다**(백테스트엔 불필요해 설치 단계에서 선택). 빌드 안 하고 토글을 켜면 *"KIS 어댑터가 없습니다"* 안내가 뜹니다 — 위 [설치](#설치)의 어댑터 빌드 단계를 실행하세요.
 
 ---
 
@@ -204,6 +205,10 @@ uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 # 4) 대시보드 실행 (기본 포트 8420)
 .venv/bin/python -m orchestrator.api
 # 다른 포트로 열려면:  BUYLOW_DASHBOARD_PORT=9000 .venv/bin/python -m orchestrator.api
+
+# 5) (라이브 실거래용 — 백테스트만 쓰면 생략) KIS 어댑터 빌드
+dotnet build launcher/BuylowLauncher.csproj -c Release   # 런처 먼저(NuGet 복원)
+scripts/build-adapter.sh                                  # 어댑터 빌드 + DLL을 런처 옆에 복사
 ```
 
 </details>
@@ -227,6 +232,12 @@ uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
 # 3) 대시보드 실행 (기본 포트 8420)
 .venv\Scripts\python -m orchestrator.api
 # 다른 포트로 열려면:  $env:BUYLOW_DASHBOARD_PORT=9000; .venv\Scripts\python -m orchestrator.api
+
+# 4) (라이브 실거래용 — 백테스트만 쓰면 생략) KIS 어댑터 빌드
+#    build-adapter.sh는 bash 전용이라 Windows에선 아래 PowerShell 명령으로 동일하게 빌드합니다.
+dotnet build launcher\BuylowLauncher.csproj -c Release             # 런처 먼저(NuGet 복원)
+dotnet build adapter\MyTrading.Kis\MyTrading.Kis.csproj -c Release # 어댑터 빌드
+Copy-Item adapter\MyTrading.Kis\bin\Release\net10.0\MyTrading.Kis.dll launcher\bin\Release\net10.0\
 ```
 
 > ⚠️ **`uv` 설치 직후 `uv venv .venv`에서 "uv 용어가 cmdlet… 아닙니다" 에러가 나면** PATH가 아직

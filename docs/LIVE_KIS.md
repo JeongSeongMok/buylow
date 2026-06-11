@@ -108,6 +108,16 @@ DOTNET_ROOT=$HOME/.dotnet dotnet test adapter/MyTrading.Kis.Tests
 .venv/bin/pytest tests/test_live.py
 ```
 
+`build-adapter.sh` is bash-only. On **Windows (PowerShell)** the script step has no shell equivalent,
+so run what it does directly — build the launcher (so its output folder exists), build the adapter,
+then copy the DLL next to the launcher:
+
+```powershell
+dotnet build launcher\BuylowLauncher.csproj -c Release             # 런처(출력폴더 생성)
+dotnet build adapter\MyTrading.Kis\MyTrading.Kis.csproj -c Release # 어댑터
+Copy-Item adapter\MyTrading.Kis\bin\Release\net10.0\MyTrading.Kis.dll launcher\bin\Release\net10.0\
+```
+
 ## 모의투자(demo) 수동 검증 절차 (e2e)
 
 자동 e2e는 실계좌가 필요해 CI에서 돌리지 않는다. KIS **모의투자** 계좌로 수동 점검:
