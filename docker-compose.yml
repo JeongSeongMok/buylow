@@ -1,0 +1,24 @@
+# buylow — clone-and-run with Docker.
+#
+#   cp config.example.yaml config.local.yaml   # (1회) 시크릿 저장 파일
+#   touch buylow.db .kis_token.json            # (1회) 파일 마운트 footgun 방지 — 없으면 docker가 폴더로 만듦
+#   docker compose up -d                       # 빌드 후 백그라운드 기동
+#   # → http://127.0.0.1:8420
+#
+# 컨테이너 안에서는 0.0.0.0(BUYLOW_DASHBOARD_HOST, Dockerfile)에 바인딩하지만, 포트는 호스트의
+# 127.0.0.1에만 매핑하므로 네트워크 노출 없이 로컬 전용이 유지된다(매매 제어를 쥐므로).
+services:
+  buylow:
+    build: .
+    image: buylow:local
+    # 포트: 호스트 127.0.0.1:<BUYLOW_PORT>(기본 8420) → 컨테이너 8420.
+    ports:
+      - "127.0.0.1:${BUYLOW_PORT:-8420}:8420"
+    volumes:
+      # 영속 상태(컨테이너 재생성에도 살아남아야 하는 것):
+      - ./data:/app/data                            # ETL 적재 데이터(시세·분봉·수급·펀더멘털) — 대용량
+      - ./runs:/app/runs                            # 백테스트 결과 blob
+      - ./config.local.yaml:/app/config.local.yaml  # 시크릿·설정(대시보드가 여기에 저장)
+      - ./buylow.db:/app/buylow.db                  # 실행 이력·상태(SQLite)
+      - ./.kis_token.json:/app/.kis_token.json      # KIS 접근토큰 캐시(24h)
+    restart: unless-stopped

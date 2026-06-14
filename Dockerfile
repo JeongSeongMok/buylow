@@ -1,0 +1,50 @@
+# buylow — 백테스트·라이브를 한 컨테이너에서 돌리기 위한 이미지.
+#
+# 왜 이렇게 묶나: buylow는 두 런타임을 함께 쓴다 — Python 3.11(오케스트레이터·전략) + .NET 10(LEAN
+# 엔진). LEAN은 pythonnet으로 Python 3.11을 그대로 임베드하므로 **정확히 3.11**이 필요하다. 그래서
+# python:3.11 이미지를 베이스로 잡고 .NET 10 SDK를 얹는다(반대로 dotnet SDK 이미지는 Python 버전을
+# 고정하기 어렵다). 빌드 시 런처·어댑터·NuGet·AlgorithmImports·.leanpy venv를 미리 구워 첫 실행이 빠르다.
+FROM python:3.11-slim-bookworm
+
+# .NET 런타임 의존성(libicu) + 빌드 도구. git은 일부 의존성 설치에 쓰일 수 있어 포함.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates git libicu-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- .NET 10 SDK (sudo 없이 공식 스크립트로 설치) ---
+ENV DOTNET_ROOT=/usr/share/dotnet
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh \
+        | bash -s -- --channel 10.0 --install-dir "$DOTNET_ROOT" \
+    && ln -s "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
+ENV PATH="$DOTNET_ROOT:$PATH" \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+
+# --- uv (Python 환경/의존성 관리자) ---
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# pythonnet(PYTHONNET_PYDLL)이 로드할 libpython3.11.so 보장. 공식 python 이미지는
+# --enable-shared로 빌드돼 libpython3.11.so.1.0를 두지만 버전 없는 심볼릭이 없을 수 있어 만들어 둔다.
+RUN ln -sf /usr/local/lib/libpython3.11.so.1.0 /usr/local/lib/libpython3.11.so 2>/dev/null || true
+
+WORKDIR /app
+COPY . /app
+
+# --- Python 의존성(오케스트레이터) ---
+RUN uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+
+# --- LEAN 런타임 미리 굽기 ---
+# 런처 빌드 = NuGet 복원(+ AlgorithmImports content) → 어댑터 빌드(라이브용 KIS DLL) →
+# .leanpy(전략용 pandas/numpy 3.11 venv) 생성. 이걸 이미지에 구워 첫 백테스트가 즉시 시작된다.
+RUN dotnet build launcher/BuylowLauncher.csproj -c Release --nologo \
+    && bash scripts/build-adapter.sh \
+    && uv venv --python 3.11 .leanpy \
+    && uv pip install --python .leanpy/bin/python pandas numpy
+
+# 컨테이너 안에서는 0.0.0.0에 바인딩해야 호스트 포트매핑이 닿는다. 외부 노출 차단은
+# docker-compose가 호스트 쪽을 127.0.0.1로 묶어 책임진다(README/DEVELOPMENT.md 참고).
+ENV BUYLOW_DASHBOARD_HOST=0.0.0.0
+EXPOSE 8420
+
+CMD [".venv/bin/python", "-m", "orchestrator.api"]

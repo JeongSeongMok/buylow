@@ -23,6 +23,29 @@ export PATH="$HOME/.dotnet:$PATH"
 
 (`scripts/run-backtest.sh` sets these automatically if `~/.dotnet` is used.)
 
+## Running in Docker (the easy path)
+
+The two runtimes (Python 3.11 + .NET 10) make a native setup fiddly, so the recommended way to
+run buylow — and the **only path we suggest for Windows** — is Docker. The `Dockerfile` is based on
+`python:3.11-slim` (LEAN's pythonnet needs *exactly* 3.11) with the .NET 10 SDK layered on; the image
+build pre-bakes the launcher, the KIS adapter DLL, the NuGet restore (+ `AlgorithmImports` content), and
+the `.leanpy` pandas/numpy venv so the first backtest starts immediately.
+
+```bash
+cp config.example.yaml config.local.yaml   # one-time: the file the dashboard writes secrets into
+touch buylow.db .kis_token.json            # one-time: pre-create so the file bind-mounts don't become dirs
+docker compose up -d --build               # → http://127.0.0.1:8420  (BUYLOW_PORT=9000 to change)
+```
+
+- **Host binding**: the server defaults to `127.0.0.1` (local-only — it holds trading control). In the
+  container that would be unreachable through the port map, so the image sets
+  `BUYLOW_DASHBOARD_HOST=0.0.0.0` (`get_dashboard_host()`). The local-only guarantee is preserved by
+  `docker-compose.yml` mapping the host side to `127.0.0.1:<port>` only — no external exposure.
+- **Persistence**: `data/`, `runs/`, `config.local.yaml`, `buylow.db`, `.kis_token.json` are bind-mounted,
+  so they survive `docker compose down` + image rebuilds.
+- **`.dockerignore`** keeps the build context lean and never bakes host secrets/state (`config.local.yaml`,
+  `buylow.db`, `.kis_token.json`) or the heavy `data/`/`runs/` dirs into the image.
+
 ## LEAN NuGet version trap (important)
 
 QuantConnect publishes **two lineages** on NuGet, and the higher semver is the **old** one:
@@ -88,8 +111,10 @@ macOS, Linux, **and Windows**:
   `sysconfig.get_path('purelib')` (note: `site.getsitepackages()[0]` returns the venv root on Windows).
 - **dotnet** — `dotnet.exe` vs `dotnet`; otherwise found on PATH.
 
-macOS/Linux are CI-validated; **Windows native is implemented but pending on-device validation**
-(the maintainer dev env is macOS). Pure branch logic is unit-tested in `tests/test_environment.py`.
+macOS/Linux are CI-validated. The per-OS branches (incl. Windows) remain in
+`environment.py` and are unit-tested in `tests/test_environment.py`, but **a native Windows install is
+no longer a documented path** — Windows users run buylow via Docker (see *Running in Docker* above), which
+sidesteps the .NET/Python runtime juggling entirely. The documented native paths are Linux and macOS.
 
 ## Running via the orchestrator (LEAN Runner)
 

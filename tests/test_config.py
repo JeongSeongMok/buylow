@@ -13,6 +13,7 @@ def tmp_config(tmp_path, monkeypatch):
         monkeypatch.delenv(spec.env, raising=False)
     monkeypatch.delenv("LEAN_DATA_DIR", raising=False)
     monkeypatch.delenv("BUYLOW_DASHBOARD_PORT", raising=False)
+    monkeypatch.delenv("BUYLOW_DASHBOARD_HOST", raising=False)
     return tmp_path
 
 
@@ -33,6 +34,15 @@ def test_dashboard_port_resolution(tmp_config, monkeypatch):
     assert config.get_dashboard_port() == 9001
     monkeypatch.setenv("BUYLOW_DASHBOARD_PORT", "9999")
     assert config.get_dashboard_port() == 9999
+
+
+def test_dashboard_host_resolution(tmp_config, monkeypatch):
+    # 기본은 보안상 로컬 전용 127.0.0.1. Docker만 env로 0.0.0.0으로 풀어 포트매핑이 닿게 한다.
+    assert config.get_dashboard_host() == "127.0.0.1"
+    (tmp_config / "config.local.yaml").write_text("dashboard_host: 1.2.3.4\n")
+    assert config.get_dashboard_host() == "1.2.3.4"
+    monkeypatch.setenv("BUYLOW_DASHBOARD_HOST", "0.0.0.0")
+    assert config.get_dashboard_host() == "0.0.0.0"  # env 우선
 
 
 def test_secret_env_then_file(tmp_config, monkeypatch):

@@ -128,6 +128,17 @@ def get_dashboard_port() -> int:
     )
 
 
+# 대시보드 바인드 호스트. 기본은 보안상 127.0.0.1(로컬 전용 — 매매 제어를 쥐므로 네트워크 노출 금지).
+# Docker 컨테이너에서만 BUYLOW_DASHBOARD_HOST=0.0.0.0으로 풀어 호스트 포트매핑이 닿게 한다
+# (docker-compose가 호스트 쪽을 127.0.0.1로 묶어 외부 노출은 여전히 막음 — docs/DEVELOPMENT.md).
+def get_dashboard_host() -> str:
+    return (
+        os.environ.get("BUYLOW_DASHBOARD_HOST")
+        or _load_local().get("dashboard_host")
+        or "127.0.0.1"
+    )
+
+
 RISK_KEYS = ("stop_loss", "take_profit", "trailing")
 
 # 리스크 폼 기본값(%). 한 번도 저장하지 않았을 때 대시보드에 미리 채워 보여준다.

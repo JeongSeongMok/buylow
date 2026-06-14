@@ -112,7 +112,7 @@ buylow는 내 PC에서만 동작하는 **로컬 웹 대시보드**로 한국 주
 - **계좌 모니터링** — 예수금·매수가능·보유종목(매수가/현재가/손익), 장중/장마감 상태, 매매 내역(KIS 체결조회 기반, 10초마다 자동 갱신).
 - **오늘의 선정** — 저장 전략·대상종목·현재 보유 기준으로 담을/뺄 종목을 미리 보여줍니다(전날 종가 1회 선별을 그대로 재현).
 - 자동매매는 기본 **꺼짐**이며, 켜면 저장한 전략대로 바로 주문을 냅니다. 자세한 라이브 절차는 [docs/LIVE_KIS.md](./docs/LIVE_KIS.md) 참고.
-- ⚠️ **라이브는 KIS 어댑터 DLL 빌드가 한 번 필요합니다**(백테스트엔 불필요해 설치 단계에서 선택). 빌드 안 하고 토글을 켜면 *"KIS 어댑터가 없습니다"* 안내가 뜹니다 — 위 [설치](#설치)의 어댑터 빌드 단계를 실행하세요.
+- ⚠️ **라이브는 KIS 어댑터 DLL 빌드가 한 번 필요합니다**(Docker 설치는 이미지에 포함돼 자동; 직접 설치는 백테스트엔 불필요해 선택). 빌드 안 하고 토글을 켜면 *"KIS 어댑터가 없습니다"* 안내가 뜹니다 — 위 [설치](#설치)의 어댑터 빌드 단계를 실행하세요.
 
 ---
 
@@ -183,19 +183,54 @@ flowchart TD
 
 ### 설치
 
-다음이 필요합니다 — **.NET 10 SDK**(엔진 실행), **Python 3.11**(전략 실행), **uv**(파이썬 환경), **git**.
+설치 방법은 두 가지입니다 — **Docker**(가장 간단, 모든 OS) 또는 **직접 설치**(Linux·macOS). 둘 다
+백테스트·라이브를 한 번에 갖춥니다. Windows 사용자는 **Docker**를 권장합니다(직접 설치는 .NET·Python
+런타임을 OS마다 손으로 맞춰야 해 번거롭습니다).
 
 <details open>
-<summary><b>macOS</b></summary>
+<summary><b>① Docker (권장 — 모든 OS)</b></summary>
+
+[Docker](https://docs.docker.com/get-docker/)만 있으면 됩니다(.NET·Python·LEAN은 이미지 안에 모두 포함).
 
 ```bash
-# 1) .NET 10 SDK (영구 적용은 ~/.zshrc 에 export 추가)
+git clone https://github.com/JeongSeongMok/buylow.git
+cd buylow
+
+# (1회) 마운트할 영속 파일 준비 — 없으면 Docker가 폴더로 잘못 만듭니다.
+cp config.example.yaml config.local.yaml
+touch buylow.db .kis_token.json
+
+# 빌드 + 백그라운드 기동 (첫 빌드는 .NET SDK·NuGet 받느라 수 분 걸립니다)
+docker compose up -d --build
+# 다른 포트로 열려면:  BUYLOW_PORT=9000 docker compose up -d --build
+
+# 로그 보기 / 중지
+docker compose logs -f
+docker compose down
+```
+
+- 데이터·결과·설정(`data/`, `runs/`, `config.local.yaml`, `buylow.db`)은 호스트 볼륨으로 마운트돼
+  컨테이너를 지워도 **그대로 보존**됩니다.
+- 컨테이너는 안에서 `0.0.0.0`에 바인딩하지만 포트는 호스트의 `127.0.0.1`에만 매핑돼 **로컬 전용**이
+  유지됩니다(외부 네트워크 노출 없음).
+- 라이브용 KIS 어댑터 DLL은 이미지 빌드 때 함께 구워지므로 별도 빌드가 필요 없습니다.
+
+</details>
+
+<details>
+<summary><b>② 직접 설치 (Linux · macOS)</b></summary>
+
+**.NET 10 SDK**(엔진 실행) · **Python 3.11**(전략 실행) · **uv**(파이썬 환경) · **git**이 필요합니다.
+
+```bash
+# 1) .NET 10 SDK (영구 적용은 ~/.zshrc 또는 ~/.bashrc 에 export 추가)
 curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir "$HOME/.dotnet"
 export DOTNET_ROOT="$HOME/.dotnet" && export PATH="$HOME/.dotnet:$PATH"
 
-# 2) Python 3.11 · git · uv
-brew install python@3.11 git
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# 2) Python 3.11 · git   (macOS: brew / Debian·Ubuntu: apt)
+brew install python@3.11 git                              # macOS
+# sudo apt install -y python3.11 python3.11-venv git      # Linux(Debian·Ubuntu)
+curl -LsSf https://astral.sh/uv/install.sh | sh           # uv
 
 # 3) 코드 + 의존성
 git clone https://github.com/JeongSeongMok/buylow.git
@@ -210,40 +245,6 @@ uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 dotnet build launcher/BuylowLauncher.csproj -c Release   # 런처 먼저(NuGet 복원)
 scripts/build-adapter.sh                                  # 어댑터 빌드 + DLL을 런처 옆에 복사
 ```
-
-</details>
-
-<details>
-<summary><b>Windows (PowerShell)</b></summary>
-
-```powershell
-# 1) .NET 10 SDK · Python 3.11 · git · uv (설치 후 새 터미널로 PATH 반영)
-winget install Microsoft.DotNet.SDK.10
-winget install Python.Python.3.11
-winget install Git.Git
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# 2) 코드 + 의존성
-git clone https://github.com/JeongSeongMok/buylow.git
-cd buylow
-uv venv .venv
-uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
-
-# 3) 대시보드 실행 (기본 포트 8420)
-.venv\Scripts\python -m orchestrator.api
-# 다른 포트로 열려면:  $env:BUYLOW_DASHBOARD_PORT=9000; .venv\Scripts\python -m orchestrator.api
-
-# 4) (라이브 실거래용 — 백테스트만 쓰면 생략) KIS 어댑터 빌드
-#    build-adapter.sh는 bash 전용이라 Windows에선 아래 PowerShell 명령으로 동일하게 빌드합니다.
-dotnet build launcher\BuylowLauncher.csproj -c Release             # 런처 먼저(NuGet 복원)
-dotnet build adapter\MyTrading.Kis\MyTrading.Kis.csproj -c Release # 어댑터 빌드
-Copy-Item adapter\MyTrading.Kis\bin\Release\net10.0\MyTrading.Kis.dll launcher\bin\Release\net10.0\
-```
-
-> ⚠️ **`uv` 설치 직후 `uv venv .venv`에서 "uv 용어가 cmdlet… 아닙니다" 에러가 나면** PATH가 아직
-> 갱신되지 않은 것입니다. **PowerShell 창을 완전히 닫고 새로 연 뒤** 다시 실행하세요. 창을 닫지 않고
-> 바로 쓰려면 현재 창에서 `$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"` 로 PATH를
-> 추가하면 됩니다. (`.NET`/`python` 명령도 설치 후 같은 이유로 새 터미널이 필요합니다.)
 
 </details>
 

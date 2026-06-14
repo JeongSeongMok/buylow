@@ -112,7 +112,7 @@ All data is managed on the **Data tab of the dashboard**.
 - **Account monitoring** — deposit / buyable amount / holdings (buy price / current price / P&L), market-open/close status, trade history (based on KIS execution inquiry, auto-refreshed every 10 seconds).
 - **Today's selection** — previews which tickers would be bought/sold based on the saved strategy, target tickers, and current holdings (reproduces the once-a-day previous-close selection exactly).
 - Automated trading is **off** by default; once on, it places orders immediately per the saved strategy. For the full live procedure see [docs/LIVE_KIS.md](./docs/LIVE_KIS.md).
-- ⚠️ **Live requires building the KIS adapter DLL once** (not needed for backtest, hence optional in the install steps). If you flip the toggle without building it, you'll see a *"KIS adapter is missing"* notice — run the adapter-build step in [Setup](#setup) above.
+- ⚠️ **Live requires building the KIS adapter DLL once** (the Docker install bakes it into the image automatically; a native install makes it optional since it isn't needed for backtest). If you flip the toggle without building it, you'll see a *"KIS adapter is missing"* notice — run the adapter-build step in [Setup](#setup) above.
 
 ---
 
@@ -183,19 +183,54 @@ flowchart TD
 
 ### Install
 
-You need — **.NET 10 SDK** (runs the engine), **Python 3.11** (runs strategies), **uv** (Python env), and **git**.
+There are two ways to install — **Docker** (simplest, any OS) or a **native install** (Linux · macOS).
+Both give you backtest and live in one go. **Windows users should use Docker** (a native install means
+matching the .NET/Python runtimes by hand per OS, which is fiddly).
 
 <details open>
-<summary><b>macOS</b></summary>
+<summary><b>① Docker (recommended — any OS)</b></summary>
+
+You only need [Docker](https://docs.docker.com/get-docker/) (.NET, Python, and LEAN are all baked into the image).
 
 ```bash
-# 1) .NET 10 SDK (add the export to ~/.zshrc to make it permanent)
+git clone https://github.com/JeongSeongMok/buylow.git
+cd buylow
+
+# (one-time) Create the persistent files to mount — otherwise Docker creates them as directories.
+cp config.example.yaml config.local.yaml
+touch buylow.db .kis_token.json
+
+# Build + start in the background (the first build takes a few minutes to fetch the .NET SDK + NuGet)
+docker compose up -d --build
+# To use a different port:  BUYLOW_PORT=9000 docker compose up -d --build
+
+# Logs / stop
+docker compose logs -f
+docker compose down
+```
+
+- Your data, results, and settings (`data/`, `runs/`, `config.local.yaml`, `buylow.db`) are mounted as host
+  volumes, so they **survive even if you delete the container**.
+- The container binds to `0.0.0.0` inside, but the port is mapped only to the host's `127.0.0.1`, so it stays
+  **local-only** (no external network exposure).
+- The KIS adapter DLL for live trading is built into the image, so no separate build step is needed.
+
+</details>
+
+<details>
+<summary><b>② Native install (Linux · macOS)</b></summary>
+
+You need **.NET 10 SDK** (runs the engine), **Python 3.11** (runs strategies), **uv** (Python env), and **git**.
+
+```bash
+# 1) .NET 10 SDK (add the export to ~/.zshrc or ~/.bashrc to make it permanent)
 curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir "$HOME/.dotnet"
 export DOTNET_ROOT="$HOME/.dotnet" && export PATH="$HOME/.dotnet:$PATH"
 
-# 2) Python 3.11 · git · uv
-brew install python@3.11 git
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# 2) Python 3.11 · git   (macOS: brew / Debian·Ubuntu: apt)
+brew install python@3.11 git                              # macOS
+# sudo apt install -y python3.11 python3.11-venv git      # Linux (Debian·Ubuntu)
+curl -LsSf https://astral.sh/uv/install.sh | sh           # uv
 
 # 3) Code + dependencies
 git clone https://github.com/JeongSeongMok/buylow.git
@@ -210,40 +245,6 @@ uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 dotnet build launcher/BuylowLauncher.csproj -c Release   # build the launcher first (restores NuGet)
 scripts/build-adapter.sh                                  # build the adapter + copy the DLL next to the launcher
 ```
-
-</details>
-
-<details>
-<summary><b>Windows (PowerShell)</b></summary>
-
-```powershell
-# 1) .NET 10 SDK · Python 3.11 · git · uv (open a new terminal after installing so PATH updates)
-winget install Microsoft.DotNet.SDK.10
-winget install Python.Python.3.11
-winget install Git.Git
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# 2) Code + dependencies
-git clone https://github.com/JeongSeongMok/buylow.git
-cd buylow
-uv venv .venv
-uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
-
-# 3) Run the dashboard (default port 8420)
-.venv\Scripts\python -m orchestrator.api
-# To use a different port:  $env:BUYLOW_DASHBOARD_PORT=9000; .venv\Scripts\python -m orchestrator.api
-
-# 4) (For live trading — skip if you only backtest) Build the KIS adapter
-#    build-adapter.sh is bash-only, so on Windows build the same way with the PowerShell commands below.
-dotnet build launcher\BuylowLauncher.csproj -c Release             # build the launcher first (restores NuGet)
-dotnet build adapter\MyTrading.Kis\MyTrading.Kis.csproj -c Release # build the adapter
-Copy-Item adapter\MyTrading.Kis\bin\Release\net10.0\MyTrading.Kis.dll launcher\bin\Release\net10.0\
-```
-
-> ⚠️ **If `uv venv .venv` errors with "uv is not recognized as a cmdlet…" right after installing `uv`**, PATH
-> hasn't refreshed yet. **Close the PowerShell window completely and open a new one**, then rerun. To use it
-> in the current window without reopening, add it to PATH: `$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"`.
-> (The `.NET`/`python` commands also need a new terminal after install for the same reason.)
 
 </details>
 
