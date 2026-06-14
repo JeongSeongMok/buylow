@@ -196,10 +196,6 @@ You only need [Docker](https://docs.docker.com/get-docker/) (.NET, Python, and L
 git clone https://github.com/JeongSeongMok/buylow.git
 cd buylow
 
-# (one-time) Create the persistent files to mount — otherwise Docker creates them as directories.
-cp config.example.yaml config.local.yaml
-touch buylow.db .kis_token.json
-
 # Build + start in the background (the first build takes a few minutes to fetch the .NET SDK + NuGet)
 docker compose up -d --build
 # To use a different port:  BUYLOW_PORT=9000 docker compose up -d --build
@@ -209,11 +205,11 @@ docker compose logs -f
 docker compose down
 ```
 
-- Your data, results, and settings (`data/`, `runs/`, `config.local.yaml`, `buylow.db`) are mounted as host
-  volumes, so they **survive even if you delete the container**.
-- The container binds to `0.0.0.0` inside, but the port is mapped only to the host's `127.0.0.1`, so it stays
-  **local-only** (no external network exposure).
-- The KIS adapter DLL for live trading is built into the image, so no separate build step is needed.
+- Data, results, and settings live in host directories (`data/`, `runs/`, `state/`), so they **persist even if
+  you delete the container** — settings (`config.local.yaml`), run history (`buylow.db`), and the KIS token live in `state/`.
+- API keys are entered in the dashboard's **Settings** tab and stored in `state/config.local.yaml`.
+- The dashboard is mapped only to the host's `127.0.0.1`, so it is **local-only** (no external network exposure).
+- The KIS adapter DLL for live trading is included in the image.
 
 </details>
 

@@ -15,7 +15,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 # 테스트에서 다른 경로로 바꿔 끼울 수 있게 모듈 전역으로 둔다.
-CONFIG_LOCAL = REPO_ROOT / "config.local.yaml"
+# BUYLOW_CONFIG_LOCAL로 위치를 옮길 수 있다(Docker는 bind-mount된 /app/state로 보내 영속화 —
+# 개별 파일 마운트의 footgun 없이 디렉토리만 마운트하기 위함. docs/DEVELOPMENT.md).
+CONFIG_LOCAL = Path(os.environ.get("BUYLOW_CONFIG_LOCAL") or REPO_ROOT / "config.local.yaml")
 
 DEFAULT_DASHBOARD_PORT = 8420
 DEFAULT_DATA_FOLDER = REPO_ROOT / "data"
@@ -106,6 +108,8 @@ def _load_local() -> dict:
 
 
 def _write_local(data: dict) -> None:
+    # 커스텀 경로(예: Docker의 /app/state)면 상위 디렉토리가 없을 수 있어 보장한다.
+    CONFIG_LOCAL.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_LOCAL.write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8"
     )

@@ -3,6 +3,15 @@
 import pytest
 
 from orchestrator.persistence import RunStore
+from orchestrator.persistence.store import default_db_path
+
+
+def test_default_db_path_env_override(tmp_path, monkeypatch):
+    # BUYLOW_DB_PATH로 DB 위치를 옮길 수 있다(Docker는 /app/state로 보냄).
+    monkeypatch.delenv("BUYLOW_DB_PATH", raising=False)
+    assert default_db_path().name == "buylow.db"
+    monkeypatch.setenv("BUYLOW_DB_PATH", str(tmp_path / "state" / "buylow.db"))
+    assert default_db_path() == tmp_path / "state" / "buylow.db"
 
 
 @pytest.fixture

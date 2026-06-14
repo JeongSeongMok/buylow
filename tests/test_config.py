@@ -36,6 +36,19 @@ def test_dashboard_port_resolution(tmp_config, monkeypatch):
     assert config.get_dashboard_port() == 9999
 
 
+def test_config_local_env_override(monkeypatch, tmp_path):
+    # BUYLOW_CONFIG_LOCAL로 설정파일 위치를 옮길 수 있다(Docker는 /app/state로 보냄).
+    import importlib
+    target = tmp_path / "state" / "config.local.yaml"
+    monkeypatch.setenv("BUYLOW_CONFIG_LOCAL", str(target))
+    try:
+        importlib.reload(config)
+        assert config.CONFIG_LOCAL == target
+    finally:
+        monkeypatch.delenv("BUYLOW_CONFIG_LOCAL", raising=False)
+        importlib.reload(config)  # 다른 테스트에 새지 않게 기본 경로로 복원
+
+
 def test_dashboard_host_resolution(tmp_config, monkeypatch):
     # 기본은 보안상 로컬 전용 127.0.0.1. Docker만 env로 0.0.0.0으로 풀어 포트매핑이 닿게 한다.
     assert config.get_dashboard_host() == "127.0.0.1"

@@ -196,10 +196,6 @@ flowchart TD
 git clone https://github.com/JeongSeongMok/buylow.git
 cd buylow
 
-# （初回）マウントする永続ファイルを用意 — ないと Docker がディレクトリとして作成してしまいます。
-cp config.example.yaml config.local.yaml
-touch buylow.db .kis_token.json
-
 # ビルド + バックグラウンド起動（初回ビルドは .NET SDK・NuGet の取得で数分かかります）
 docker compose up -d --build
 # 別のポートで開くには:  BUYLOW_PORT=9000 docker compose up -d --build
@@ -209,11 +205,11 @@ docker compose logs -f
 docker compose down
 ```
 
-- データ・結果・設定（`data/`・`runs/`・`config.local.yaml`・`buylow.db`）はホストのボリュームとして
-  マウントされるため、コンテナを削除しても**そのまま保持**されます。
-- コンテナ内部では `0.0.0.0` にバインドしますが、ポートはホストの `127.0.0.1` にのみマッピングされるため
-  **ローカル専用**が維持されます（外部ネットワークへの公開なし）。
-- ライブ用の KIS アダプタ DLL はイメージビルド時に同梱されるため、別途ビルドは不要です。
+- データ・結果・設定はホストのディレクトリ（`data/`・`runs/`・`state/`）に保存されるため、コンテナを
+  削除しても**保持**されます — 設定（`config.local.yaml`）・実行履歴（`buylow.db`）・KIS トークンは `state/` にまとまります。
+- API キーはダッシュボードの**設定**タブで入力し、`state/config.local.yaml` に保存されます。
+- ダッシュボードはホストの `127.0.0.1` にのみマッピングされるため**ローカル専用**です（外部ネットワークへの公開なし）。
+- ライブ用の KIS アダプタ DLL はイメージに含まれています。
 
 </details>
 

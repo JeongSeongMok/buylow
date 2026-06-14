@@ -12,6 +12,7 @@ FastAPI 스레드풀에서 호출돼도 안전하게. WAL 모드로 동시 읽�
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -41,8 +42,11 @@ CREATE TABLE IF NOT EXISTS runs (
 
 
 def default_db_path() -> Path:
-    """기본 DB 위치 (repo 루트의 buylow.db; gitignore됨)."""
-    return REPO_ROOT / "buylow.db"
+    """기본 DB 위치 (repo 루트의 buylow.db; gitignore됨).
+
+    BUYLOW_DB_PATH로 옮길 수 있다(Docker는 bind-mount된 /app/state로 보내 영속화).
+    """
+    return Path(os.environ.get("BUYLOW_DB_PATH") or REPO_ROOT / "buylow.db")
 
 
 class RunStore:

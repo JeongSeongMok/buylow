@@ -196,10 +196,6 @@ flowchart TD
 git clone https://github.com/JeongSeongMok/buylow.git
 cd buylow
 
-# (1회) 마운트할 영속 파일 준비 — 없으면 Docker가 폴더로 잘못 만듭니다.
-cp config.example.yaml config.local.yaml
-touch buylow.db .kis_token.json
-
 # 빌드 + 백그라운드 기동 (첫 빌드는 .NET SDK·NuGet 받느라 수 분 걸립니다)
 docker compose up -d --build
 # 다른 포트로 열려면:  BUYLOW_PORT=9000 docker compose up -d --build
@@ -209,11 +205,11 @@ docker compose logs -f
 docker compose down
 ```
 
-- 데이터·결과·설정(`data/`, `runs/`, `config.local.yaml`, `buylow.db`)은 호스트 볼륨으로 마운트돼
-  컨테이너를 지워도 **그대로 보존**됩니다.
-- 컨테이너는 안에서 `0.0.0.0`에 바인딩하지만 포트는 호스트의 `127.0.0.1`에만 매핑돼 **로컬 전용**이
-  유지됩니다(외부 네트워크 노출 없음).
-- 라이브용 KIS 어댑터 DLL은 이미지 빌드 때 함께 구워지므로 별도 빌드가 필요 없습니다.
+- 데이터·결과·설정은 호스트 디렉토리(`data/`, `runs/`, `state/`)에 저장돼 컨테이너를 지워도 **유지**됩니다
+  — 설정(`config.local.yaml`)·실행 이력(`buylow.db`)·KIS 토큰은 `state/`에 모입니다.
+- API 키는 **대시보드 설정 탭**에서 입력하며 `state/config.local.yaml`에 저장됩니다.
+- 대시보드는 호스트의 `127.0.0.1`에만 매핑돼 **로컬 전용**입니다(외부 네트워크 노출 없음).
+- 라이브용 KIS 어댑터 DLL이 이미지에 포함돼 있습니다.
 
 </details>
 

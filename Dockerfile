@@ -42,6 +42,14 @@ RUN dotnet build launcher/BuylowLauncher.csproj -c Release --nologo \
     && uv venv --python 3.11 .leanpy \
     && uv pip install --python .leanpy/bin/python pandas numpy
 
+# 런타임 상태(설정·DB·토큰)를 한 디렉토리(/app/state)로 모은다. compose가 이 '디렉토리'를
+# bind-mount해 영속화하므로 사전준비(cp/touch)가 필요 없다 — 개별 '파일'을 마운트하면 없을 때
+# Docker가 디렉토리로 잘못 만드는 footgun이 있어, 디렉토리만 마운트하려고 경로를 여기로 옮긴다.
+RUN mkdir -p /app/state
+ENV BUYLOW_CONFIG_LOCAL=/app/state/config.local.yaml \
+    BUYLOW_DB_PATH=/app/state/buylow.db \
+    BUYLOW_KIS_TOKEN_CACHE=/app/state/.kis_token.json
+
 # 컨테이너 안에서는 0.0.0.0에 바인딩해야 호스트 포트매핑이 닿는다. 외부 노출 차단은
 # docker-compose가 호스트 쪽을 127.0.0.1로 묶어 책임진다(README/DEVELOPMENT.md 참고).
 ENV BUYLOW_DASHBOARD_HOST=0.0.0.0

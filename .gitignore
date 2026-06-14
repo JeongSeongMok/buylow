@@ -48,3 +48,6 @@ runs/
 
 # === 로컬 상태 DB (SQLite, 사용자 실행 이력) ===
 buylow.db*
+
+# === Docker 런타임 상태 디렉토리 (config.local.yaml·buylow.db·.kis_token.json 모음) ===
+state/

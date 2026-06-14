@@ -32,19 +32,23 @@ build pre-bakes the launcher, the KIS adapter DLL, the NuGet restore (+ `Algorit
 the `.leanpy` pandas/numpy venv so the first backtest starts immediately.
 
 ```bash
-cp config.example.yaml config.local.yaml   # one-time: the file the dashboard writes secrets into
-touch buylow.db .kis_token.json            # one-time: pre-create so the file bind-mounts don't become dirs
-docker compose up -d --build               # → http://127.0.0.1:8420  (BUYLOW_PORT=9000 to change)
+docker compose up -d --build   # → http://127.0.0.1:8420  (BUYLOW_PORT=9000 to change)
 ```
 
+- **No prep step**: every bind mount is a *directory* (`data/`, `runs/`, `state/`), which Docker auto-creates
+  if missing — works the same on every OS. (Bind-mounting individual *files* that don't exist is the footgun:
+  Docker would create them as directories and the app would crash; we avoid it by mounting dirs only.)
+- **Relocatable state paths**: the three runtime files default to the repo root but honor env overrides so the
+  image can funnel them into one mounted dir — `BUYLOW_CONFIG_LOCAL` (`config.py`), `BUYLOW_DB_PATH`
+  (`store.default_db_path`), `BUYLOW_KIS_TOKEN_CACHE` (`brokers/kis.py`). The Dockerfile sets all three under
+  `/app/state`, and `docker-compose.yml` bind-mounts `./state` there. Native runs leave them at the root.
 - **Host binding**: the server defaults to `127.0.0.1` (local-only — it holds trading control). In the
   container that would be unreachable through the port map, so the image sets
   `BUYLOW_DASHBOARD_HOST=0.0.0.0` (`get_dashboard_host()`). The local-only guarantee is preserved by
   `docker-compose.yml` mapping the host side to `127.0.0.1:<port>` only — no external exposure.
-- **Persistence**: `data/`, `runs/`, `config.local.yaml`, `buylow.db`, `.kis_token.json` are bind-mounted,
-  so they survive `docker compose down` + image rebuilds.
-- **`.dockerignore`** keeps the build context lean and never bakes host secrets/state (`config.local.yaml`,
-  `buylow.db`, `.kis_token.json`) or the heavy `data/`/`runs/` dirs into the image.
+- **Persistence**: `data/`, `runs/`, and `state/` (config + DB + token) survive `docker compose down` +
+  rebuilds. **`.dockerignore`** keeps the build context lean and never bakes host secrets/state into the image.
+- API keys are entered in the dashboard's Settings tab after launch (written into `state/config.local.yaml`).
 
 ## LEAN NuGet version trap (important)
 
