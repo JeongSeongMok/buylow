@@ -1,0 +1,23 @@
+# GitHub Pages (Jekyll) 설정 — SEO 랜딩 페이지 전용.
+# 구글이 README와 별개로 인덱싱하는 사이트를 띄워 검색 노출을 키운다.
+# jekyll-seo-tag 가 <title>/description/OpenGraph/canonical 메타를 자동 생성한다.
+title: buylow
+description: >-
+  한국 주식(KOSPI·KOSDAQ) 자동매매·자동 트레이딩 전략을 코드 없이 구성하고
+  백테스트하고 실거래까지 돌리는 오픈소스 툴킷. QuantConnect LEAN 엔진 기반,
+  한국투자증권(KIS) API 연동, 로컬 웹 대시보드.
+lang: ko-KR
+theme: jekyll-theme-cayman
+url: https://jeongseongmok.github.io
+baseurl: /buylow
+author: JeongSeongMok
+plugins:
+  - jekyll-seo-tag
+github:
+  is_project_page: true
+# 개발/내부 문서는 랜딩 사이트에서 제외(검색엔 index.md만 핵심 노출).
+defaults:
+  - scope:
+      path: ""
+    values:
+      image: /buylow/assets/og.png
