@@ -1,0 +1,4 @@
+# 셸 스크립트는 OS·git 설정과 무관하게 항상 LF로 체크아웃한다.
+# 이유: Windows의 core.autocrlf=true가 .sh를 CRLF로 바꾸면, Docker 컨테이너(리눅스)의 bash가
+# 'set: pipefail: invalid option' 등으로 깨진다(줄 끝 \r 때문). eol=lf가 autocrlf보다 우선해 막는다.
+*.sh text eol=lf

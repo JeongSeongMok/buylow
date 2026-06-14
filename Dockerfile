@@ -31,6 +31,11 @@ RUN ln -sf /usr/local/lib/libpython3.11.so.1.0 /usr/local/lib/libpython3.11.so 2
 WORKDIR /app
 COPY . /app
 
+# Windows에서 git autocrlf로 .sh가 CRLF로 체크아웃된 작업본이 빌드 컨텍스트로 들어오면 컨테이너
+# (리눅스) bash가 'set: pipefail: invalid option'으로 깨진다. CR을 제거해 LF로 정규화한다
+# (.gitattributes eol=lf가 근본 차단이지만, 이미 CRLF로 받은 작업본도 빌드되도록 방어).
+RUN find . -name '*.sh' -exec sed -i 's/\r$//' {} +
+
 # --- Python 의존성(오케스트레이터) ---
 RUN uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 
