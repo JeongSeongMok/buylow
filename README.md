@@ -8,6 +8,19 @@
 
 **한국어** · [English](./README.en.md) · [日本語](./README.ja.md)
 
+[![release](https://img.shields.io/github/v/release/JeongSeongMok/buylow?label=release)](https://github.com/JeongSeongMok/buylow/releases)
+[![license](https://img.shields.io/github/license/JeongSeongMok/buylow)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/JeongSeongMok/buylow?style=social)](https://github.com/JeongSeongMok/buylow/stargazers)
+![python](https://img.shields.io/badge/python-3.11-blue)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4)
+![engine](https://img.shields.io/badge/engine-QuantConnect%20LEAN-orange)
+
+<sub>한국 주식 자동매매 · 자동 트레이딩 봇 · 주식 백테스트 · 한국투자증권(KIS) API 자동매매 · LEAN · KOSPI · KOSDAQ · pykrx</sub>
+
+<!-- 데모 스크린샷/GIF 자리: docs/assets/demo.png(또는 .gif) 추가 후 아래 한 줄 주석 해제
+<img src="docs/assets/demo.png" alt="buylow 대시보드 — 한국 주식 자동매매 백테스트 화면" width="820">
+-->
+
 </div>
 
 ---

@@ -8,6 +8,19 @@ Built on the [QuantConnect LEAN](https://github.com/QuantConnect/Lean) engine, w
 
 [한국어](./README.md) · **English** · [日本語](./README.ja.md)
 
+[![release](https://img.shields.io/github/v/release/JeongSeongMok/buylow?label=release)](https://github.com/JeongSeongMok/buylow/releases)
+[![license](https://img.shields.io/github/license/JeongSeongMok/buylow)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/JeongSeongMok/buylow?style=social)](https://github.com/JeongSeongMok/buylow/stargazers)
+![python](https://img.shields.io/badge/python-3.11-blue)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4)
+![engine](https://img.shields.io/badge/engine-QuantConnect%20LEAN-orange)
+
+<sub>Korean stock algorithmic trading · automated trading bot · backtesting · Korea Investment Securities (KIS) API · LEAN · KOSPI · KOSDAQ · pykrx</sub>
+
+<!-- Demo screenshot/GIF slot: add docs/assets/demo.png (or .gif), then uncomment the line below
+<img src="docs/assets/demo.png" alt="buylow dashboard — Korean stock automated-trading backtest" width="820">
+-->
+
 </div>
 
 ---
