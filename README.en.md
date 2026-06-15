@@ -125,6 +125,7 @@ All data is managed on the **Data tab of the dashboard**.
 - **Account monitoring** — deposit / buyable amount / holdings (buy price / current price / P&L), market-open/close status, trade history (based on KIS execution inquiry, auto-refreshed every 10 seconds).
 - **Today's selection** — previews which tickers would be bought/sold based on the saved strategy, target tickers, and current holdings (reproduces the once-a-day previous-close selection exactly).
 - Automated trading is **off** by default; once on, it places orders immediately per the saved strategy. For the full live procedure see [docs/LIVE_KIS.md](./docs/LIVE_KIS.md).
+- **Operational resilience** — while automated trading is on, it resumes automatically if the server restarts (deploy/reboot), and if the live process exits unexpectedly it is restarted automatically after a short backoff. When orders bunch up (e.g., at the open), submissions are paced to the broker's per-second order limit and transient errors are retried, so a single order's failure never halts the whole bot.
 - ⚠️ **Live requires building the KIS adapter DLL once** (the Docker install bakes it into the image automatically; a native install makes it optional since it isn't needed for backtest). If you flip the toggle without building it, you'll see a *"KIS adapter is missing"* notice — run the adapter-build step in [Setup](#setup) above.
 
 ---

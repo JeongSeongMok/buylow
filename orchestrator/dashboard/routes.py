@@ -929,13 +929,12 @@ def register_dashboard(
         form = await request.form()
         want_on = str(form.get("enabled", "")).lower() in ("1", "true", "on", "yes")
 
-        if not want_on:  # 끄기 → 라이브 프로세스 종료
-            live_manager.stop()
+        if not want_on:  # 끄기 → desired=OFF + 라이브 프로세스 종료(워치독 재시작 안 함)
             config.set_live_enabled(False)
+            live_manager.disable()
             return RedirectResponse(url="/trade?saved=1", status_code=303)
 
         # 켜기 — enabled + 전략·유니버스·어댑터 준비 확인(무장 게이트 없음 — 켜면 바로 매매).
-        import json as _json
         config.set_live_enabled(True)  # live_start_ok가 enabled를 보므로 먼저 설정
         ok, why = config.live_start_ok()
         strategy = config.get_strategy()
@@ -956,17 +955,11 @@ def register_dashboard(
         if not adapter_ok:
             return _fail("KIS 어댑터가 없습니다 — 터미널에서 scripts/build-adapter.sh 로 먼저 빌드하세요.")
 
-        # 저장된 전략 + 라이브 유니버스로 라이브 spec(백테스트의 start/end/cash는 없음 — 라이브는 무한·계좌잔액).
-        spec = {**strategy, "universe": universe,
-                "data_folder": str(Path(config.get_data_folder()).resolve())}
-        req = RunRequest(
-            strategy_path="strategies/RuleStrategy.py",
-            data_folder=config.get_data_folder(),
-            algorithm_type="RuleStrategy",
-            parameters={"rule_spec": _json.dumps(spec)},
-        )
+        # 워치독에 위임: enable이 desired=ON으로 두고 즉시 시작 + 죽으면 백오프 재시작.
+        # build_live_request를 넘겨 재시작 때마다 최신 전략/유니버스를 반영한다.
+        from ..live_runner import build_live_request
         try:
-            live_manager.start(get_runner(), req)
+            live_manager.enable(get_runner(), build_live_request)
         except Exception as e:
             return _fail(f"라이브 시작 실패: {type(e).__name__} {e}")
         return RedirectResponse(url="/trade?saved=1", status_code=303)

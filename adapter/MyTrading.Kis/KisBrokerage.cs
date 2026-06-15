@@ -150,8 +150,11 @@ namespace MyTrading.Kis
             }
             catch (Exception e)
             {
+                // ★ Warning(Error 아님): 주문 1건의 예외가 LEAN RuntimeError로 라이브 전체를 종료시키면 안 된다.
+                // 해당 주문만 Invalid 처리하고 알고리즘은 계속(KisRestClient.SendOrder가 이미 전송오류를
+                // 예외 대신 결과로 돌려주므로 여기 도달은 드물지만, 방어적으로 치명화하지 않는다).
                 OnOrderEvent(new OrderEvent(order, DateTime.UtcNow, OrderFee.Zero, e.Message) { Status = OrderStatus.Invalid });
-                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Error, "OrderError", e.Message));
+                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Warning, "OrderError", e.Message));
                 return false;
             }
         }
@@ -186,7 +189,8 @@ namespace MyTrading.Kis
             }
             catch (Exception e)
             {
-                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Error, "UpdateError", e.Message));
+                // 정정 실패는 그 주문만의 문제 — 라이브 세션을 죽이지 않도록 Warning.
+                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Warning, "UpdateError", e.Message));
                 return false;
             }
         }
@@ -204,7 +208,8 @@ namespace MyTrading.Kis
             }
             catch (Exception e)
             {
-                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Error, "CancelError", e.Message));
+                // 취소 실패는 그 주문만의 문제 — 라이브 세션을 죽이지 않도록 Warning.
+                OnMessage(new BrokerageMessageEvent(BrokerageMessageType.Warning, "CancelError", e.Message));
                 return false;
             }
         }

@@ -74,10 +74,33 @@ def create_app(runner: LeanRunner | None = None, store: RunStore | None = None,
     @asynccontextmanager
     async def _lifespan(_app):
         broker_cache.start()  # 서버 가동 동안 백그라운드 캐시 갱신
+        _resume_live_if_enabled()  # 토글이 켜진 채 재시작되면 자동매매 재개(배포/재부팅 복원)
         try:
             yield
         finally:
-            broker_cache.stop()
+            # 종료 시 라이브 프로세스를 kill — 고아 프로세스로 매매가 계속되는 것을 막는다.
+            # config(enabled)는 유지되므로 다음 부팅 때 _resume_live_if_enabled가 재개한다.
+            try:
+                live_manager.shutdown()
+            finally:
+                broker_cache.stop()
+
+    def _resume_live_if_enabled() -> None:
+        """부팅 시점 재개: config.live가 켜졌고 시작 가드(enabled+HTS ID)·전략·유니버스·어댑터가
+        모두 준비됐으면 워치독을 통해 라이브를 다시 띄운다. 하나라도 미비면 조용히 건너뛴다
+        (사용자가 매매 탭에서 다시 켜면 됨)."""
+        try:
+            from ..config import get_live_universe, get_strategy, live_start_ok
+            ok, _why = live_start_ok()
+            if not (ok and get_strategy() is not None and get_live_universe()):
+                return
+            from ..lean.environment import LAUNCHER_OUT
+            if not (LAUNCHER_OUT / "MyTrading.Kis.dll").exists():
+                return
+            from ..live_runner import build_live_request
+            live_manager.enable(get_runner(), build_live_request)
+        except Exception:
+            pass  # 부팅 재개 실패가 서버 기동을 막지 않게 한다(감독 스레드가 이후 재시도)
 
     app = FastAPI(title="buylow", version="0.0.1", lifespan=_lifespan)
     # runner는 lazy: 주입되지 않았으면 첫 실행 때 생성(런처 빌드 비용을 startup에서 회피)

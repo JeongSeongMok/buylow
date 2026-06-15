@@ -80,6 +80,15 @@ namespace MyTrading.Kis
         private DateTime _balanceCacheAt = DateTime.MinValue;
         private static readonly TimeSpan BalanceCacheTtl = TimeSpan.FromSeconds(2);
 
+        // 주문 페이싱 — 같은 클라이언트의 주문 전송을 최소 간격으로 직렬화해 KIS 초당 주문건수 한도
+        // (EGW00201 "초당 거래건수 초과")를 넘지 않게 한다. 장 시작에 RuleAlpha가 유니버스 전체로
+        // 시장가 주문을 한꺼번에 쏟아내며 대량 거부/전송오류가 나던 회귀(라이브 종료)를 막는다.
+        // 주문은 LEAN 단일 트랜잭션 스레드에서 들어오지만 간격 보장을 위해 lock으로 직렬화한다.
+        private readonly object _orderGate = new object();
+        private DateTime _lastOrderAt = DateTime.MinValue;
+        private static readonly TimeSpan OrderMinInterval = TimeSpan.FromMilliseconds(250); // ≤4건/초
+        private const int OrderMaxAttempts = 4;
+
         public string Env => _env;
         public bool IsDemo => KisConstants.IsDemo(_env);
 
@@ -251,7 +260,45 @@ namespace MyTrading.Kis
                 ["ORD_UNPR"] = (ordDvsn == KisConstants.OrdDvsnMarket ? 0 : (long)Math.Round(price)).ToString(CultureInfo.InvariantCulture),
                 ["EXCG_ID_DVSN_CD"] = "KRX",
             };
-            return ParseOrder(PostJson(KisConstants.PathOrderCash, body.ToString(), trId, null));
+            return SendOrder(KisConstants.PathOrderCash, body.ToString(), trId);
+        }
+
+        /// <summary>주문 전송(현금/정정취소 공통). 페이싱 + 레이트리밋/일시적 전송오류 백오프 재시도.
+        /// ★ 실패해도 예외를 던지지 않고 Ok=false 결과를 돌려준다 — 호출측(KisBrokerage)이 주문 1건만
+        /// Invalid 처리하고 알고리즘은 계속 살아있게 하기 위함(전송오류 1건이 라이브 전체를 RuntimeError로
+        /// 종료시키던 회귀 차단).</summary>
+        private KisOrderResult SendOrder(string path, string body, string trId)
+        {
+            lock (_orderGate)
+            {
+                var since = DateTime.UtcNow - _lastOrderAt;
+                if (since < OrderMinInterval)
+                    System.Threading.Thread.Sleep(OrderMinInterval - since);
+                try
+                {
+                    KisOrderResult last = null;
+                    for (var attempt = 1; attempt <= OrderMaxAttempts; attempt++)
+                    {
+                        try
+                        {
+                            last = ParseOrder(PostJson(path, body, trId, null));
+                            if (last.Ok) return last;
+                            // 레이트리밋(EGW00201) 거부만 백오프 후 재시도; 그 외 거부(잔고부족 등)는 즉시 반환.
+                            if (!IsRateLimit(last.Message) || attempt == OrderMaxAttempts) return last;
+                        }
+                        catch (Exception e)
+                        {
+                            // 일시적 전송/파싱 오류(HTTP 타임아웃·연결 끊김 등). 마지막 시도면 실패결과로 반환.
+                            Log.Trace($"KisRestClient.SendOrder: 전송 오류({attempt}/{OrderMaxAttempts}): {e.Message}");
+                            last = new KisOrderResult { Ok = false, Code = "TRANSPORT", Message = e.Message };
+                            if (attempt == OrderMaxAttempts) return last;
+                        }
+                        System.Threading.Thread.Sleep(300 * attempt); // 0.3→0.6→0.9s 백오프
+                    }
+                    return last ?? new KisOrderResult { Ok = false, Message = "주문 전송 실패" };
+                }
+                finally { _lastOrderAt = DateTime.UtcNow; }
+            }
         }
 
         /// <summary>주식주문(정정취소). cancel=true 취소, false 정정. orgNo/orderNo는 원주문 식별.</summary>
@@ -271,7 +318,7 @@ namespace MyTrading.Kis
                 ["ORD_UNPR"] = ((long)Math.Round(price)).ToString(CultureInfo.InvariantCulture),
                 ["QTY_ALL_ORD_YN"] = all ? "Y" : "N",
             };
-            return ParseOrder(PostJson(KisConstants.PathOrderRvseCncl, body.ToString(), trId, null));
+            return SendOrder(KisConstants.PathOrderRvseCncl, body.ToString(), trId);
         }
 
         private static KisOrderResult ParseOrder(string resp)

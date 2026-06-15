@@ -148,11 +148,20 @@ Copy-Item adapter\MyTrading.Kis\bin\Release\net10.0\MyTrading.Kis.dll launcher\b
 - **체결통보 HTS ID는 필수**(설정 탭 시크릿) — 없으면 `live_start_ok`가 라이브 시작을 막는다(실시간
   체결확인 불가 → 포지션/리스크 추적 어긋남 방지). REST 체결폴링 폴백은 미구현.
 - **수수료**는 OrderEvent에 0으로 보고하고 잔고로 정산 — 정밀 체결수수료 반영은 후속.
-- **킬 스위치/프로세스 감독**(장시간 라이브 프로세스 모니터·재시작)은 JobManager 확장으로 후속.
+- **주문 안정성(구현됨)**: `KisRestClient.SendOrder`가 주문(OrderCash/ReviseCancel)을 **최소간격
+  페이싱(250ms·≤4건/초) + EGW00201(초당 거래건수)·일시적 HTTP 예외 백오프 재시도(최대 4회)**로 감싼다.
+  실패해도 **예외를 던지지 않고 `Ok=false` 결과만** 반환하고, `KisBrokerage`의 주문 catch는 모두
+  `BrokerageMessageType.Warning`(Error 아님)이라 **주문 1건 실패가 LEAN RuntimeError로 라이브 전체를
+  종료시키지 않는다**(과거: 장 시작 대량 주문 폭주 → 전송예외 1건 → 알고리즘 종료 회귀).
+- **프로세스 감독/재개(구현됨)**: `LiveProcessManager`가 **desired 상태(토글)**를 들고 감독 스레드로
+  desired=ON인데 죽으면 **백오프(5s→…→120s) 자동 재시작**(≥120s 생존 후 종료면 백오프 리셋). FastAPI
+  `lifespan`이 **부팅 시** `config.live`가 켜졌으면 자동 재개(`enable`), **종료 시** `shutdown()`으로 라이브
+  프로세스 kill(고아 방지). 남은 것: 재시작 시 **open-order resync**(미체결은 빈 목록; 보유 포지션은
+  잔고조회로 실측되어 RuleAlpha가 델타만 거래 → 중복 매수는 없음).
 - **매매 탭 자동매매 가동(구현됨)**: 매매 탭에서 **대상종목(라이브 유니버스)**을 인덱스·그룹·검색으로 골라
   저장하고, **자동매매 토글 ON**(`/trade/toggle`)이 가드(enabled·전략·유니버스·어댑터 DLL; 무장 없음) 통과 시
-  `LiveProcessManager.start`(`orchestrator/live_runner.py`)로 LEAN 라이브 프로세스를 spawn,
-  **OFF**면 `stop()`으로 종료(킬 스위치). `run_live(proc_sink=...)`가 Popen 핸들을 매니저에 넘긴다.
-  해상도는 저장 전략의 resolution(분봉=1분봉마다). 남은 것: 라이브 프로세스 헬스/재시작 감독.
+  `LiveProcessManager.enable`(`orchestrator/live_runner.py`)로 LEAN 라이브 프로세스를 spawn + 감독,
+  **OFF**면 `disable()`로 종료(킬 스위치, 재시작 안 함). `run_live(proc_sink=...)`가 Popen 핸들을 매니저에 넘긴다.
+  재시작 때마다 `build_live_request()`로 최신 전략/유니버스를 반영. 해상도는 저장 전략의 resolution(분봉=1분봉마다).
 - **Toss**는 동일 `IBrokerage` 형태로 추가; 대시보드엔 KIS∩Toss 교집합 기능만 노출.
 - ⛔ 실전(real) 실주문은 **실계좌 검증 전까지 토글을 켜지 말 것**(무장 게이트가 없어 켜면 바로 나간다).

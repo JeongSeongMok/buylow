@@ -93,7 +93,7 @@ Every Claude session working in this repo follows these:
 
 **Live (KIS) — built (자동매매 토글 ON이면 실전·모의 모두 바로 매매; 무장 개념 제거):**
 - **KIS live adapter** (`adapter/MyTrading.Kis`, `MyTrading.Kis.dll`) — C# `KisBrokerage` (+`IDataQueueHandler`): `KisRestClient` (token cache, order-cash `TTTC0012U`/`0011U`, order-rvsecncl, inquire-balance, inquire-psbl-order, chk-holiday; real/demo TR 분기), `KisWebSocketClient` (실시간 체결가 `H0STCNT0` → feed, 체결통보 `H0STCNI0`/`9` AES-CBC → OrderEvent), `KisSymbolMapper`, `KisBrokerageModel` (`Market.Add("krx",50)`, `KoreanFeeModel` matching `market/krx.py`), `KisBrokerageFactory`. Builds to net10 against LEAN NuGet `2.5.17757`; `scripts/build-adapter.sh` copies the DLL next to the launcher so Composer loads `KisBrokerage` by name.
-- **Live wiring** — `runner.build_live_config` emits the `live-kis` LEAN environment (live handlers + `BrokerageSetupHandler` + brokerage data); `runner.run_live` spawns it. **무장(arming) 게이트는 제거됨** — 시작 가드는 `config.live_start_ok`(=`enabled` + **HTS ID 필수**)다. HTS ID는 체결통보 구독에 필요(없으면 주문이 LEAN에 체결로 반영되지 않아 포지션/리스크 추적이 어긋남)해 라이브 시작을 막는다. **HTS ID는 설정 탭의 증권사별 시크릿**(`kis_hts_id`/`kis_demo_hts_id`, app_key와 동일 관리·실전/모의 분리; `config.get_kis_hts_id`)으로 등록 — `get_live_config.hts_id`가 활성 증권사 시크릿에서 도출돼 `kis-hts-id`로 주입된다. 유일한 선택적 방벽은 `max_order_amount`(원, 0=비활성, 매매 탭 `/trade/arm`)로 `KisBrokerage.PlaceOrder`가 1건 금액 초과 시 거부. defaults disabled/demo. Tests: `tests/test_live.py` (pure config/builder), `adapter/MyTrading.Kis.Tests` (xUnit frame parsing/constants). See **[docs/LIVE_KIS.md](./docs/LIVE_KIS.md)**.
+- **Live wiring** — `runner.build_live_config` emits the `live-kis` LEAN environment (live handlers + `BrokerageSetupHandler` + brokerage data); `runner.run_live` spawns it. **무장(arming) 게이트는 제거됨** — 시작 가드는 `config.live_start_ok`(=`enabled` + **HTS ID 필수**)다. HTS ID는 체결통보 구독에 필요(없으면 주문이 LEAN에 체결로 반영되지 않아 포지션/리스크 추적이 어긋남)해 라이브 시작을 막는다. **HTS ID는 설정 탭의 증권사별 시크릿**(`kis_hts_id`/`kis_demo_hts_id`, app_key와 동일 관리·실전/모의 분리; `config.get_kis_hts_id`)으로 등록 — `get_live_config.hts_id`가 활성 증권사 시크릿에서 도출돼 `kis-hts-id`로 주입된다. 유일한 선택적 방벽은 `max_order_amount`(원, 0=비활성, 매매 탭 `/trade/arm`)로 `KisBrokerage.PlaceOrder`가 1건 금액 초과 시 거부. defaults disabled/demo. **주문 안정성(운영)**: `KisRestClient.SendOrder`가 모든 주문(OrderCash/ReviseCancel)을 **최소간격 페이싱(250ms·≤4건/초) + EGW00201(초당 거래건수)·일시적 HTTP 예외 백오프 재시도(최대 4회)**로 감싼다 — 장 시작에 RuleAlpha가 유니버스 전체로 시장가를 한꺼번에 쏟아내며 대량 거부/전송예외가 나던 폭주를 흡수. 실패해도 **예외를 던지지 않고 `Ok=false` 결과만** 돌려주고, `KisBrokerage.PlaceOrder/UpdateOrder/CancelOrder`의 catch도 `BrokerageMessageType.Warning`(Error 아님)이라 **주문 1건 실패가 LEAN RuntimeError로 라이브 전체를 종료시키지 않는다**(과거 전송예외 1건이 자동매매를 죽이던 회귀). Tests: `tests/test_live.py`·`tests/test_live_runner.py`(워치독/빌더), `adapter/MyTrading.Kis.Tests`(프레임 파싱·주문 재시도). See **[docs/LIVE_KIS.md](./docs/LIVE_KIS.md)**.
 
 **매매(라이브) 대시보드 탭 — built (control + monitoring surface):**
 - **매매 탭** (`/trade`, `trade.html`; nav '● 매매' 강조 버튼) — 레이아웃은 전략설정처럼 `wide` 2-col:
@@ -118,14 +118,19 @@ Every Claude session working in this repo follows these:
   날짜 **화살표/선택은 `#trade-trades`만 부분 교체**(전체 리로드/브라우저 탭 로딩 없음). 헤더에 캐시 기준시각 표시.
 - **D 자동매매 가동(LEAN 라이브)** — 매매 탭에서 **대상종목(라이브 유니버스)**을 인덱스·그룹·검색 칩으로
   골라 `POST /trade/universe`(`config.save_live_universe`)로 저장. 토글 ON(`/trade/toggle`)이 가드
-  (enabled·**HTS ID**·전략저장·유니버스·어댑터 DLL; 무장 없음) 통과 시 저장 전략+유니버스로 live-kis spec을 만들어
-  `LiveProcessManager.start`(`orchestrator/live_runner.py`)로 **LEAN 라이브 프로세스 spawn**, OFF면
-  `stop()`으로 종료(킬 스위치). `run_live(proc_sink=...)`가 Popen 핸들을 매니저에 넘겨 terminate/kill.
-  해상도는 저장 전략의 resolution(분봉=1분봉마다, 일봉=다음 거래일). `RuleStrategy`는 라이브 시 start/end/cash
-  미설정(현재시각·계좌잔액). v1 계좌당 1전략. ⚠️ 실주문 e2e는 모의(demo)+어댑터 빌드 수동 검증(LIVE_KIS.md).
+  (enabled·**HTS ID**·전략저장·유니버스·어댑터 DLL; 무장 없음) 통과 시 **워치독에 위임**:
+  `LiveProcessManager.enable(runner, build_live_request)`(`orchestrator/live_runner.py`)가 desired=ON으로 두고
+  **LEAN 라이브 프로세스 spawn** + **감독 스레드**가 desired=ON인데 죽으면 **백오프(5s→…→120s) 자동 재시작**.
+  OFF면 `disable()`로 desired=OFF + 종료(킬 스위치, 재시작 안 함). `run_live(proc_sink=...)`가 Popen 핸들을
+  매니저에 넘겨 terminate/kill. **재시작 때마다 `build_live_request()`로 최신 전략/유니버스 재구성**. 충분히
+  오래(≥120s) 산 뒤 종료면 백오프 리셋(부트루프만 점증). 해상도는 저장 전략의 resolution(분봉=1분봉마다,
+  일봉=다음 거래일). `RuleStrategy`는 라이브 시 start/end/cash 미설정(현재시각·계좌잔액). v1 계좌당 1전략.
+  **부팅 시 재개**: FastAPI `lifespan`이 `config.live`가 켜진 채 서버가 재시작되면(배포/재부팅) `live_start_ok`+
+  전략·유니버스·어댑터 확인 후 자동으로 `enable` → 재개. **종료 시** `live_manager.shutdown()`이 라이브
+  프로세스를 kill(고아 매매 방지; config.enabled는 유지돼 다음 부팅에 재개). ⚠️ 실주문 e2e는 모의(demo)+어댑터 빌드 수동 검증(LIVE_KIS.md).
 
 **Not done / gated:**
-- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의(demo)** first (어댑터 빌드 + 절차 LIVE_KIS.md). ⚠️ **무장 게이트를 제거**해 실전(real)도 토글 ON이면 바로 실주문이 나가므로, real은 실계좌 검증 전까지 켜지 말 것(또는 `max_order_amount`로 1건 금액 상한). **토글→LEAN 라이브 spawn/kill·라이브 유니버스는 구현됨**(위 D). 남은 것: 라이브 프로세스 헬스/재시작 감독, open-order resync on restart, precise fill-fee reporting(라이브 `OnFill`은 현재 수수료 0 보고). **체결통보는 HTS ID 필수**(설정 탭 시크릿)로 강제 — 없으면 `live_start_ok`가 라이브 시작을 막는다(REST 체결폴링 폴백은 미구현).
+- ⛔ **Real-order e2e** — needs a KIS account; verify on **모의(demo)** first (어댑터 빌드 + 절차 LIVE_KIS.md). ⚠️ **무장 게이트를 제거**해 실전(real)도 토글 ON이면 바로 실주문이 나가므로, real은 실계좌 검증 전까지 켜지 말 것(또는 `max_order_amount`로 1건 금액 상한). **토글→LEAN 라이브 spawn/kill·라이브 유니버스·헬스 워치독(백오프 재시작)·부팅 시 재개·주문 페이싱+재시도는 구현됨**(위 D + 어댑터). 남은 것: open-order resync on restart(재시작 시 미체결 동기화 — 보유 포지션은 잔고조회로 실측되나 미체결은 빈 목록), precise fill-fee reporting(라이브 `OnFill`은 현재 수수료 0 보고). **체결통보는 HTS ID 필수**(설정 탭 시크릿)로 강제 — 없으면 `live_start_ok`가 라이브 시작을 막는다(REST 체결폴링 폴백은 미구현).
 - ⛔ **Toss live** — same `IBrokerage` shape; gated on Toss API (not open).
 - ⚠️ **KIS minute history is bounded** (~1y kept, 120 bars/call) → minute backtest is universe-scoped + recent, not whole-market 5y.
 - ⚠️ **LEAN 분봉 백테스트 규모 한도** — 동시구독 **종목수 × 거래일 ≳ 10,000**을 넘으면 LEAN 데이터피드 read-ahead가 멈추고 **fill-forward(마지막 봉 복제)**로 가짜봉을 채워 결과를 조용히 오염시킨다(데이터/전략 문제 아님 — 맨 알고리즘 `strategies/MinuteFeedProbe.py`로 통제실험 확인: 40종목×1년≈9,800 깨끗, 200·348 동결. 단일 config 상수 아닌 read-ahead 버퍼/워크스케줄러/zip캐시의 창발 천장). **가드**: `POST /backtest`가 분봉+`len(universe)×_trading_days > MINUTE_FEED_MAX_SYMBOL_DAYS(10,000)`이면 차단(최대 종목수 안내). 곱 한도라 1년≈40종목·3개월≈150·1개월≈400. 일봉·라이브는 무관(라이브는 실시간 1봉씩, read-ahead 없음). 메모리 `lean-minute-feed-scale-limit`

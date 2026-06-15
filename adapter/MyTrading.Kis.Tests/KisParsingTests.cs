@@ -149,4 +149,75 @@ namespace MyTrading.Kis.Tests
             Assert.Equal(after, h.BalanceCalls);
         }
     }
+
+    // 주문 페이싱 + 레이트리밋/전송오류 재시도 — 장 시작 대량 주문 폭주에 EGW00201 거부·전송예외가
+    // 나며 라이브가 RuntimeError로 종료되던 회귀를 고정한다(주문은 끝까지 결과로 반환, 예외 전파 X).
+    public class KisOrderRetryTests
+    {
+        class OrderHandler : HttpMessageHandler
+        {
+            public int OrderCalls;
+            public int FailFirstHttp;    // 처음 N회 전송예외(HttpRequestException)
+            public int RateLimitFirst;   // 처음 N회 rt_cd=1(초당 거래건수 초과)
+
+            private HttpResponseMessage Respond(HttpRequestMessage request)
+            {
+                var path = request.RequestUri.AbsolutePath;
+                if (path.Contains("tokenP"))
+                    return Ok("{\"access_token\":\"T\",\"expires_in\":86400}");
+                if (path.Contains("order-cash"))
+                {
+                    OrderCalls++;
+                    if (OrderCalls <= FailFirstHttp)
+                        throw new HttpRequestException("An error occurred while sending the request.");
+                    if (OrderCalls <= FailFirstHttp + RateLimitFirst)
+                        return Ok("{\"rt_cd\":\"1\",\"msg_cd\":\"EGW00201\",\"msg1\":\"초당 거래건수를 초과하였습니다.\"}");
+                    return Ok("{\"rt_cd\":\"0\",\"msg1\":\"정상\",\"output\":{\"ODNO\":\"0001\",\"KRX_FWDG_ORD_ORGNO\":\"00950\",\"ORD_TMD\":\"090000\"}}");
+                }
+                return Ok("{}");
+            }
+
+            private static HttpResponseMessage Ok(string body) =>
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+
+            protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken ct)
+                => Respond(request);
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+                => Task.FromResult(Respond(request));
+        }
+
+        private static KisRestClient Client(OrderHandler h) =>
+            new KisRestClient("ak123456", "sk", "demo", null, new HttpClient(h));
+
+        [Fact]
+        public void OrderCash_retries_on_rate_limit_then_succeeds()
+        {
+            var h = new OrderHandler { RateLimitFirst = 1 };
+            var res = Client(h).OrderCash("12345678", "01", "005930", true, 10, 0m, KisConstants.OrdDvsnMarket);
+            Assert.True(res.Ok);
+            Assert.Equal("0001", res.OrderNo);
+            Assert.Equal(2, h.OrderCalls);     // 1회 한도초과 + 1회 성공
+        }
+
+        [Fact]
+        public void OrderCash_retries_on_transport_error_then_succeeds()
+        {
+            var h = new OrderHandler { FailFirstHttp = 1 };
+            var res = Client(h).OrderCash("12345678", "01", "005930", true, 10, 0m, KisConstants.OrdDvsnMarket);
+            Assert.True(res.Ok);
+            Assert.Equal(2, h.OrderCalls);
+        }
+
+        [Fact]
+        public void OrderCash_returns_failure_without_throwing_when_exhausted()
+        {
+            // 계속 전송오류여도 예외를 던지지 않고 Ok=false(TRANSPORT)를 반환해 알고리즘이 살아있게 한다.
+            var h = new OrderHandler { FailFirstHttp = 99 };
+            var res = Client(h).OrderCash("12345678", "01", "005930", true, 10, 0m, KisConstants.OrdDvsnMarket);
+            Assert.False(res.Ok);
+            Assert.Equal("TRANSPORT", res.Code);
+            Assert.Equal(4, h.OrderCalls);     // OrderMaxAttempts 만큼 시도
+        }
+    }
 }

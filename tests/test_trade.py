@@ -156,10 +156,18 @@ class FakeLiveManager:
         self.started = self.stopped = False
     def is_running(self):
         return self._running
-    def start(self, runner, req):
+    # 신 API: enable(runner, build_request)/disable() — 워치독 위임.
+    def enable(self, runner, build_request):
         self.started = True; self._running = True; return "live-job"
-    def stop(self):
+    def disable(self):
         self.stopped = True; self._running = False; return True
+    def shutdown(self):
+        self.stopped = True; self._running = False
+    # 하위호환
+    def start(self, runner, req):
+        return self.enable(runner, lambda: req)
+    def stop(self):
+        return self.disable()
 
 
 @pytest.fixture
