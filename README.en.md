@@ -156,6 +156,8 @@ All data is managed on the **Data tab of the dashboard**.
 | **Jobs** | Background-job progress·logs·run history |
 | **● Trade** | Live account monitoring + automated trading on/off + target tickers + today's selection |
 
+See the actual screens for each tab in the **[dashboard screenshot gallery →](./SCREENSHOTS.md)** (captions in Korean — the UI is Korean).
+
 ---
 
 ## Architecture and pipeline

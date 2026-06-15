@@ -51,3 +51,5 @@ buylow.db*
 
 # === Docker 런타임 상태 디렉토리 (config.local.yaml·buylow.db·.kis_token.json 모음) ===
 state/
+
+.mcp.json
