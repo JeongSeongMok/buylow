@@ -12,98 +12,103 @@
   <a href="/data">데이터</a> 탭에서 <b>[데이터 최신화]</b>를 먼저 실행하세요(최소 일봉).</p>
 {% endif %}
 
-{# ── A. 증권사/계좌 (컬럼 구분 없이 최상단) ── #}
-<section class="card">
-  <h2>증권사 · 계좌</h2>
-  {% if account %}
-  <div class="bigtoggle">
-    <span class="state">{{ account.broker_label }}</span>
-    <span>계좌 <b>{{ account.account_no }}</b> · {{ account.account_type }}</span>
-    {% if account.env == 'demo' %}<span class="badge demo">모의투자</span>{% endif %}
-  </div>
-  {% else %}
-  <p class="meta">{{ errors.account or '계좌 정보를 불러올 수 없습니다.' }}</p>
-  {% endif %}
-</section>
-
-{# ── 대상 종목(라이브 유니버스) 선택 ── #}
-<section class="card">
-  <div class="actionbar">
-    <h2>대상 종목 <small>(자동매매 유니버스 · {{ live_universe|length }}종목)</small></h2>
-    <span class="grow"></span>
-    <button type="submit" form="live-universe-form">대상종목 저장</button>
-  </div>
-  <p class="meta">자동매매가 매매할 종목입니다. 인덱스·그룹 버튼이나 검색으로 추가하세요(저장 후 자동매매를 켜면 이 종목들을 전략대로 매매).</p>
-  <form method="post" action="/trade/universe" id="live-universe-form">
-    <div class="add-row" id="u-index-row">
-      {% for idx in indices %}
-      <button type="button" class="ghost idx-btn" onclick="uAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
-      {% endfor %}
-      <span class="meta" id="u-index-status"></span>
-    </div>
-    <div class="add-row search-wrap">
-      <input type="text" id="u-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();uAddTyped();}">
-      <button type="button" class="ghost" onclick="uAddTyped()">추가</button>
-      <div id="u-results" class="search-results" hidden></div>
-    </div>
-    <details id="u-details" open>
-      <summary class="meta spaced">대상 종목 <span id="u-count"></span>
-        <button type="button" class="ghost clear-btn"
-                onclick="event.preventDefault();event.stopPropagation();uClear()">전체비우기</button></summary>
-      <div id="u-chips"></div>
-    </details>
-    <input type="hidden" name="universe" id="u-hidden" value="">
-  </form>
-</section>
-
-{# ── D. 자동매매 on/off + E. 장 상태 (컬럼 구분 없이) ── #}
-<section class="card">
-  <h2>자동매매</h2>
-  {% if not has_strategy %}<p class="notice">전략이 없습니다 — <a href="/strategy">전략 설정</a>에서 먼저 저장하세요.</p>{% endif %}
-  {% if not live_universe %}<p class="notice">대상 종목이 없습니다 — 위에서 선택해 저장하세요.</p>{% endif %}
-  <div class="bigtoggle">
-    <form method="post" action="/trade/toggle" style="margin:0">
-      <input type="hidden" name="enabled" value="{{ '0' if running else '1' }}">
-      <button type="submit" class="{{ 'off' if running else 'on' }}">
-        {{ '■ 자동매매 끄기' if running else '▶ 자동매매 켜기' }}</button>
-    </form>
-    {% if run_state == 'running' %}
-      <span class="state running">● 실행 중 — 전략대로 매매(분봉=1분봉마다)</span>
-    {% elif run_state == 'idle' %}
-      <span class="state idle">● 켜짐 · 프로세스 대기/종료됨 (로그 확인)</span>
-    {% else %}
-      <span class="state off">○ 꺼짐</span>
-    {% endif %}
-
-    {# E. 장 상태 배지 #}
-    {% if market %}
-      {% set sess = market.session %}
-      <span class="badge {{ 'open' if sess == 'regular' else 'closed' }}">
-        {% if market.is_holiday %}휴장
-        {% elif sess == 'regular' %}장중
-        {% elif sess == 'pre' %}장 시작 전
-        {% else %}장 마감{% endif %}
-      </span>
-      <span class="meta">기준 {{ market.as_of }} (KST)</span>
-    {% elif errors.market %}
-      <span class="meta">장 상태 조회 실패: {{ errors.market }}</span>
-    {% endif %}
-  </div>
-
-  {% if not live.hts_id %}
-  <p class="notice">⚠️ HTS ID가 없어 체결통보를 구독하지 못합니다 — <b>주문 체결이 자동 반영되지 않고
-    자동매매를 켤 수 없습니다</b>. <a href="/settings">설정 탭</a>에서 HTS ID를 등록하세요.</p>
-  {% endif %}
-</section>
-
-{# 오늘의 선정 — 담을/뺄 종목 미리보기(전략+대상종목+보유 기준). 30초마다 HTMX 갱신. #}
-{% include "partials/trade_selection.html" %}
-
+{# 전체 2컬럼: ① 대상종목·오늘의선정  ② 증권사/계좌/자동매매·잔고·매매내역.
+   각 컬럼은 wrapper div(그리드 아이템)로 묶고, 카드는 그 안에서 세로로 쌓인다. #}
 <div class="cols2">
-  {# B 잔고(1열) · C 매매내역(2열) — 각 부분 템플릿이 10초마다 HTMX로 자기 갱신 #}
-  {% include "partials/trade_balance.html" %}
-  {% include "partials/trade_trades.html" %}
+  {# ── 1열 ── #}
+  <div>
+    {# 대상 종목(라이브 유니버스) 선택 #}
+    <section class="card">
+      <div class="actionbar">
+        <h2>대상 종목 <small>(자동매매 유니버스 · {{ live_universe|length }}종목)</small></h2>
+        <span class="grow"></span>
+        <button type="submit" form="live-universe-form">대상종목 저장</button>
+      </div>
+      <p class="meta">자동매매가 매매할 종목입니다. 인덱스·그룹 버튼이나 검색으로 추가하세요(저장 후 자동매매를 켜면 이 종목들을 전략대로 매매).</p>
+      <form method="post" action="/trade/universe" id="live-universe-form">
+        <div class="add-row" id="u-index-row">
+          {% for idx in indices %}
+          <button type="button" class="ghost idx-btn" onclick="uAddIndex('{{ idx.key }}', this)">{{ idx.label }}</button>
+          {% endfor %}
+          <span class="meta" id="u-index-status"></span>
+        </div>
+        <div class="add-row search-wrap">
+          <input type="text" id="u-search" autocomplete="off" placeholder="종목명 또는 코드 검색 (예: 삼성전자 / 005930)"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();uAddTyped();}">
+          <button type="button" class="ghost" onclick="uAddTyped()">추가</button>
+          <div id="u-results" class="search-results" hidden></div>
+        </div>
+        <details id="u-details" open>
+          <summary class="meta spaced">대상 종목 <span id="u-count"></span>
+            <button type="button" class="ghost clear-btn"
+                    onclick="event.preventDefault();event.stopPropagation();uClear()">전체비우기</button></summary>
+          <div id="u-chips"></div>
+        </details>
+        <input type="hidden" name="universe" id="u-hidden" value="">
+      </form>
+    </section>
+
+    {# 오늘의 선정 — 담을/뺄 종목 미리보기(전략+대상종목+보유 기준). 30초마다 HTMX 갱신. #}
+    {% include "partials/trade_selection.html" %}
+  </div>
+
+  {# ── 2열 ── #}
+  <div>
+    {# 증권사·계좌 + 자동매매 on/off + 장 상태 — 한 카드에 통합 #}
+    <section class="card">
+      <h2>증권사 · 계좌 · 자동매매</h2>
+      {% if account %}
+      <div class="bigtoggle">
+        <span class="state">{{ account.broker_label }}</span>
+        <span>계좌 <b>{{ account.account_no }}</b> · {{ account.account_type }}</span>
+        {% if account.env == 'demo' %}<span class="badge demo">모의투자</span>{% endif %}
+      </div>
+      {% else %}
+      <p class="meta">{{ errors.account or '계좌 정보를 불러올 수 없습니다.' }}</p>
+      {% endif %}
+
+      <h3 class="subhead">자동매매</h3>
+      {% if not has_strategy %}<p class="notice">전략이 없습니다 — <a href="/strategy">전략 설정</a>에서 먼저 저장하세요.</p>{% endif %}
+      {% if not live_universe %}<p class="notice">대상 종목이 없습니다 — 1열에서 선택해 저장하세요.</p>{% endif %}
+      <div class="bigtoggle">
+        <form method="post" action="/trade/toggle" style="margin:0">
+          <input type="hidden" name="enabled" value="{{ '0' if running else '1' }}">
+          <button type="submit" class="{{ 'off' if running else 'on' }}">
+            {{ '■ 자동매매 끄기' if running else '▶ 자동매매 켜기' }}</button>
+        </form>
+        {% if run_state == 'running' %}
+          <span class="state running">● 실행 중 — 전략대로 매매(분봉=1분봉마다)</span>
+        {% elif run_state == 'idle' %}
+          <span class="state idle">● 켜짐 · 프로세스 대기/종료됨 (로그 확인)</span>
+        {% else %}
+          <span class="state off">○ 꺼짐</span>
+        {% endif %}
+
+        {# 장 상태 배지 #}
+        {% if market %}
+          {% set sess = market.session %}
+          <span class="badge {{ 'open' if sess == 'regular' else 'closed' }}">
+            {% if market.is_holiday %}휴장
+            {% elif sess == 'regular' %}장중
+            {% elif sess == 'pre' %}장 시작 전
+            {% else %}장 마감{% endif %}
+          </span>
+          <span class="meta">기준 {{ market.as_of }} (KST)</span>
+        {% elif errors.market %}
+          <span class="meta">장 상태 조회 실패: {{ errors.market }}</span>
+        {% endif %}
+      </div>
+
+      {% if not live.hts_id %}
+      <p class="notice">⚠️ HTS ID가 없어 체결통보를 구독하지 못합니다 — <b>주문 체결이 자동 반영되지 않고
+        자동매매를 켤 수 없습니다</b>. <a href="/settings">설정 탭</a>에서 HTS ID를 등록하세요.</p>
+      {% endif %}
+    </section>
+
+    {# B 잔고 · C 매매내역 — 각 부분 템플릿이 10초마다 HTMX로 자기 갱신 #}
+    {% include "partials/trade_balance.html" %}
+    {% include "partials/trade_trades.html" %}
+  </div>
 </div>
 
 <script>
