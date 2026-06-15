@@ -308,6 +308,15 @@ def test_settings_page_two_columns_and_no_storage_wording(client):
     assert "저장소에는 올라가지 않습니다" not in t        # 삭제된 워딩
 
 
+def test_active_tab_highlight(client):
+    # 현재 보고 있는 탭에만 active 클래스가 붙어 '선택 중'이 표시된다.
+    t = client.get("/strategy").text
+    assert '<a href="/strategy" class="active">' in t
+    assert '<a href="/backtest" class="">' in t          # 다른 탭은 비활성
+    # 서브경로도 prefix로 강조 + 매매 탭은 live-tab과 함께 active
+    assert 'class="live-tab active"' in client.get("/trade").text
+
+
 def test_settings_test_krx_requires_creds(client):
     # 자격증명 없으면 네트워크 호출 없이 ok:false 즉시 반환
     d = client.post("/settings/test/krx").json()

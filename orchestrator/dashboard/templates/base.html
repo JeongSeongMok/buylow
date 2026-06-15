@@ -12,14 +12,16 @@
 <body>
   <header>
     <h1><a href="/">BuyLow</a></h1>
+    {# 현재 경로로 활성 탭 판별 — 서브경로(/data/005930 등)도 prefix로 강조 #}
+    {% set p = request.url.path if request else '' %}
     <nav class="chapters">
-      <a href="/strategy">전략 설정</a>
-      <a href="/backtest">백테스트</a>
-      <a href="/data">데이터</a>
-      <a href="/groups">그룹</a>
-      <a href="/settings">설정</a>
-      <a href="/jobs">작업중</a>
-      <a href="/trade" class="live-tab">● 매매</a>
+      <a href="/strategy" class="{{ 'active' if p.startswith('/strategy') }}">전략 설정</a>
+      <a href="/backtest" class="{{ 'active' if p.startswith('/backtest') }}">백테스트</a>
+      <a href="/data" class="{{ 'active' if p.startswith('/data') }}">데이터</a>
+      <a href="/groups" class="{{ 'active' if p.startswith('/groups') }}">그룹</a>
+      <a href="/settings" class="{{ 'active' if p.startswith('/settings') }}">설정</a>
+      <a href="/jobs" class="{{ 'active' if p.startswith('/jobs') }}">작업중</a>
+      <a href="/trade" class="live-tab {{ 'active' if p.startswith('/trade') }}">● 매매</a>
     </nav>
   </header>
   <main class="{% block main_class %}{% endblock %}">
