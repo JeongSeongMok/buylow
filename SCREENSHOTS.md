@@ -10,7 +10,7 @@
 
 상단 탭으로 전략 설정·백테스트·데이터·그룹·설정·작업중·매매를 오갑니다. 현재 보고 있는 탭이 강조됩니다(실거래 진입점인 **매매**는 항상 강조색).
 
-![탭 내비게이션](screenshots/헤더.png)
+![탭 내비게이션](screenshots/header.png)
 
 ---
 
@@ -26,7 +26,7 @@
 
 EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각각의 기간·임계값을 조정합니다.
 
-<img src="screenshots/지표설정.png" width="100%" alt="지표 설정">
+<img src="screenshots/indicators.png" width="100%" alt="지표 설정">
 
 </td>
 <td width="50%" valign="top">
@@ -35,13 +35,13 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 한 그룹 안의 지표는 모두 충족(**AND**), 그룹끼리는 하나만 충족(**OR**)하면 매수합니다. 예: `[EMA + MACD]` 또는 `[RSI + BB]` 또는 `[MOM + VAL]` 또는 `[FLOW]`.
 
-<img src="screenshots/매수규칙.png" width="100%" alt="매수 규칙">
+<img src="screenshots/buy-rules.png" width="100%" alt="매수 규칙">
 
 **신호 보유 기간 · 체결 타이밍 · 리스크**
 
 매수 신호가 사라진 뒤 며칠 더 보유할지, 그리고 선별된 종목을 *언제* 체결할지(시가/종가/지정시각/TWAP/눌림목)를 고릅니다. 타이밍이 데이터 해상도(일봉/분봉)와 리스크 평가 주기를 자동 결정합니다. 손절·익절·트레일링 스탑도 여기서 설정합니다.
 
-<img src="screenshots/보유기간+체결타이밍.png" width="100%" alt="신호 보유 기간 · 체결 타이밍 · 리스크">
+<img src="screenshots/holding-timing.png" width="100%" alt="신호 보유 기간 · 체결 타이밍 · 리스크">
 
 </td>
 </tr>
@@ -55,19 +55,19 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 기간(빠른 선택 1주~1년)과 종목(전체·KOSPI200·KOSDAQ150·내 그룹·검색)을 고르고 실행합니다. 오른쪽에 실행 이력(순손익·주문수)이 쌓이며 상세/삭제할 수 있습니다.
 
-![백테스트 실행](screenshots/백테스트.png)
+![백테스트 실행](screenshots/backtest.png)
 
 ### 진행 로그 — 실시간
 
 백그라운드 잡으로 돌아가는 LEAN 엔진의 진행 로그를 실시간으로 봅니다.
 
-![백테스트 로그](screenshots/백테스트%20로그.png)
+![백테스트 로그](screenshots/backtest-log.png)
 
 ### 결과 — 한국어 요약 · 신호 진단 · 거래 내역
 
 수익률·MDD·승률·샤프 등을 한국어(억/만원)로 요약하고, 매수 신호를 주로 발동시킨 시그널을 진단하며, 날짜·종목·구분·수량·금액·사유가 담긴 거래 내역을 페이지네이션으로 봅니다.
 
-![백테스트 결과](screenshots/백테스트%20결과.png)
+![백테스트 결과](screenshots/backtest-result.png)
 
 ---
 
@@ -75,7 +75,7 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 데이터 최신화(전 종목 증분 적재), 적재 현황(가격·수급 적재 여부와 최신 일자)·검색·인덱스 필터, 분봉 적재, 그리고 자동 스케줄러 상태를 다룹니다.
 
-![데이터](screenshots/데이터.png)
+![데이터](screenshots/data.png)
 
 ---
 
@@ -83,7 +83,7 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 원하는 종목을 묶어 **내 인덱스(커스텀 종목 그룹)**를 만들면, 백테스트·분봉적재·적재현황·매매에서 KOSPI200처럼 `★이름`으로 한 번에 골라 쓸 수 있습니다(생성·수정·삭제).
 
-![그룹](screenshots/그룹.png)
+![그룹](screenshots/groups.png)
 
 ---
 
@@ -91,7 +91,7 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 증권사(KIS 실전/모의)를 고르고, KRX(pykrx) 로그인과 증권사 API 키(App Key·Secret·계좌번호·HTS ID)를 입력합니다. 모든 키는 로컬에만 저장됩니다.
 
-![설정](screenshots/설정.png)
+![설정](screenshots/settings.png)
 
 ---
 
@@ -99,7 +99,7 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 대량 적재·백테스트 등 오래 걸리는 백그라운드 작업의 상태(실행 중/종료·시작 시각·결과)를 봅니다.
 
-![작업중(백그라운드)](screenshots/백그라운드.png)
+![작업중(백그라운드)](screenshots/background.png)
 
 ---
 
@@ -112,4 +112,4 @@ EMA·MACD·RSI·모멘텀·볼린저밴드·저평가(가치)·수급 추종 각
 
 잔고·매매내역은 백그라운드로 캐시돼 10초마다 자동 갱신됩니다.
 
-![매매](screenshots/매매.png)
+![매매](screenshots/trade.png)

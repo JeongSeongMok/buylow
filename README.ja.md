@@ -2,6 +2,8 @@
 
 # buylow
 
+![buylow ダッシュボード総合画面](screenshots/overview.png)
+
 **韓国株式（KOSPI・KOSDAQ）の自動売買戦略をコードなしで構築し、過去データでバックテストし、実取引まで動かす個人向けツールキット。**
 
 [QuantConnect LEAN](https://github.com/QuantConnect/Lean) エンジン上で動作し、**同一の戦略定義がバックテストと実取引でそのまま実行**されます。すべてのデータと API キーは自分の PC にのみ保存されます。

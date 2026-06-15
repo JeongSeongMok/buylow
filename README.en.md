@@ -2,6 +2,8 @@
 
 # buylow
 
+![buylow dashboard overview](screenshots/overview.png)
+
 **A personal toolkit to build Korean-equity (KOSPI·KOSDAQ) automated trading strategies without code, backtest them on historical data, and run them live.**
 
 Built on the [QuantConnect LEAN](https://github.com/QuantConnect/Lean) engine, where **the same strategy definition runs unchanged in both backtest and live trading**. All data and API keys stay on your own machine.
