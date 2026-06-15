@@ -1,6 +1,6 @@
 [project]
 name = "buylow-orchestrator"
-version = "0.1.0"
+version = "0.2.0"
 description = "buylow orchestrator: runs LEAN backtests/live jobs and serves the dashboard"
 requires-python = ">=3.11"
 dependencies = [
