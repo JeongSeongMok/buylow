@@ -17,7 +17,7 @@ Built on the [QuantConnect LEAN](https://github.com/QuantConnect/Lean) engine, w
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
 ![engine](https://img.shields.io/badge/engine-QuantConnect%20LEAN-orange)
 
-<sub>Korean stock algorithmic trading · automated trading bot · backtesting · Korea Investment Securities (KIS) API · LEAN · KOSPI · KOSDAQ · pykrx</sub>
+<sub>Korean stock algorithmic trading · automated trading bot · backtesting · Korea Investment Securities (KIS) & Toss Securities API · LEAN · KOSPI · KOSDAQ · pykrx</sub>
 
 <!-- Demo screenshot/GIF slot: add docs/assets/demo.png (or .gif), then uncomment the line below
 <img src="docs/assets/demo.png" alt="buylow dashboard — Korean stock automated-trading backtest" width="820">
@@ -46,7 +46,7 @@ buylow handles Korean-equity automated trading through a **local web dashboard**
 
 - Define strategies with **signal combination rules + risk settings** — no coding.
 - Backtest against **whole-market Korean data** and review results as a Korean-language summary plus a trade log.
-- Run the same strategy live on **Korea Investment & Securities (KIS)** (backtest = live isomorphism).
+- Run the same strategy live on **Korea Investment & Securities (KIS) or Toss Securities** (backtest = live isomorphism).
 - All data and API keys are stored locally only and are never sent anywhere.
 
 ---
@@ -116,33 +116,34 @@ All data is managed on the **Data tab of the dashboard**.
 
 - One **Update data** click incrementally loads price (OHLCV), flow (net buying by investor type), and fundamentals (PER/PBR) for all tickers (5-year backfill when empty).
 - **Auto-load scheduler** (on by default) — incrementally loads daily bars on a fixed interval while the server runs. If you designate minute-bar targets, it loads those too.
-- **Minute loading** — pick tickers/indexes and store minute bars (already-loaded days are skipped). KIS keeps minute bars for **about 1 year at most**.
+- **Minute loading** — pick tickers/indexes and store minute bars (already-loaded days are skipped) via the active broker's API (KIS keeps minute bars for **about 1 year at most**; Toss uses getCandles).
 - **Load status** — search by name/code, filter by index, view per-ticker detail (price·flow).
 - **My index (custom ticker group)** — group tickers you want on the Groups tab, then use them across backtest / minute loading / load status with one click as `★name`, just like KOSPI200.
 
-### Live trading (KIS)
+### Live trading (KIS · Toss)
 
-- Turn on automated trading on the **Trade tab** and it places real orders using your saved strategy + target tickers (turn it off to stop).
+- Turn on automated trading on the **Trade tab** and it places real orders using your saved strategy + target tickers (turn it off to stop). KIS and Toss share the same screen and the same strategy code.
 - Buys follow the strategy and timing; exits follow signals/risk — the same code as backtest.
-- **Account monitoring** — deposit / buyable amount / holdings (buy price / current price / P&L), market-open/close status, trade history (based on KIS execution inquiry, auto-refreshed every 10 seconds).
+- **Account monitoring** — deposit / buyable amount / holdings (buy price / current price / P&L), market-open/close status, trade history (KIS uses execution inquiry, Toss uses buylow's own trade log; auto-refreshed every 10 seconds).
 - **Today's selection** — previews which tickers would be bought/sold based on the saved strategy, target tickers, and current holdings (reproduces the once-a-day previous-close selection exactly).
-- Automated trading is **off** by default; once on, it places orders immediately per the saved strategy. For the full live procedure see [docs/LIVE_KIS.md](./docs/LIVE_KIS.md).
+- Automated trading is **off** by default; once on, it places orders immediately per the saved strategy. For the full live procedure see [docs/LIVE_KIS.md](./docs/LIVE_KIS.md) (KIS) · [docs/LIVE_TOSS.md](./docs/LIVE_TOSS.md) (Toss).
 - **Operational resilience** — while automated trading is on, it resumes automatically if the server restarts (deploy/reboot), and if the live process exits unexpectedly it is restarted automatically after a short backoff. When orders bunch up (e.g., at the open), submissions are paced to the broker's per-second order limit and transient errors are retried, so a single order's failure never halts the whole bot.
-- ⚠️ **Live requires building the KIS adapter DLL once** (the Docker install bakes it into the image automatically; a native install makes it optional since it isn't needed for backtest). If you flip the toggle without building it, you'll see a *"KIS adapter is missing"* notice — run the adapter-build step in [Setup](#setup) above.
+- ⚠️ **Live requires building the broker adapter DLL once** (the Docker install bakes it into the image automatically; a native install makes it optional since it isn't needed for backtest). If you flip the toggle without building it, you'll see a *"live adapter is missing"* notice — run the adapter-build step in [Setup](#setup) above (`scripts/build-adapter.sh` builds both the KIS and Toss adapters).
 
 ---
 
 ## Supported brokers
 
-| Broker | Data (quotes·minute) | Backtest | Live trading | Status |
-|---|:---:|:---:|:---:|---|
-| **Korea Investment & Securities (KIS live)** | ✅ | ✅ | ✅ | Working |
-| **Korea Investment & Securities (KIS paper)** | ✅ | ✅ | ✅ (paper server) | Working — recommended for pre-live validation |
-| **Toss Securities** | — | — | — | 🚧 Planned (awaiting Toss API release) |
+| Broker | Account/balance inquiry | Live trading | Status |
+|---|:---:|:---:|---|
+| **Korea Investment & Securities (KIS live)** | ✅ | ✅ | Working |
+| **Korea Investment & Securities (KIS paper)** | ✅ | ✅ (paper server) | Working — recommended for pre-live validation |
+| **Toss Securities** | ✅ | ✅ | Working — real-only (no paper); validate on a real account |
 
+- Pick a broker on the Settings tab and enter its keys; inquiry and live orders then run through that broker.
 - KIS keeps **live and paper app keys/accounts fully separate**, so each is registered and managed independently (same logic, different environment).
-- Trading (balance·orders) uses the chosen broker's server, but **quote/minute loading always uses the live domain even if you chose paper** (account-free queries, which are more stable).
-- Daily historical data comes from the auth-free pykrx, so it is independent of broker choice.
+- **Toss Securities** has no paper server (real only); enter just the OAuth2 keys (Client ID/Secret) and the account is resolved automatically (no account number / HTS ID). Lacking a fill-notification WebSocket, the adapter confirms fills by **polling orders**.
+- Trading (balance·orders) and **minute-bar loading run through the chosen broker's API** (KIS = 120 bars/call, ~1y retention; Toss = getCandles, 200 bars/call). **Daily historical data comes from the auth-free pykrx** (broker-independent).
 
 ---
 
@@ -227,7 +228,7 @@ docker compose down
   you delete the container** — settings (`config.local.yaml`), run history (`buylow.db`), and the KIS token live in `state/`.
 - API keys are entered in the dashboard's **Settings** tab and stored in `state/config.local.yaml`.
 - The dashboard is mapped only to the host's `127.0.0.1`, so it is **local-only** (no external network exposure).
-- The KIS adapter DLL for live trading is included in the image.
+- The broker adapter DLLs (KIS·Toss) for live trading are included in the image.
 
 </details>
 
@@ -255,9 +256,10 @@ uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
 .venv/bin/python -m orchestrator.api
 # To use a different port:  BUYLOW_DASHBOARD_PORT=9000 .venv/bin/python -m orchestrator.api
 
-# 5) (For live trading — skip if you only backtest) Build the KIS adapter
+# 5) (For live trading — skip if you only backtest) Build the broker adapters (KIS·Toss)
 dotnet build launcher/BuylowLauncher.csproj -c Release   # build the launcher first (restores NuGet)
-scripts/build-adapter.sh                                  # build the adapter + copy the DLL next to the launcher
+scripts/build-adapter.sh                                  # build KIS·Toss adapters + copy DLLs next to the launcher
+                                                          #   (one only: scripts/build-adapter.sh toss)
 ```
 
 </details>
@@ -269,7 +271,9 @@ After launching, open the dashboard in your browser (default `http://127.0.0.1:8
 Keys are entered and managed on the **Settings tab of the dashboard** (stored locally only).
 
 - **KRX ID·password** — for flow·fundamental data ([free signup](https://data.krx.co.kr)). Not needed if you use price only.
-- **Broker (KIS) keys** — on the Settings tab, choose the broker (live/paper) and enter the App Key·App Secret·account number·HTS ID (separate for live/paper; the HTS ID is needed for live fill notifications).
+- **Broker keys** — on the Settings tab, choose the broker and enter its keys.
+  - **KIS (live/paper)**: App Key·App Secret·account number·HTS ID (separate for live/paper; the HTS ID is needed for live fill notifications).
+  - **Toss Securities**: just Client ID·Client Secret (account and fills are automatic; no HTS ID).
 
 ---
 
