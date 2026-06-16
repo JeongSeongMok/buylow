@@ -939,8 +939,11 @@ def register_dashboard(
         ok, why = config.live_start_ok()
         strategy = config.get_strategy()
         universe = config.get_live_universe()
+        # 활성 증권사에 맞는 어댑터 DLL을 확인(KIS/토스 서로 다른 어댑터).
         from ..lean.environment import LAUNCHER_OUT
-        adapter_ok = (LAUNCHER_OUT / "MyTrading.Kis.dll").exists()
+        from ..lean.runner import LIVE_ADAPTERS
+        _env_name, adapter_name = LIVE_ADAPTERS.get(config.get_broker(), LIVE_ADAPTERS["kis"])
+        adapter_ok = (LAUNCHER_OUT / adapter_name).exists()
 
         def _fail(msg):
             config.set_live_enabled(False)
@@ -953,7 +956,7 @@ def register_dashboard(
         if not universe:
             return _fail("대상종목(유니버스)을 먼저 선택하세요.")
         if not adapter_ok:
-            return _fail("KIS 어댑터가 없습니다 — 터미널에서 scripts/build-adapter.sh 로 먼저 빌드하세요.")
+            return _fail(f"라이브 어댑터({adapter_name})가 없습니다 — 터미널에서 scripts/build-adapter.sh 로 먼저 빌드하세요.")
 
         # 워치독에 위임: enable이 desired=ON으로 두고 즉시 시작 + 죽으면 백오프 재시작.
         # build_live_request를 넘겨 재시작 때마다 최신 전략/유니버스를 반영한다.
@@ -1054,3 +1057,22 @@ def register_dashboard(
             return {"ok": True, "message": f"정상 — {label}({envlabel}) 접근토큰 발급 성공"}
         except Exception as e:
             return {"ok": False, "message": f"실패({label}): {type(e).__name__} {e}"}
+
+    @app.post("/settings/test/broker")
+    def settings_test_broker():
+        # 활성 증권사 기준 연동 테스트(설정 탭 '연동 테스트' 버튼). KIS는 토큰 발급, 토스는 토큰+계좌조회.
+        broker = config.get_broker()
+        label = config.BROKER_LABELS.get(broker, broker)
+        if broker == "toss":
+            cred = config.get_toss_credentials()
+            if not (cred["client_id"] and cred["client_secret"]):
+                return {"ok": False, "message": f"{label} Client ID/Secret을 먼저 저장하세요"}
+            try:
+                from brokers.toss import TossClient
+                client = TossClient(cred["client_id"], cred["client_secret"])
+                seq = client.account_seq()  # 토큰 발급 + 계좌(accountSeq) 해석까지 확인
+                return {"ok": True, "message": f"정상 — {label} 인증 + 계좌 조회 성공(accountSeq={seq})"}
+            except Exception as e:
+                return {"ok": False, "message": f"실패({label}): {type(e).__name__} {e}"}
+        # KIS(실전/모의)는 기존 토큰 발급 테스트와 동일.
+        return settings_test_kis()

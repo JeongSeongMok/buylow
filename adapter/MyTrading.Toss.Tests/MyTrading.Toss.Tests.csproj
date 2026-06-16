@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    토스 어댑터의 '순수/파싱' 로직(REST 응답 파싱·계좌 해석·주문 상태 분류) 단위 테스트.
+    네트워크/실계좌 없이 검증한다 — HttpMessageHandler 스텁으로 캔드 JSON을 먹인다
+    (실주문 e2e는 실계좌 수동 검증 — docs/LIVE_TOSS.md. 토스는 모의계좌가 없다).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyTrading.Toss/MyTrading.Toss.csproj" />
+  </ItemGroup>
+
+</Project>

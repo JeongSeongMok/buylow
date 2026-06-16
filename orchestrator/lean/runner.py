@@ -3,7 +3,8 @@
 config.json 생성 → LEAN 프로세스 spawn → 결과(통계·산출물) 수집/파싱까지, '1프로세스=1작업'
 모델(docs/ARCHITECTURE.md)을 코드로 구현한다. run-backtest.sh의 셸 흐름을 흡수한 것.
 
-지금은 백테스트만 지원한다. 라이브(env=live-toss)는 토스 어댑터 단계에서 확장한다.
+백테스트(run_backtest)와 라이브 실주문(run_live)을 모두 지원한다. 라이브는 증권사별 어댑터로 분기한다
+(KIS=live-kis/MyTrading.Kis, 토스=live-toss/MyTrading.Toss — LIVE_ADAPTERS).
 """
 
 from __future__ import annotations
@@ -167,6 +168,19 @@ _LIVE_HANDLERS = {
     "data-queue-handler": ["KisBrokerage"],
 }
 
+# 라이브(live-toss) 환경 핸들러 — KIS와 동일하되 브로커리지 이름만 토스 어댑터로.
+_LIVE_HANDLERS_TOSS = dict(_LIVE_HANDLERS)
+_LIVE_HANDLERS_TOSS["live-mode-brokerage"] = "TossBrokerage"
+_LIVE_HANDLERS_TOSS["data-queue-handler"] = ["TossBrokerage"]
+
+
+# 증권사 → (LEAN environment 이름, 어댑터 DLL 파일명). 라이브 spawn이 브로커별로 분기하는 단일 출처.
+LIVE_ADAPTERS = {
+    "kis": ("live-kis", "MyTrading.Kis.dll"),
+    "kis_demo": ("live-kis", "MyTrading.Kis.dll"),
+    "toss": ("live-toss", "MyTrading.Toss.dll"),
+}
+
 
 def build_live_config(request: RunRequest, results_dir: Path, algorithm_id: str,
                       *, live: dict, kis: dict, token_cache: str | None = None) -> dict:
@@ -213,6 +227,52 @@ def build_live_config(request: RunRequest, results_dir: Path, algorithm_id: str,
         "kis-max-order-amount": str(int(live.get("max_order_amount", 0) or 0)),
         "kis-token-cache": token_cache or "",
         "environments": {"live-kis": dict(_LIVE_HANDLERS)},
+    }
+    return config
+
+
+def build_toss_live_config(request: RunRequest, results_dir: Path, algorithm_id: str,
+                           *, live: dict, toss: dict, token_cache: str | None = None) -> dict:
+    """라이브(live-toss)용 LEAN config(dict) 생성 — build_live_config의 토스 짝.
+
+    같은 전략 .py를 라이브 모드로 돌리되, 토스 어댑터에 필요한 자격증명/선택적 주문한도를
+    브로커리지 데이터(toss-* 키)로 주입한다. TossBrokerageFactory.BrokerageData가 이 키들을 읽는다.
+
+    KIS와 달리 계좌번호·HTS ID·env 키가 없다(accountSeq 자동해석, 체결 폴링, 실전 단일).
+    이 함수는 순수(파일/네트워크 없음)라 단위테스트로 키 주입을 검증한다.
+    """
+    config = {
+        "environment": "live-toss",
+        "close-automatically": False,  # 라이브는 수동/킬스위치로 종료
+        "algorithm-id": algorithm_id,
+        "algorithm-type-name": request.resolved_algorithm_type(),
+        "algorithm-language": "Python",
+        "algorithm-location": str(request.resolved_strategy()),
+        "data-folder": str(Path(request.data_folder).resolve()),
+        "results-destination-folder": str(results_dir),
+        "log-handler": "QuantConnect.Logging.CompositeLogHandler",
+        "messaging-handler": "QuantConnect.Messaging.Messaging",
+        "job-queue-handler": "QuantConnect.Queues.JobQueue",
+        "api-handler": "QuantConnect.Api.Api",
+        "map-file-provider": "QuantConnect.Data.Auxiliary.LocalDiskMapFileProvider",
+        "factor-file-provider": "QuantConnect.Data.Auxiliary.LocalDiskFactorFileProvider",
+        "data-provider": "QuantConnect.Lean.Engine.DataFeeds.DefaultDataProvider",
+        "data-channel-provider": "DataChannelProvider",
+        "object-store": "QuantConnect.Lean.Engine.Storage.LocalObjectStore",
+        "data-aggregator": "QuantConnect.Lean.Engine.DataFeeds.AggregationManager",
+        "job-user-id": "0",
+        "api-access-token": "",
+        "job-organization-id": "",
+        "maximum-data-points-per-chart-series": 1000000,
+        "maximum-chart-series": 30,
+        "parameters": _params_with_risk(request.parameters),
+        "python-additional-paths": [],
+        # ── 토스 어댑터 브로커리지 데이터(선택적 주문한도 포함) ──
+        "toss-client-id": toss.get("client_id") or "",
+        "toss-client-secret": toss.get("client_secret") or "",
+        "toss-max-order-amount": str(int(live.get("max_order_amount", 0) or 0)),
+        "toss-token-cache": token_cache or "",
+        "environments": {"live-toss": dict(_LIVE_HANDLERS_TOSS)},
     }
     return config
 
@@ -312,11 +372,14 @@ class LeanRunner:
         if not strategy.is_file():
             raise FileNotFoundError(f"전략 파일 없음: {strategy}")
 
+        # 증권사별 라이브 환경/어댑터 분기 — KIS(실전·모의)와 토스가 서로 다른 어댑터 DLL/브로커리지를 쓴다.
+        broker = config.get_broker()
+        _env_name, adapter_name = LIVE_ADAPTERS.get(broker, LIVE_ADAPTERS["kis"])
         out_dir = self._env.launcher_dll.parent
-        adapter_dll = out_dir / "MyTrading.Kis.dll"
+        adapter_dll = out_dir / adapter_name
         if not adapter_dll.exists():
             raise FileNotFoundError(
-                f"KIS 어댑터 DLL이 없음: {adapter_dll} — 'scripts/build-adapter.sh'로 먼저 빌드하세요")
+                f"라이브 어댑터 DLL이 없음: {adapter_dll} — 'scripts/build-adapter.sh'로 먼저 빌드하세요")
 
         algo_type = request.resolved_algorithm_type()
         run_id = f"live-{algo_type}-{datetime.now():%Y%m%d-%H%M%S}"
@@ -324,10 +387,16 @@ class LeanRunner:
         run_dir.mkdir(parents=True, exist_ok=True)
 
         live = config.get_live_config()
-        kis = config.get_kis_credentials()
-        from brokers.kis import DEFAULT_TOKEN_CACHE
-        cfg = build_live_config(request, run_dir, run_id, live=live, kis=kis,
-                                token_cache=str(DEFAULT_TOKEN_CACHE))
+        if broker == "toss":
+            from brokers.toss import DEFAULT_TOKEN_CACHE
+            cfg = build_toss_live_config(request, run_dir, run_id, live=live,
+                                         toss=config.get_toss_credentials(),
+                                         token_cache=str(DEFAULT_TOKEN_CACHE))
+        else:
+            from brokers.kis import DEFAULT_TOKEN_CACHE
+            cfg = build_live_config(request, run_dir, run_id, live=live,
+                                    kis=config.get_kis_credentials(),
+                                    token_cache=str(DEFAULT_TOKEN_CACHE))
         (out_dir / "config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
         pythonpath_parts = [

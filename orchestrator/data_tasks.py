@@ -28,9 +28,16 @@ def run_minute_update(job, data_dir: str, tickers: list[str], days: int = 365) -
     ok = total = skipped = 0
     # 클라이언트 1개를 재사용 — 공유 토큰버킷이 종목 경계에서도 합산 호출률을 한도 내로 유지하고
     # 토큰도 1회만 발급. 분봉은 호출이 많아 병렬화: rate_per_sec(초당 상한)·max_workers(동시 요청)로
-    # KIS 한도(실전 ~20/s) 아래에서 네트워크 지연을 가려 적재를 단축한다.
-    from brokers.kis import from_config
-    MINUTE_RATE_PER_SEC, MINUTE_WORKERS = 12.0, 8
+    # 증권사 한도 아래에서 네트워크 지연을 가려 적재를 단축한다.
+    # 활성 증권사로 분봉 소스를 고른다 — KIS(120건/호출, ~1년) 또는 토스(getCandles 200건/호출).
+    # 둘 다 fetch_minute(ticker, day) 인터페이스가 동일해 ingest_minute가 그대로 적재한다.
+    from . import config
+    if config.get_broker() == "toss":
+        from brokers.toss import from_config
+        MINUTE_RATE_PER_SEC, MINUTE_WORKERS = 8.0, 4   # 토스 한도는 보수적으로
+    else:
+        from brokers.kis import from_config
+        MINUTE_RATE_PER_SEC, MINUTE_WORKERS = 12.0, 8  # KIS 실전 ~20/s 아래
     client = from_config(rate_per_sec=MINUTE_RATE_PER_SEC, max_workers=MINUTE_WORKERS)
     with open(log_path, "a", encoding="utf-8", buffering=1) as f:
         def log(msg):

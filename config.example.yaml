@@ -9,8 +9,9 @@ data_folder: ./data
 # 대시보드 포트 (기본: 8420)
 dashboard_port: 8420
 
-# 증권사 선택 (kis|toss, 기본 kis). 일봉 과거는 무인증 pykrx로 적재되고, 증권사는
-# '오늘/실시간' 데이터와 (추후) 실주문에 쓰인다. 대시보드 설정 탭에서도 고를 수 있다.
+# 증권사 선택 (kis|kis_demo|toss, 기본 kis). 일봉 과거는 무인증 pykrx로 적재되고, 증권사는
+# '오늘/실시간' 데이터와 실주문(라이브)에 쓰인다. 대시보드 설정 탭에서도 고를 수 있다.
+#   kis=한국투자증권 실전, kis_demo=한국투자증권 모의투자, toss=토스증권(모의 없음·실전 단일)
 broker: kis
 
 # 일일 데이터 최신화 스케줄 (평일 장마감 후 KST). 켜면 대시보드 '데이터 최신화'와 동일하게
@@ -29,7 +30,17 @@ secrets:
   # KRX 로그인 (pykrx 펀더멘털 PER/PBR 등 조회용). https://data.krx.co.kr 무료 회원가입.
   krx_id: ""
   krx_pw: ""
-  # 한국투자증권(KIS) OpenAPI — 분봉·당일 데이터 및 (추후) 실주문용. https://apiportal.koreainvestment.com
+  # 한국투자증권(KIS) OpenAPI — 분봉·당일 데이터 및 실주문용. https://apiportal.koreainvestment.com
   kis_app_key: ""
   kis_app_secret: ""
   kis_account_no: ""   # 종합계좌번호 (예: 12345678-01). 라이브 단계에서 사용
+  kis_hts_id: ""       # HTS ID — 라이브 체결통보(웹소켓) 구독에 필요(실전)
+  # KIS 모의투자 — 실전과 키·계좌가 완전히 분리(broker: kis_demo 일 때 사용)
+  kis_demo_app_key: ""
+  kis_demo_app_secret: ""
+  kis_demo_account_no: ""
+  kis_demo_hts_id: ""
+  # 토스증권 OpenAPI — OAuth2 client-credentials(실주문/조회용). 모의 서버 없음(실전 단일).
+  # 계좌는 자동 해석(getAccounts)하므로 계좌번호·HTS ID가 없다(체결은 주문 폴링으로 확인).
+  toss_client_id: ""
+  toss_client_secret: ""

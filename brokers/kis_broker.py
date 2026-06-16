@@ -115,14 +115,22 @@ class KisBroker:
 def get_trading_broker():
     """현재 설정 증권사로 매매 조회 브로커를 만든다. 자격증명/계좌 미설정이면 (None, 사유).
 
-    kis(실전)/kis_demo(모의) 모두 같은 KisBroker 로직을 쓰고, 매매 도메인 env만 증권사로 달라진다
-    (kis_demo→demo). 데이터(시세·분봉)는 별개로 항상 실전 도메인(brokers.kis.from_config).
+    - kis(실전)/kis_demo(모의): 같은 KisBroker 로직을 쓰고 매매 도메인 env만 증권사로 달라진다
+      (kis_demo→demo). 데이터(시세·분봉)는 별개로 항상 실전 도메인(brokers.kis.from_config).
+    - toss: TossBroker(client_id/secret). 모의투자 env 없음(실전 단일), 계좌는 getAccounts로 자동 해석.
     """
     from orchestrator import config
     broker = config.get_broker()
     label = config.BROKER_LABELS.get(broker, broker)
+    if broker == "toss":
+        cred = config.get_toss_credentials()
+        if not (cred["client_id"] and cred["client_secret"]):
+            return None, f"{label} Client ID/Secret을 설정 탭에서 먼저 입력하세요."
+        from .toss_broker import TossBroker
+        return TossBroker(cred["client_id"], cred["client_secret"],
+                          name=broker, label=label), None
     if broker not in ("kis", "kis_demo"):
-        return None, f"'{label}' 매매 조회는 아직 미지원입니다(KIS 실전/모의만 가능)."
+        return None, f"'{label}' 매매 조회는 아직 미지원입니다."
     cred = config.get_kis_credentials(broker)
     if not (cred["app_key"] and cred["app_secret"]):
         return None, f"{label} App Key/Secret을 설정 탭에서 먼저 입력하세요."

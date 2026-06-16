@@ -87,8 +87,15 @@ BROKER_SECRET_SPECS: dict[str, list[SecretSpec]] = {
         SecretSpec("kis_demo_hts_id", "BUYLOW_KIS_DEMO_HTS_ID", "KIS 모의 HTS ID",
                    "실시간 체결통보 구독에 필요(라이브 체결 자동확인). 라이브 매매 필수"),
     ],
-    # Toss API 개방 시 동일 패턴으로 추가.
-    "toss": [],
+    # 토스증권 OpenAPI — OAuth2 client-credentials(client_id/client_secret). KIS와 달리 모의투자
+    # 서버가 없어 실전 하나뿐이고, 계좌는 헤더(accountSeq)로 지정한다 — 계좌번호 시크릿이 없다
+    # (TossClient가 getAccounts로 자동 해석). HTS ID도 없다(체결통보 웹소켓 대신 주문 폴링).
+    "toss": [
+        SecretSpec("toss_client_id", "BUYLOW_TOSS_CLIENT_ID", "토스 Client ID",
+                   "토스증권 OpenAPI client_id (OAuth2 client-credentials)"),
+        SecretSpec("toss_client_secret", "BUYLOW_TOSS_CLIENT_SECRET", "토스 Client Secret",
+                   "토스증권 OpenAPI client_secret"),
+    ],
 }
 
 # 증권사 → KIS 자격증명 키 묶음(app_key/app_secret/account_no 시크릿 key 이름).
@@ -96,6 +103,9 @@ _KIS_CRED_KEYS = {
     "kis": ("kis_app_key", "kis_app_secret", "kis_account_no"),
     "kis_demo": ("kis_demo_app_key", "kis_demo_app_secret", "kis_demo_account_no"),
 }
+
+# 증권사 → Toss 자격증명 키 묶음(client_id/client_secret).
+_TOSS_CRED_KEYS = {"toss": ("toss_client_id", "toss_client_secret")}
 
 # 증권사 → HTS ID 시크릿 key. 체결통보 구독에 쓰며 실전/모의가 다를 수 있어 따로 둔다.
 _KIS_HTS_KEYS = {"kis": "kis_hts_id", "kis_demo": "kis_demo_hts_id"}
@@ -278,13 +288,23 @@ def set_live_enabled(enabled: bool) -> None:
 
 
 def live_start_ok(cfg: dict | None = None) -> tuple[bool, str]:
-    """자동매매 시작 가드. (허용여부, 사유). enabled=True면 실전·모의 모두 허용(무장 개념 제거).
+    """자동매매 시작 가드. (허용여부, 사유). enabled=True가 기본 가드(무장 개념 제거).
 
-    HTS ID는 필수 — 없으면 체결통보를 구독하지 못해 주문 체결이 LEAN에 자동 반영되지 않아
-    포지션/리스크 추적이 어긋난다(설정 탭에서 증권사별로 등록). 실전·모의 모두 동일 적용."""
+    증권사별 추가 가드:
+    - KIS(실전/모의): HTS ID 필수 — 없으면 체결통보(웹소켓)를 구독하지 못해 주문 체결이 LEAN에
+      자동 반영되지 않아 포지션/리스크 추적이 어긋난다(설정 탭에서 증권사별로 등록).
+    - Toss: 체결통보 웹소켓이 없어 어댑터가 주문 폴링으로 체결을 확인하므로 HTS ID가 불필요하다.
+      대신 client_id/client_secret이 있어야 한다.
+    """
     cfg = cfg or get_live_config()
     if not cfg["enabled"]:
         return False, "자동매매가 꺼져 있습니다"
+    broker = get_broker()
+    if broker == "toss":
+        cred = get_toss_credentials()
+        if not (cred["client_id"] and cred["client_secret"]):
+            return False, "토스 Client ID/Secret이 없습니다 — 설정 탭에서 등록하세요"
+        return True, "ok"
     if not cfg.get("hts_id"):
         return False, "HTS ID가 없습니다 — 설정 탭에서 등록하세요(체결 자동확인에 필수)"
     return True, "ok"
@@ -417,6 +437,19 @@ def get_kis_credentials(broker: str | None = None) -> dict[str, str | None]:
         "app_key": by_key.get(ak_key),
         "app_secret": by_key.get(sk_key),
         "account_no": by_key.get(acc_key),
+    }
+
+
+def get_toss_credentials() -> dict[str, str | None]:
+    """토스증권 OpenAPI 자격증명 묶음. client_id/client_secret (없으면 None).
+
+    KIS와 달리 계좌번호 시크릿이 없다 — TossClient가 getAccounts로 accountSeq를 자동 해석한다.
+    """
+    by_key = {s.key: get_secret(s) for specs in BROKER_SECRET_SPECS.values() for s in specs}
+    cid_key, csec_key = _TOSS_CRED_KEYS["toss"]
+    return {
+        "client_id": by_key.get(cid_key),
+        "client_secret": by_key.get(csec_key),
     }
 
 

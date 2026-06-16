@@ -44,8 +44,8 @@
         <select id="broker" name="broker"
                 onchange="document.getElementById('broker-form').submit()">
           {% for b in brokers %}
-          <option value="{{ b }}" {{ 'selected' if broker == b }} {{ 'disabled' if b == 'toss' }}>
-            {{ broker_labels.get(b, b) }}{{ ' (미구현)' if b == 'toss' }}
+          <option value="{{ b }}" {{ 'selected' if broker == b }}>
+            {{ broker_labels.get(b, b) }}
           </option>
           {% endfor %}
         </select>
@@ -61,15 +61,15 @@
       {% endif %}
       <div class="form-actions">
         <button type="submit">저장</button>
-        {% if broker in ('kis', 'kis_demo') %}
-        <button type="button" class="secondary" onclick="testConn('kis')">연동 테스트</button>
+        {% if broker_secrets %}
+        <button type="button" class="secondary" onclick="testConn('broker')">연동 테스트</button>
         {% endif %}
         {% if broker_secrets and broker_secrets|selectattr('set')|list %}
         <button type="submit" class="secondary" formaction="/settings/clear" formmethod="post"
                 onclick="return confirm('{{ broker_labels.get(broker, broker) }}의 저장된 키를 모두 삭제할까요?')">
           이 증권사 키 삭제</button>
         {% endif %}
-        <span class="test-result meta" id="kis-test-result"></span>
+        <span class="test-result meta" id="broker-test-result"></span>
       </div>
     </form>
   </section>
